@@ -34,6 +34,17 @@ test("the usage chart and token counting are gone", () => {
   assert.doesNotMatch(readFileSync(join(ROOT, "site", "worker.js"), "utf8"), /recordUsage|buildUsage|\/api\/usage/);
 });
 
+test("the model button says Choose model, and only models with an effort setting get an effort chooser", () => {
+  assert.match(html, /<button class="picker-btn" id="pickerBtn"[^>]*><span>Choose model<\/span>/);
+  // the button no longer shows the model or its effort, so nothing in the script writes to those parts
+  assert.doesNotMatch(html, /pbName|pbEffort|pbMeter/);
+  // the effort chooser is built only when the picked model has efforts; a model without them gets no chooser and no note
+  assert.match(script, /\(m\.efforts\.length\s*\? `<div class="effort">[\s\S]*?\s*: ""\)/);
+  assert.doesNotMatch(html, /answers without an effort setting/);
+  // Haiku is the model without efforts
+  assert.match(script, /id: "claude-haiku-5-5"[^\n]*efforts: \[\]/);
+});
+
 test("everything the owner can change is behind a confirmation or a typed name", () => {
   assert.match(script, /confirm\(`Delete \$\{CFG\.name\}/);
   assert.match(script, /confirm\(`Set up \$\{SET\.address\}/);

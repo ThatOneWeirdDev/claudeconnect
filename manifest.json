@@ -1,21 +1,18 @@
 {
   "name": "claudeconnect",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "released": "2026-10-08",
   "notes": [
-    "Change the site from the site: name, what the AI calls itself, logo, tab icon and Fable, all from Settings.",
-    "Change the address from Settings: the new site is set up first, and the old one is deleted once the new one is working.",
-    "Delete the site from Settings, like the command line.",
-    "Your real Claude plan usage (session and weekly percentages), read from Claude Code, replaces the token chart.",
-    "A new look, modelled on ChatGPT.",
-    "A locked site now has an I am the owner button that explains how to turn on Cloudflare Access, and a claim command to get a fresh claim link."
+    "The model button now says Choose model, and the list shows the models.",
+    "Haiku no longer shows an effort chooser, since it has no effort setting.",
+    "Tidier spacing in the effort chooser."
   ],
   "files": {
     "ClaudeConnect.mjs": "2ad4647b8c16dceb459dbc7ce243a30223035c5cf5c0ac96ff4639d739c35fd7",
     "installer.mjs": "b7c4ec417558e70e4f9fc11c7024ddd7bf39e4d43277a07ba72266dd8dd2d137",
     "agent/agent.mjs": "369f43fa6881917d901b2e9655928d7b1a8b42ad6d9b020f8c5f45b06aa87f47",
     "site/worker.js": "b6145ad1914940171362bc298e48622e1773c23a1e1894cc079ce3729d4e8615",
-    "site/app.html": "92e2db848f9be68000c9464bfbc5b591c2865d0d6da3cb7846f14058580c3d4b",
+    "site/app.html": "7b708e871295c2f4ace7a935cc9041b2b426f65cb6ab53cbbc131aa8293cbb28",
     "site/version.js": "13cbf80951c6c37d24ef63839932e07960647b39b3975864a58a0554853b9339",
     "site/names.js": "2975b72cbbe15ade8424d806a242079471f8b1577f1c95f193d8bb5302f6b857",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
