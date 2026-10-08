@@ -1,0 +1,111 @@
+// The real agent with a fake `claude`: a reply's thinking and text kept in the order they happened, and the usage credit
+// balance read from Claude's account when that's turned on, with Anthropic's API stood in for by a local server.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { startSite } from "../helpers/site.mjs";
+import { makeComputer } from "../helpers/computer.mjs";
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ORG = "0a1b2c3d-1111-4222-8333-444455556666";
+
+async function until(fn, what, ms = 30000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = await fn().catch(() => null);
+    if (v) return v;
+    await sleep(150);
+  }
+  throw new Error("timed out waiting for " + what);
+}
+
+async function boot(t, { credits = false, anthropic = null } = {}) {
+  const site = await startSite({ appVersion: "1.7.0" });
+  await site.claim();
+  const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9" });
+  if (credits) {
+    const cfg = JSON.parse(pc.read("config.json"));
+    cfg.credits = true;
+    writeFileSync(join(pc.dir, "config.json"), JSON.stringify(cfg));
+  }
+  const env = { ...pc.env, CLAUDECONNECT_ANTHROPIC_API: anthropic || "http://127.0.0.1:9" };
+  const { spawn } = await import("node:child_process");
+  const agent = spawn(process.execPath, [join(pc.dir, "agent.mjs"), "run"], { env, stdio: "ignore" });
+  t.after(async () => {
+    agent.kill("SIGKILL");
+    pc.cleanup();
+    await site.stop();
+  });
+  await until(async () => (await site.api("/api/state")).body.agent.online, "the agent to connect");
+  return { site, pc };
+}
+
+test("thinking that comes after text is shown after it, not merged into one block at the top", async t => {
+  const { site } = await boot(t);
+  const res = await site.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "interleave please", model: "claude-opus-5-5" }) });
+  const lines = (await res.text()).trim().split("\n").map(l => JSON.parse(l));
+  // the stream itself comes in order
+  const seq = lines.filter(l => l.type === "thinking" || l.type === "delta").map(l => l.type);
+  assert.deepEqual(seq.filter((x, i) => x !== seq[i - 1]), ["thinking", "delta", "thinking", "delta"]);
+  const done = lines.find(l => l.type === "done").message;
+  assert.equal(done.content, "ok time for test 2\n\ndone");
+  assert.equal(done.meta.thinking, "first thought\n\nsecond thought");
+  assert.deepEqual(done.meta.parts.map(p => [p.t, p.n]), [["think", 13], ["text", 18], ["think", 16], ["text", 6]]);
+  // and it's kept that way
+  const chat = (await site.api(`/api/chats/${lines.find(l => l.type === "meta").chat.id}`)).body;
+  assert.deepEqual(chat.messages[1].meta.parts, done.meta.parts);
+});
+
+test("with the balance turned on, the computer reads it from Claude's account with Claude Code's sign-in, and only the numbers reach the site", async t => {
+  const seen = [];
+  const api = http.createServer((req, res) => {
+    seen.push({ url: req.url, auth: req.headers.authorization, beta: req.headers["anthropic-beta"] });
+    res.setHeader("content-type", "application/json");
+    if (req.url === "/api/oauth/usage") return res.end(JSON.stringify({ five_hour: { utilization: 40 }, extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 1234, utilization: 24.7 } }));
+    if (req.url === `/api/oauth/organizations/${ORG}/prepaid/credits`) return res.end(JSON.stringify({ amount: 2500, currency: "USD", promo_tranches: [{ remaining_amount_minor_units: 5000, currency: "USD", expires_at: "2026-12-01T00:00:00Z", name: "Welcome credit" }, { remaining_amount_minor_units: 0 }] }));
+    res.statusCode = 404;
+    res.end("{}");
+  });
+  await new Promise(r => api.listen(0, "127.0.0.1", r));
+  t.after(() => api.close());
+  const { site, pc } = await boot(t, { credits: true, anthropic: `http://127.0.0.1:${api.address().port}` });
+  // Claude Code's sign-in, where it keeps it on Linux and Windows
+  mkdirSync(join(pc.home, ".claude"), { recursive: true });
+  writeFileSync(join(pc.home, ".claude", ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "sk-ant-oat-test", refreshToken: "r", expiresAt: Date.now() + 3600e3 } }));
+  writeFileSync(join(pc.home, ".claude.json"), JSON.stringify({ oauthAccount: { organizationUuid: ORG } }));
+  assert.equal((await site.api("/api/state")).body.agent.credits, true);
+  assert.equal((await site.post("/api/limits/refresh")).status, 200);
+  const c = await until(async () => (await site.api("/api/credits")).body, "the balance");
+  assert.deepEqual(c.extra, { enabled: true, limit: 5000, used: 1234 });
+  assert.equal(c.balance.amount, 2500);
+  assert.deepEqual(c.balance.promos, [{ amount: 5000, currency: "USD", expires: Date.parse("2026-12-01T00:00:00Z"), name: "Welcome credit" }]);
+  assert.ok(seen.every(s => s.auth === "Bearer sk-ant-oat-test" && s.beta === "oauth-2025-04-20"));
+  assert.ok(!JSON.stringify((await site.api("/api/state")).body).includes("sk-ant"), "the sign-in never reaches the site");
+  assert.ok(!readFileSync(join(pc.dir, "agent.log"), "utf8").includes("sk-ant"));
+});
+
+test("without it turned on, Claude's sign-in isn't touched; with it on and the sign-in expired, the site is told why", async t => {
+  const seen = [];
+  const api = http.createServer((req, res) => {
+    seen.push(req.url);
+    res.end("{}");
+  });
+  await new Promise(r => api.listen(0, "127.0.0.1", r));
+  t.after(() => api.close());
+  const off = await boot(t, { anthropic: `http://127.0.0.1:${api.address().port}` });
+  assert.equal((await off.site.api("/api/state")).body.agent.credits, false);
+  await off.site.post("/api/limits/refresh");
+  await sleep(1500);
+  assert.deepEqual(seen, []);
+  assert.equal((await off.site.api("/api/credits")).body, null);
+
+  const on = await boot(t, { credits: true, anthropic: `http://127.0.0.1:${api.address().port}` });
+  mkdirSync(join(on.pc.home, ".claude"), { recursive: true });
+  writeFileSync(join(on.pc.home, ".claude", ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "old", expiresAt: Date.now() - 1000 } }));
+  await on.site.post("/api/limits/refresh");
+  const c = await until(async () => (await on.site.api("/api/credits")).body, "a reading");
+  assert.equal(c.error, "expired");
+  assert.deepEqual(seen, [], "an expired sign-in isn't sent anywhere");
+});

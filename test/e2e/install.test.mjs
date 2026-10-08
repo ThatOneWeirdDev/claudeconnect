@@ -52,7 +52,9 @@ test("a first install, then an update, through the real launcher and installer",
   makeFakes(bin);
   const env = {
     ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"),
-    CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50"
+    CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50",
+    // there's no real site here for the agent to connect to
+    CLAUDECONNECT_CONNECT_MS: "500"
   };
   const dir = join(home, ".claudeconnect");
   t.after(async () => {
@@ -106,11 +108,13 @@ test("a first install, then an update, through the real launcher and installer",
   assert.match(readFileSync(join(dir, "agent.log"), "utf8"), new RegExp(`My Site ${RELEASE.version} starting`));
   const firstPid = Number(readFileSync(join(dir, "agent.pid"), "utf8"));
 
-  // ---- the site now exists, so running it again offers an update; --update takes it without questions
+  // ---- the site now exists; --update (what `<command> update` runs) updates it in place and asks nothing
   cf.siteExists(true);
-  const second = await runLauncher(home, env, ["--update", "--name", "My Site", "--no-autostart", "--no-fable"]);
+  const second = await runLauncher(home, env, ["--update"]);
   assert.equal(second.status, 0, second.out);
-  assert.match(second.out, /already set up/);
+  assert.match(second.out, new RegExp(`Updating My Site to ${RELEASE.version.replace(/\./g, "\\.")}`));
+  assert.match(second.out, /Updating the site[\s\S]*Updating this computer[\s\S]*Restarting[\s\S]*Coming back online/);
+  assert.doesNotMatch(second.out, /already set up|Name|Logo|Fable|Which account/, "none of the setup questions");
   assert.equal(readdirSync(join(home, "deploys")).length, 2);
   const cfg2 = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   assert.equal(cfg2.secret, cfg1.secret, "the agent's key survives an update");
@@ -120,9 +124,9 @@ test("a first install, then an update, through the real launcher and installer",
   assert.equal(cfg2.version, RELEASE.version);
   assert.equal(cf.created.length, 1, "no second storage namespace was made");
   assert.equal(cf.deleted.length, 0, "nothing was deleted");
-  const secrets2 = readdirSync(home).filter(f => /^secrets-.*\.json$/.test(f)).sort().map(f => JSON.parse(readFileSync(join(home, f), "utf8")));
-  assert.equal(secrets2[1].AGENT_SECRET, cfg1.secret);
-  assert.notEqual(secrets2[1].CLAIM_CODE, secrets2[0].CLAIM_CODE);
+  assert.equal(readdirSync(home).filter(f => /^secrets-.*\.json$/.test(f)).length, 1, "the site's secrets are left as they are");
+  const wr2 = JSON.parse(readFileSync(join(dir, "site", "wrangler.jsonc"), "utf8"));
+  assert.deepEqual(wr2.vars, wr.vars, "same name, command and settings");
   // the agent was restarted: the old process is gone and a new one has taken its place
   let pid = 0;
   for (let i = 0; i < 40 && !pid; i++) {

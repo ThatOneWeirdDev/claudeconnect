@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // ClaudeConnect setup. ClaudeConnect.mjs downloads a release from GitHub, checks it, and runs this from the download folder.
 // Run it with --remote-update (no questions) to update an existing install in place, which is what the site's Update button does.
+// --update does the same from a terminal, and --edit (what `<command> edit` runs) asks about each setting with a y/n.
 import { spawnSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, accessSync, chmodSync, rmSync, statSync, readdirSync, openSync, readSync, closeSync, renameSync, cpSync, constants } from "node:fs";
 import { join, dirname } from "node:path";
@@ -33,6 +34,7 @@ const REMOTE_OP = opt("--remote-op");
 const REMOTE = flag("--remote-update") || !!REMOTE_OP;
 const UPDATE_ID = opt("--update-id");
 const JOB_FILE = opt("--job-file");
+const EDIT = flag("--edit");
 const REPO = process.env.CLAUDECONNECT_REPO || DEFAULT_REPO;
 const REF = process.env.CLAUDECONNECT_REF || "main";
 const tty = !REMOTE && process.stdin.isTTY && process.stdout.isTTY;
@@ -52,8 +54,11 @@ function note(s) {
 
 class Stop extends Error {}
 
+// Set while an update or a change runs from a terminal: a failure is caught, so whatever was stopped is started again.
+let JOB = REMOTE;
+
 function fail(s) {
-  if (REMOTE) throw new Stop(s);
+  if (JOB) throw new Stop(s);
   console.error("\n" + bold("Setup stopped: ") + s);
   process.exit(1);
 }
@@ -393,8 +398,15 @@ function wranglerConfig(o) {
 // until that site is deleted.
 let REPORT_TO = null;
 
+// From a terminal, the same steps are printed as they start.
+const STEP_LABEL = { site: "Updating the site", computer: "Updating this computer", restart: "Restarting", online: "Coming back online" };
+
 async function report(step, status, message, info) {
-  if (!REMOTE || !UPDATE_ID) return null;
+  if (!REMOTE) {
+    if (status === "active" && STEP_LABEL[step]) console.log(teal("▸ ") + bold(STEP_LABEL[step]));
+    return null;
+  }
+  if (!UPDATE_ID) return null;
   const c = REPORT_TO || readJson(CONFIG);
   if (!c || !c.site) return null;
   try {
@@ -468,8 +480,7 @@ async function remoteUpdate(manifest) {
     await report("verify", "done");
     at = "site";
     await report("site", "active");
-    token = cloudflareToken();
-    if (!token) fail(`Cloudflare didn't accept the saved sign-in. Run ${old.command || "ClaudeConnect"} update on your computer to sign in again.`);
+    signIn(old);
     installSite(manifest);
     writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
     deploy(SITE, old, "the new version");
@@ -497,7 +508,11 @@ async function remoteUpdate(manifest) {
     await report("restart", "done");
     at = "online";
     await report("online", "active");
-    if (!(await waitForConnected(logPath, from, 120000))) fail(`The new version started but hasn't connected to the site yet. Run ${cfg.command || "ClaudeConnect"} logs on your computer to see why.`);
+    // From a terminal the update itself is done by now: not connecting yet is worth saying, not a failure.
+    if (!(await waitForConnected(logPath, from, REMOTE ? 120000 : Number(process.env.CLAUDECONNECT_CONNECT_MS) || 30000))) {
+      if (REMOTE) fail(`The new version started but hasn't connected to the site yet. Run ${cfg.command || "ClaudeConnect"} logs on your computer to see why.`);
+      note(`It hasn't connected to the site yet. Run ${cfg.command || "ClaudeConnect"} logs to see why.`);
+    }
     await report("online", "done");
     console.log(`Updated to ${manifest.version}.`);
   } catch (e) {
@@ -538,6 +553,11 @@ function requireInstall() {
 
 function signIn(old) {
   token = cloudflareToken();
+  if (!token && !REMOTE) {
+    note("Sign in to Cloudflare in the browser window that opens.");
+    sh(`${WR} login`);
+    token = cloudflareToken();
+  }
   if (!token) fail(`Cloudflare didn't accept the saved sign-in. Run ${old.command || "ClaudeConnect"} update on your computer to sign in again.`);
 }
 
@@ -799,6 +819,88 @@ if (REMOTE_OP) {
   else await remoteDelete(old);
 }
 
+// ---- `<command> edit`: each setting in turn, with what it is now, and a y/n to change it. The site's own settings are
+// redeployed in place like Settings on the site does it; the rest only touches this computer.
+async function editSettings() {
+  let old;
+  try {
+    old = requireInstall();
+  } catch (e) {
+    console.error(failure(e));
+    process.exit(1);
+  }
+  const yes = async (q, def = false) => /^y/i.test(await ask(`  ${q} ${def ? "[Y/n]" : "[y/N]"} `, def ? "y" : "n"));
+  const name = old.displayName || "ClaudeConnect";
+  const agentPath = join(DIR, "agent.mjs");
+  console.log(bold(`\nChange ${name}`) + dim("  Enter keeps things as they are."));
+  const job = {};
+  const local = {};
+  if (await yes(`Change the name? Now: ${name}.`)) {
+    for (;;) {
+      const n = String(await ask("  New name: ", "")).trim().replace(/\s+/g, " ");
+      if (!n) break;
+      if (cleanSiteName(n)) {
+        if (n !== name) job.displayName = n;
+        break;
+      }
+      console.log("  That name won't work. Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number.");
+    }
+  }
+  const brand = readBrand();
+  if (await yes(`Change the logo? Now: ${brand.logo ? "your own" : "the built-in one"}.`)) {
+    const img = await askImage("Logo", "the current one", "the built-in one", "--logo", brand.logo);
+    if (JSON.stringify(img) !== JSON.stringify(brand.logo)) job.logo = img;
+  }
+  if (await yes(`Change the tab icon? Now: ${brand.favicon ? "your own" : "the logo"}.`)) {
+    const img = await askImage("Tab icon", "the current one", "the logo", "--favicon", brand.favicon);
+    if (JSON.stringify(img) !== JSON.stringify(brand.favicon)) job.favicon = img;
+  }
+  if (await yes(`${old.fable ? "Hide" : "Show"} Fable 5.1 in the model picker? It's ${old.fable ? "shown" : "hidden"} now.`)) job.fable = !old.fable;
+  const auto = autostartOn();
+  if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
+  if (await yes(`${old.credits ? "Stop showing" : "Show"} your usage credit balance on the site? It's ${old.credits ? "shown" : "not shown"} now. This reads your Claude Code sign-in on this computer to ask Claude for it; the sign-in itself never leaves this computer.`)) local.credits = !old.credits;
+  const changes = [
+    job.displayName && `name: ${job.displayName}`,
+    "logo" in job && `logo: ${job.logo ? "new" : "built-in"}`,
+    "favicon" in job && `tab icon: ${job.favicon ? "new" : "the logo"}`,
+    "fable" in job && `Fable 5.1: ${job.fable ? "shown" : "hidden"}`,
+    "autostart" in local && `start at login: ${local.autostart ? "yes" : "no"}`,
+    "credits" in local && `usage credit balance: ${local.credits ? "shown" : "not shown"}`
+  ].filter(Boolean);
+  if (!changes.length) {
+    console.log("\nNothing changed.");
+    process.exit(0);
+  }
+  console.log("\n  " + changes.join("\n  "));
+  if (!(await yes("Save these changes?", true))) {
+    console.log("\nNothing changed.");
+    process.exit(0);
+  }
+  if ("autostart" in local) spawnSync(process.execPath, [agentPath, "autostart", local.autostart ? "on" : "off"], { stdio: "ignore" });
+  if ("credits" in local) {
+    const cfg = readJson(CONFIG) || old;
+    cfg.credits = local.credits;
+    writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    old = cfg;
+  }
+  JOB = true;
+  // The name, logo, tab icon and Fable are part of the site: it's redeployed, and the program here restarts.
+  if (Object.keys(job).length) await remoteSettings(old, job);
+  if ("credits" in local && agentPid()) {
+    console.log(teal("▸ ") + bold("Restarting"));
+    await restartAgent();
+  }
+  console.log("Saved.");
+  process.exit(0);
+}
+
+function autostartOn() {
+  const r = spawnSync(process.execPath, [join(DIR, "agent.mjs"), "status"], { encoding: "utf8" });
+  return /Starts at login: yes/.test(String(r.stdout || ""));
+}
+
+if (EDIT) await editSettings();
+
 const major = Number(process.versions.node.split(".")[0]);
 let payload;
 try {
@@ -811,6 +913,19 @@ try {
   process.exit(1);
 }
 if (REMOTE) await remoteUpdate(payload);
+
+// Updating from a terminal asks nothing: it's the same in-place update the site's Update button does. Changing the name or the
+// look is `<command> edit`.
+function installedConfig() {
+  const c = readJson(CONFIG);
+  return c && c.accountId && c.kvId && c.name && c.site ? c : null;
+}
+async function quickUpdate() {
+  console.log(bold(`\nUpdating ${installedConfig().displayName || "ClaudeConnect"} to ${payload.version}`) + dim("  your chats and settings are kept"));
+  JOB = true;
+  await remoteUpdate(payload);
+}
+if (flag("--update") && installedConfig()) await quickUpdate();
 
 console.log(bold(`\nClaudeConnect setup`) + dim(`  ${payload.version}`));
 
@@ -875,10 +990,11 @@ if (found.names.length || existsSync(CONFIG) || legacy) {
   const where = found.names.length ? found.names.join(", ") : "this computer";
   target = found.v1 ? null : found.names.includes(prior.name) ? prior.name : found.names.find(n => !n.endsWith("-relay")) || null;
   console.log("\n" + bold(`${known} is already set up`) + ` (${where}).`);
-  if (target) console.log(`  ${bold("u")}  Update it. Keeps your chats, brings the site and this computer up to date, and lets you change its name and look.`);
+  if (target) console.log(`  ${bold("u")}  Update it. Keeps your chats and settings, and brings the site and this computer up to date.${prior.command ? ` To change its name or look, run ${prior.command} edit.` : ""}`);
   console.log(`  ${bold("r")}  Reset it. Deletes the site and all its chats, then sets everything up again from the start.`);
   console.log(`  ${bold("n")}  Leave it as it is.`);
   const pick = flag("--reset") ? "r" : flag("--update") && target ? "u" : (await ask(`  Choose [${target ? "u/" : ""}r/N]: `, "n")).toLowerCase();
+  if (pick.startsWith("u") && target && !legacy && installedConfig() && installedConfig().name === target) await quickUpdate();
   if (pick.startsWith("u") && target) mode = "update";
   else if (pick.startsWith("r")) {
     await reset(found);

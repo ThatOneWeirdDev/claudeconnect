@@ -443,6 +443,24 @@ export class ChatgqlHub extends DurableObject {
     for (let i = 0; i < n; i++) ws.send(JSON.stringify({ type: "part", key, i, n, d: s.slice(i * CHUNK, (i + 1) * CHUNK) }));
   }
 
+  // The reply in the order it happened: stretches of thinking, text and tool calls, the way Claude Code shows them.
+  part(r, type) {
+    const last = r.parts[r.parts.length - 1];
+    if (last && last.type === type) return last;
+    const p = { type, text: "" };
+    r.parts.push(p);
+    return p;
+  }
+
+  // What's kept with a finished reply: each stretch's length, pointing into the reply's text and thinking, so nothing is
+  // stored twice. Only when the stretches add up to exactly the text and thinking kept; anything else shows the old way.
+  partsMeta(r, text, thinking) {
+    if (!r || !r.parts.length) return null;
+    const sum = type => r.parts.filter(p => p.type === type).reduce((n, p) => n + p.text.length, 0);
+    if (sum("text") !== text.length || sum("think") !== thinking.length) return null;
+    return r.parts.slice(0, 400).map(p => (p.type === "tool" ? { t: "tool", id: String(p.id).slice(0, 80) } : { t: p.type, n: p.text.length, ...(p.ms ? { ms: p.ms } : {}) }));
+  }
+
   push(runId, obj) {
     const r = this.runs.get(runId);
     if (!r || r.closed) return;
@@ -555,6 +573,7 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "done") return this.completeRun(m);
     if (m.type === "update_ack") return this.updateAck(m);
     if (m.type === "limits") return this.setLimits(m.limits);
+    if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
     if (m.type === "transcript") return this.gotTranscript(m);
     const r = this.runs.get(m.runId);
@@ -563,9 +582,11 @@ export class ChatgqlHub extends DurableObject {
     this.armRun(m.runId, 100000, `Lost the connection before the reply finished. Check that ${commandName(this.env)} is still running.`);
     if (m.type === "delta") {
       r.text += m.text || "";
+      this.part(r, "text").text += m.text || "";
       this.push(m.runId, { type: "delta", text: m.text || "" });
     } else if (m.type === "tool") {
       r.tools.push({ id: m.id, name: m.name, label: m.label, done: false });
+      r.parts.push({ type: "tool", id: m.id });
       this.push(m.runId, { type: "tool", id: m.id, name: m.name, label: m.label });
     } else if (m.type === "tool_done") {
       const t = r.tools.find(x => x.id === m.id);
@@ -576,9 +597,13 @@ export class ChatgqlHub extends DurableObject {
       this.push(m.runId, { type: "tool_done", id: m.id, error: !!m.error });
     } else if (m.type === "thinking") {
       r.thinking += m.text || "";
+      this.part(r, "think").text += m.text || "";
       this.push(m.runId, { type: "thinking", text: m.text || "" });
     } else if (m.type === "thinking_done") {
-      r.thinkingMs = Number(m.ms) || 0;
+      // the agent counts thinking time across the whole reply; each stretch of thinking gets its own share
+      const ms = Number(m.ms) || 0;
+      this.part(r, "think").ms = Math.max(0, ms - (r.thinkingMs || 0));
+      r.thinkingMs = ms;
       this.push(m.runId, { type: "thinking_done", ms: r.thinkingMs });
     } else if (m.type === "status") {
       r.status = m.text;
@@ -636,6 +661,7 @@ export class ChatgqlHub extends DurableObject {
     const method = req.method;
     if (p === "/api/state" && method === "GET") return json(await this.state(req));
     if (p === "/api/limits" && method === "GET") return json(await this.limitsView());
+    if (p === "/api/credits" && method === "GET") return json((await this.ctx.storage.get("credits")) || null);
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
     if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
     if (p === "/api/import" && method === "POST") return this.importChats(req);
@@ -688,9 +714,10 @@ export class ChatgqlHub extends DurableObject {
     return {
       email: req.headers.get("x-chatgql-user") || "",
       version: appVersion(this.env),
-      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history"), credits: (info.caps || []).includes("credits") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
       prefs: await this.prefs(),
+      credits: (await this.ctx.storage.get("credits")) || null,
       update: await this.updateInfo()
     };
   }
@@ -751,6 +778,28 @@ export class ChatgqlHub extends DurableObject {
     else if (c.enabled === false) state = "off";
     else return null;
     return { state, reason: c.reason || "", resetsAt };
+  }
+
+  // The usage credit balance, read on the computer from Claude's account (when that's turned on there). Amounts are in the
+  // currency's smallest unit, as Anthropic gives them. A failed reading keeps the last good numbers and says why.
+  async setCredits(raw) {
+    if (!raw || typeof raw !== "object") return;
+    const num = v => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 1e13 ? Math.round(v) : null);
+    const cur = v => (typeof v === "string" && /^[A-Za-z]{3}$/.test(v) ? v.toUpperCase() : "");
+    const out = { at: Date.now() };
+    if (raw.extra && typeof raw.extra === "object") out.extra = { enabled: raw.extra.enabled === true, limit: num(raw.extra.limit), used: num(raw.extra.used) };
+    if (raw.balance && typeof raw.balance === "object" && num(raw.balance.amount) !== null) {
+      const currency = cur(raw.balance.currency) || "USD";
+      const promos = (Array.isArray(raw.balance.promos) ? raw.balance.promos.slice(0, 10) : []).filter(x => x && num(x.amount));
+      out.balance = { amount: num(raw.balance.amount), currency, promos: promos.map(x => ({ amount: num(x.amount), currency: cur(x.currency) || currency, expires: num(x.expires), name: typeof x.name === "string" ? x.name.replace(/\s+/g, " ").trim().slice(0, 60) : "" })) };
+    }
+    if (!out.extra && !out.balance) {
+      const prev = await this.ctx.storage.get("credits");
+      const error = ["expired", "signin", "unavailable"].includes(raw.error) ? raw.error : "unavailable";
+      await this.ctx.storage.put("credits", prev && (prev.extra || prev.balance) ? { ...prev, error, errorAt: out.at } : { at: out.at, error });
+      return;
+    }
+    await this.ctx.storage.put("credits", out);
   }
 
   async prefs() {
@@ -1054,7 +1103,7 @@ export class ChatgqlHub extends DurableObject {
     let partial = null;
     if (chat.running) {
       const r = this.runs.get(chat.running);
-      partial = r ? { text: r.text, thinking: r.thinking, thinkingMs: r.thinkingMs || 0, tools: r.tools, status: r.status || "" } : { text: "", thinking: "", thinkingMs: 0, tools: [], status: "" };
+      partial = r ? { text: r.text, thinking: r.thinking, thinkingMs: r.thinkingMs || 0, tools: r.tools, parts: r.parts, status: r.status || "" } : { text: "", thinking: "", thinkingMs: 0, tools: [], parts: [], status: "" };
     }
     return json({ chat, messages, partial });
   }
@@ -1327,7 +1376,7 @@ export class ChatgqlHub extends DurableObject {
     this.sql.exec("INSERT INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'user', ?, ?, ?)", userMsg.id, chat.id, text, JSON.stringify(userMsg.meta), now);
     this.sql.exec("UPDATE chats SET running = ?, model = ?, effort = ?, updated = ? WHERE id = ?", runId, model, effort, now, chat.id);
     const ts = new TransformStream();
-    this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null });
+    this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], parts: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
     this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: earlier + text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
     this.armRun(runId, 30000, `${siteName(this.env)} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
@@ -1410,6 +1459,8 @@ export class ChatgqlHub extends DurableObject {
     const thinking = typeof m.thinking === "string" && m.thinking ? m.thinking : (r ? r.thinking : "");
     const artifacts = this.saveArtifacts(chat.id, m.runId, Array.isArray(m.artifacts) ? m.artifacts : [], text);
     const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, mode: r ? r.mode : "code", perm: r ? r.perm : "auto", context: cleanContext(m.context), tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
+    const parts = this.partsMeta(r, text, meta.thinking);
+    if (parts) meta.parts = parts;
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);
     if (m.started) this.sql.exec("UPDATE chats SET started = 1 WHERE id = ?", chat.id);
     if (m.sync && Number.isInteger(m.sync.turns) && m.sync.turns >= 0) this.sql.exec("UPDATE chats SET synced_turns = ?, synced_at = ? WHERE id = ?", m.sync.turns, Math.round(Number(m.sync.mtime)) || 0, chat.id);

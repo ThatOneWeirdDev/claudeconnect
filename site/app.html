@@ -115,8 +115,6 @@ svg{display:block}
 .item .live{width:7px;height:7px;border-radius:50%;background:var(--text);flex:none;animation:pulse 1.4s ease-in-out infinite}
 .item input{flex:1;margin:3px 4px;padding:5px 8px;border:1px solid var(--border-2);border-radius:8px;background:var(--surface);outline:none}
 .empty-list{padding:14px 12px;color:var(--text-3);font-size:13px}
-.linkish{display:inline;color:var(--link);font-size:inherit;text-align:left}
-.linkish:hover{text-decoration:underline}
 .side-foot{padding:8px;border-top:1px solid var(--border);position:relative}
 .profile{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;text-align:left}
 .profile:hover,.profile[aria-expanded="true"]{background:var(--hover)}
@@ -485,6 +483,10 @@ svg{display:block}
 .mt-sub{margin-top:6px;color:var(--text-3);font-size:13px}
 .credits{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
 .credits p{margin:0 0 14px;color:var(--text-2);font-size:13.5px}
+.bal{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-3);font-size:13.5px}
+.bal div{display:flex;justify-content:space-between;gap:12px}
+.bal span{color:var(--text-2)}
+.bal b{font-weight:500;text-align:right}
 .state{font-size:12.5px;font-weight:500;padding:2px 10px;border-radius:999px;background:var(--surface-3);color:var(--text-2)}
 .state.using,.state.on{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
 .state.near{background:var(--warn-soft);color:var(--warn)}
@@ -1098,7 +1100,7 @@ function renderHistory() {
   const q = S.query.trim().toLowerCase();
   const list = S.chats.filter(c => !q || (c.title || "").toLowerCase().includes(q) || (c.folder || "").toLowerCase().includes(q));
   if (!list.length) {
-    h.innerHTML = `<div class="empty-list">${q ? "No chats match that search." : 'Your chats will show up here. <button type="button" class="linkish" data-import>Bring over your claude.ai chats</button>'}</div>`;
+    h.innerHTML = `<div class="empty-list">${q ? "No chats match that search." : "Your chats will show up here."}</div>`;
     return;
   }
   let html = "";
@@ -1121,7 +1123,6 @@ function closeMenus() {
   document.querySelectorAll(".more[aria-expanded=true]").forEach(b => b.setAttribute("aria-expanded", "false"));
 }
 $("history").addEventListener("click", e => {
-  if (e.target.closest("[data-import]")) { $("app").classList.remove("side-open"); return openSettings("chats"); }
   const more = e.target.closest("[data-more]");
   const open = e.target.closest("[data-open]");
   if (more) {
@@ -1214,11 +1215,12 @@ function fmtDur(ms) {
   if (sec < 60) return sec + "s";
   return Math.floor(sec / 60) + "m " + (sec % 60) + "s";
 }
-function thinkHtml(text, ms, live, open) {
+// `k` numbers the pieces of a reply, so a piece the reader opened stays open while the reply streams in.
+function thinkHtml(text, ms, live, open, k) {
   if (!text && !ms && !live) return "";
   const label = live ? '<span class="live">Thinking</span>' : `<span>${ms ? "Thought for " + fmtDur(ms) : "Thoughts"}</span>`;
   if (!text) return `<div class="think"><span class="think-head">${label}</span></div>`;
-  return `<details class="think"${open ? " open" : ""}><summary>${I.chev}${label}</summary><div class="think-body md">${md(text)}</div></details>`;
+  return `<details class="think"${open ? " open" : ""}${k !== undefined ? ` data-part="${k}"` : ""}><summary>${I.chev}${label}</summary><div class="think-body md">${md(text)}</div></details>`;
 }
 function artCard(a) {
   if (a.id) ARTS.set(a.id, a);
@@ -1227,23 +1229,62 @@ function artCard(a) {
   const on = P.a && P.a.id === a.id ? " on" : "";
   return `<div class="art${a.tooBig || !a.id ? " off" : on}"${a.id ? ` data-art="${esc(a.id)}" role="button" tabindex="0"` : ""}><span class="ico">${I["k_" + a.kind] || I.file}</span><span class="txt"><b>${esc(a.name)}</b><small>${esc(sub)}</small></span>${a.id ? `<a class="dl" href="/a/${encodeURIComponent(a.id)}?download=1" download="${esc(a.name)}" title="Download" aria-label="Download ${esc(a.name)}" data-dl>${I.download}</a>` : ""}</div>`;
 }
-function toolsHtml(tools, open) {
+function toolsHtml(tools, open, k) {
   if (!tools || !tools.length) return "";
   const n = tools.length;
   const running = tools.some(t => !t.done && !t.error);
   const label = running ? `Working: ${esc(tools.filter(t => !t.done).slice(-1)[0].label)}` : `Used ${n} tool${n === 1 ? "" : "s"}`;
-  return `<div class="tools"><details${open ? " open" : ""}><summary>${I.chev}<span>${label}</span></summary><div class="tool-list">${tools.map(t => `<div class="tool${t.error ? " err" : t.done ? " done" : ""}"><i></i><span>${esc(t.label || t.name)}</span></div>`).join("")}</div></details></div>`;
+  return `<div class="tools"><details${open ? " open" : ""}${k !== undefined ? ` data-part="${k}"` : ""}><summary>${I.chev}<span>${label}</span></summary><div class="tool-list">${tools.map(t => `<div class="tool${t.error ? " err" : t.done ? " done" : ""}"><i></i><span>${esc(t.label || t.name)}</span></div>`).join("")}</div></details></div>`;
+}
+// A reply as it happened, like Claude Code shows it: a stretch of thinking, then what it wrote, then more thinking, tools,
+// more text. Tool calls in a row are one group. A finished reply keeps each stretch's length (meta.parts), pointing into its
+// text and thinking; one from before that, or from a chat copied over, is shown as one thinking block, its tools, then text.
+function partsOf(meta, content) {
+  if (!meta || !Array.isArray(meta.parts)) return null;
+  const think = meta.thinking || "";
+  const out = [];
+  let at = 0;
+  let th = 0;
+  for (const p of meta.parts) {
+    if (p.t === "text") { out.push({ type: "text", text: content.slice(at, at + p.n) }); at += p.n; }
+    else if (p.t === "think") { out.push({ type: "think", text: think.slice(th, th + p.n), ms: p.ms || 0 }); th += p.n; }
+    else if (p.t === "tool") out.push({ type: "tool", id: p.id });
+  }
+  return at === content.length && th === think.length ? out : null;
+}
+function partsHtml(parts, tools, o) {
+  let html = "";
+  for (let i = 0; i < parts.length; ) {
+    const p = parts[i];
+    if (p.type === "tool") {
+      let j = i;
+      const group = [];
+      while (j < parts.length && parts[j].type === "tool") { const t = (tools || []).find(x => x.id === parts[j].id); if (t) group.push(t); j++; }
+      html += toolsHtml(group, i in o.open ? o.open[i] : o.live && j === parts.length, i);
+      i = j;
+      continue;
+    }
+    if (p.type === "think") html += thinkHtml(p.text, p.ms, o.live && o.thinkActive && i === parts.length - 1, !!o.open[i], i);
+    else if (p.text.trim()) html += `<div class="md">${md(p.text)}</div>`;
+    i++;
+  }
+  return html;
 }
 function botEl(m) {
   const el = document.createElement("div");
   el.className = "msg bot";
   const meta = m.meta || {};
   const arts = (meta.artifacts || []).map(a => ({ ...a }));
-  let html = thinkHtml(meta.thinking, meta.thinkingMs, false, false) + toolsHtml(meta.tools, false);
-  if (m.content) {
-    MD_ARTS = arts;
-    try { html += `<div class="md">${md(m.content)}</div>`; } finally { MD_ARTS = null; }
-  }
+  const parts = partsOf(meta, m.content || "");
+  let html = "";
+  MD_ARTS = arts;
+  try {
+    if (parts) html = partsHtml(parts, meta.tools, { live: false, open: {} });
+    else {
+      html = thinkHtml(meta.thinking, meta.thinkingMs, false, false) + toolsHtml(meta.tools, false);
+      if (m.content) html += `<div class="md">${md(m.content)}</div>`;
+    }
+  } finally { MD_ARTS = null; }
   const rest = arts.filter(a => !a._used);
   if (rest.length) html += `<div class="arts">${rest.map(artCard).join("")}</div>`;
   if (meta.error) html += `<div class="note ${meta.error === "Stopped." ? "soft" : "err"}">${meta.error === "Stopped." ? "You stopped this reply." : esc(meta.error)}</div>`;
@@ -1269,7 +1310,8 @@ function liveStart(partial) {
   el.className = "msg bot";
   $("threadInner").append(el);
   const p = partial || {};
-  S.live = { el, text: p.text || "", thinking: p.thinking || "", thinkingMs: p.thinkingMs || 0, thinkActive: p.status === "Thinking" && !p.text, thinkOpen: false, toolsOpen: true, tools: (p.tools || []).map(t => ({ ...t })), status: p.status || "", raf: 0 };
+  S.live = { el, text: p.text || "", thinking: p.thinking || "", thinkingMs: p.thinkingMs || 0, thinkActive: false, open: {}, tools: (p.tools || []).map(t => ({ ...t })), parts: livePartsFrom(p), status: p.status || "", raf: 0 };
+  S.live.thinkActive = p.status === "Thinking" && lastPart(S.live) !== "text";
   $("main").classList.remove("is-empty");
   liveRender();
   return S.live;
@@ -1278,16 +1320,36 @@ function liveRender() {
   const L = S.live;
   if (!L) return;
   L.raf = 0;
-  let html = thinkHtml(L.thinking, L.thinkingMs, L.thinkActive, L.thinkOpen) + toolsHtml(L.tools, L.toolsOpen);
-  if (L.text) html += `<div class="md caret-host">${md(L.text)}</div>`;
-  else if (!L.thinkActive) html += `<div class="thinking"><span class="wave"><i></i><i></i><i></i><i></i></span><span>${esc(L.status && L.status !== "Thinking" ? L.status : L.thinking || L.thinkingMs ? "Working" : "Thinking")}</span></div>`;
+  const end = lastPart(L);
+  let html = partsHtml(L.parts, L.tools, { live: true, thinkActive: L.thinkActive, open: L.open });
+  // thinking has started but nothing of it has arrived yet
+  if (L.thinkActive && end !== "think") html += thinkHtml("", 0, true, false);
+  else if (!L.thinkActive && end !== "text") html += `<div class="thinking"><span class="wave"><i></i><i></i><i></i><i></i></span><span>${esc(L.status && L.status !== "Thinking" ? L.status : L.parts.length ? "Working" : "Thinking")}</span></div>`;
   L.el.innerHTML = html;
-  const last = L.el.querySelector(".md > :last-child");
+  const mds = end === "text" ? L.el.querySelectorAll(":scope > .md") : [];
+  const last = mds.length ? mds[mds.length - 1].lastElementChild : null;
   if (last) {
     const tgt = last.matches("ul,ol") ? last.querySelector("li:last-child") || last : last.matches(".code") ? null : last;
     if (tgt) tgt.classList.add("caret");
   }
   autoScroll();
+}
+// The pieces of a reply that's still being written, from what the site has so far (an older site sends none: one text piece).
+function livePartsFrom(p) {
+  if (Array.isArray(p.parts)) return p.parts.map(x => ({ ...x }));
+  const out = [];
+  if (p.thinking) out.push({ type: "think", text: p.thinking, ms: p.thinkingMs || 0 });
+  for (const t of p.tools || []) out.push({ type: "tool", id: t.id });
+  if (p.text) out.push({ type: "text", text: p.text });
+  return out;
+}
+function lastPart(L) { return L.parts.length ? L.parts[L.parts.length - 1].type : ""; }
+function livePart(L, type) {
+  const last = L.parts[L.parts.length - 1];
+  if (last && last.type === type) return last;
+  const p = { type, text: "" };
+  L.parts.push(p);
+  return p;
 }
 function liveQueue() {
   if (S.live && !S.live.raf) S.live.raf = requestAnimationFrame(liveRender);
@@ -1307,8 +1369,7 @@ function liveFinish(message) {
 $("threadInner").addEventListener("toggle", e => {
   const L = S.live;
   if (!L || !L.el.contains(e.target)) return;
-  if (e.target.classList.contains("think")) L.thinkOpen = e.target.open;
-  else if (e.target.closest(".tools")) L.toolsOpen = e.target.open;
+  if (e.target.dataset && e.target.dataset.part !== undefined) L.open[e.target.dataset.part] = e.target.open;
 }, true);
 
 const thread = $("thread");
@@ -1380,7 +1441,7 @@ async function pollChat(id) {
   S.chat = j.chat;
   if (j.chat.running) {
     if (!S.live) liveStart(j.partial);
-    else if (j.partial) { const L = S.live; L.text = j.partial.text; L.tools = j.partial.tools; L.status = j.partial.status; L.thinking = j.partial.thinking || ""; L.thinkingMs = j.partial.thinkingMs || 0; L.thinkActive = L.status === "Thinking" && !L.text; liveQueue(); }
+    else if (j.partial) { const L = S.live; L.text = j.partial.text; L.tools = j.partial.tools; L.status = j.partial.status; L.thinking = j.partial.thinking || ""; L.thinkingMs = j.partial.thinkingMs || 0; L.parts = livePartsFrom(j.partial); L.thinkActive = L.status === "Thinking" && lastPart(L) !== "text"; liveQueue(); }
     S.poll = setTimeout(() => pollChat(id), 1500);
   } else {
     S.live = null;
@@ -1603,16 +1664,16 @@ function handleEvent(ev, startedIn) {
       }
       return false;
     case "delta":
-      if (L) { L.text += ev.text; L.thinkActive = false; liveQueue(); }
+      if (L) { L.text += ev.text; livePart(L, "text").text += ev.text; L.thinkActive = false; liveQueue(); }
       return false;
     case "thinking":
-      if (L) { L.thinking += ev.text; L.thinkActive = true; liveQueue(); }
+      if (L) { L.thinking += ev.text; livePart(L, "think").text += ev.text; L.thinkActive = true; liveQueue(); }
       return false;
     case "thinking_done":
-      if (L) { L.thinkingMs = ev.ms || L.thinkingMs; L.thinkActive = false; liveQueue(); }
+      if (L) { livePart(L, "think").ms = Math.max(0, (ev.ms || 0) - (L.thinkingMs || 0)); L.thinkingMs = ev.ms || L.thinkingMs; L.thinkActive = false; liveQueue(); }
       return false;
     case "tool":
-      if (L) { L.tools.push({ id: ev.id, name: ev.name, label: ev.label, done: false }); L.thinkActive = false; liveQueue(); }
+      if (L) { L.tools.push({ id: ev.id, name: ev.name, label: ev.label, done: false }); L.parts.push({ type: "tool", id: ev.id }); L.thinkActive = false; liveQueue(); }
       return false;
     case "tool_done":
       if (L) { const t = L.tools.find(x => x.id === ev.id); if (t) { t.done = true; t.error = ev.error; } liveQueue(); }
@@ -1806,7 +1867,6 @@ function profileMenu() {
   const chip = wk && !wk.reset ? `<span class="chip-r">${Math.round(wk.pct)}%</span>` : "";
   return `<div class="hdr">${esc(st.email || CFG.name)}</div>` +
     `<button type="button" role="menuitem" data-pm="usage">${I.gauge}<span>Plan usage</span>${chip}</button>` +
-    `<button type="button" role="menuitem" data-pm="chats">${I.chat}<span>Import claude.ai chats</span></button>` +
     `<button type="button" role="menuitem" data-pm="settings">${I.gear}<span>Settings</span></button>` +
     (u && u.available ? `<button type="button" role="menuitem" data-pm="updates">${I.up}<span>Update available</span><span class="chip-r up">v${esc(u.latest)}</span></button>` : "") +
     `<hr><div class="row" style="padding:0 4px 0 10px;height:38px;gap:10px;flex-wrap:nowrap"><span style="color:var(--text-2);display:flex">${I.sun.replace("<svg", '<svg style="width:18px;height:18px"')}</span><span>Theme</span><span class="themes">${THEMES.map(([k, label, ic]) => `<button type="button" data-theme-set="${k}" title="${label}" aria-label="${label}">${ic}</button>`).join("")}</span></div>`;
@@ -1830,7 +1890,7 @@ $("pmenu").addEventListener("click", e => {
   closeProfile();
   $("app").classList.remove("side-open");
   if (b.dataset.pm === "usage") openUsage();
-  else openSettings(b.dataset.pm === "updates" || b.dataset.pm === "chats" ? b.dataset.pm : "general");
+  else openSettings(b.dataset.pm === "updates" ? "updates" : "general");
 });
 
 /* ---------- plan usage: the real percentages Claude Code reads from the signed-in plan, and usage credits ---------- */
@@ -1861,7 +1921,29 @@ function creditsHtml(l) {
   const why = c && c.state === "off" && CREDIT_WHY[c.reason] ? " " + CREDIT_WHY[c.reason] : "";
   const resets = c && c.resetsAt && c.state !== "on" ? ` Their period resets ${relTime(c.resetsAt)}.` : "";
   const on = useCredits();
-  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div><p class="fine" style="margin:0">Your balance, promotional credits and spending limit are on claude.ai, which doesn't share them with other sites. <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">See them on claude.ai</a></p></div>`;
+  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div>${balanceHtml()}</div>`;
+}
+function money(minor, currency) {
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD" }).format(minor / 100); } catch { return (minor / 100).toFixed(2) + " " + (currency || ""); }
+}
+// The balance, promotional credits and this month's spending, read by the computer from your Claude account when that's
+// turned on there with `<command> edit`.
+function balanceHtml() {
+  const st = S.state || {};
+  const b = st.credits;
+  const link = '<a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">claude.ai</a>';
+  const on = st.agent && st.agent.credits;
+  if (!b || (!b.extra && !b.balance)) {
+    if (!on) return `<p class="fine" style="margin:0">To see your balance and promotional credits here, run <code>${esc(CFG.command)} edit</code> on your computer and answer <b>y</b> to showing your usage credit balance. They're always on ${link} too.</p>`;
+    const why = b && b.error === "expired" ? "Your Claude sign-in on the computer needs renewing; that happens with your next message." : b && b.error === "signin" ? "Claude Code on your computer isn't signed in with a Claude account." : U.refreshing ? "Reading your balance…" : "Claude didn't give your balance this time.";
+    return `<p class="fine" style="margin:0">${esc(why)} It's always on ${link}.</p>`;
+  }
+  const rows = [];
+  const cur = b.balance ? b.balance.currency : "USD";
+  if (b.balance) rows.push(["Balance", money(b.balance.amount, cur)]);
+  for (const p of (b.balance && b.balance.promos) || []) rows.push([p.name ? `Promotional · ${p.name}` : "Promotional", money(p.amount, p.currency) + (p.expires ? ` · until ${new Date(p.expires).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "")]);
+  if (b.extra) rows.push(["Spent this month", b.extra.used === null ? "—" : money(b.extra.used, cur) + (b.extra.limit === null ? (b.extra.enabled ? " · no limit" : "") : ` of ${money(b.extra.limit, cur)}`)]);
+  return `<div class="bal">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><p class="fine" style="margin:8px 0 0">From your Claude account${b.error ? ", as last read" : ""} · ${new Date(b.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Top up or change the limit on ${link}.</p>`;
 }
 function renderUsage() {
   const l = S.state && S.state.limits;
@@ -1908,6 +1990,13 @@ async function refreshUsage() {
         const l = await apiJson("/api/limits");
         if (l && l.at > before) { S.state.limits = l; break; }
       }
+    }
+    // the balance comes a moment after the percentages
+    const was = S.state.credits ? S.state.credits.at : 0;
+    for (let i = 0; i < 8 && S.state.agent.credits && $("usageDlg").open; i++) {
+      const c = await apiJson("/api/credits");
+      if (c && c.at > was) { S.state.credits = c; break; }
+      await new Promise(res => setTimeout(res, 1000));
     }
   } catch (e) {
     if (e.message !== "Signed out" && $("usageDlg").open) toast(e.message);
@@ -2163,7 +2252,7 @@ async function doAct(act) {
     try { applyUpdate(await apiJson("/api/admin/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })); } catch (e) { toast(e.message); }
     return renderSettings();
   }
-  if (act === "reload") return location.reload();
+  if (act === "reload") return reloadNow();
   if (act === "import") return IMP.busy || $("fImport").click();
   if (act === "hide") return closeSettings();
 }
@@ -2301,7 +2390,16 @@ async function importExport(file) {
 
 /* ---------- whatever is running: the checklist ---------- */
 function upRun() { return UP.data && UP.data.run ? UP.data.run : null; }
-function pageIsStale() { return !!(UP.data && UP.data.current && UP.data.current !== CFG.version); }
+// Behind the site: the site runs a newer version than this page. Never the other way round: for a moment after an update the
+// page can be new while the site still answers as the old one, and that page is already where it should be.
+function pageIsStale() { return !!(UP.data && UP.data.current && newerThan(UP.data.current, CFG.version)); }
+function newerThan(a, b) {
+  const x = /^(\d+)\.(\d+)\.(\d+)/.exec(String(a || ""));
+  const y = /^(\d+)\.(\d+)\.(\d+)/.exec(String(b || ""));
+  if (!x || !y) return !!a && a !== b;
+  for (let i = 1; i <= 3; i++) if (+x[i] !== +y[i]) return +x[i] > +y[i];
+  return false;
+}
 function stepState(run, key) {
   let st = run.steps[key] || (key === run.step ? "active" : "pending");
   if (run.state === "error" && key === run.step && st !== "done") st = "error";
@@ -2393,35 +2491,46 @@ function renderPill() {
     text = run.kind === "delete" ? "Deleting…" : `${OPEN_LABEL[run.kind || "update"]} ${done}/${total}`; short = `${done}/${total}`; cls += " busy";
   } else if (run && run.state === "error") { text = "Didn't finish"; short = "Failed"; cls += " bad"; }
   else if (run && run.state === "done" && run.kind === "settings") { text = "Reload"; short = "Reload"; }
-  else if (run && run.state === "done" && (pageIsStale() || UP.seen === run.id)) { text = "Updated · Reload"; short = "Reload"; }
-  else if (pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
+  else if (run && run.state === "done" && UP.seen === run.id && !pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
+  else if (pageIsStale() && !reloadAsked()) { text = "Updated · Reload"; short = "Reload"; }
   else if (u && u.available) { text = "Update available"; short = "Update"; }
   b.hidden = !text;
   b.className = cls;
   $("pillText").textContent = text;
   $("pillShort").textContent = short;
 }
+// One click: a finished update or change reloads straight away, rather than opening a panel that has another Reload button.
 $("updatePill").onclick = () => {
   const run = upRun();
-  if (pageIsStale() && (!run || run.state === "done")) return location.reload();
+  if (run ? run.state === "done" : pageIsStale()) return reloadNow();
   openSettings(run ? "general" : "updates");
 };
 
+// Reloading for a version is remembered in this browser. If the page that comes back is still the old one (for a few seconds
+// after an update, Cloudflare can still hand out the previous version), it says nothing more about it and quietly tries again.
+function reloadNow() {
+  if (pageIsStale()) store.set("reloadFor", UP.data.current);
+  location.reload();
+}
+function reloadAsked() { return pageIsStale() && store.get("reloadFor", "") === UP.data.current; }
+
 // A page that is behind the site (an update finished, here or from another device) moves to the new version by itself, as
-// soon as that can't lose anything: nothing typed or attached, no reply being written, no unsaved changes in Settings. Once
-// per version in a tab, so a page that somehow stays old can't loop; the Reload buttons are still there then.
+// soon as that can't lose anything: nothing typed or attached, no reply being written, no unsaved changes in Settings. At most
+// three times per version in a tab, further apart each time, so a page that somehow stays old can't loop.
 function reloadedTo() { try { return sessionStorage.getItem("gql.reloadedTo") || ""; } catch { return ""; } }
 function maybeReload(wait) {
   clearTimeout(UP.reloadTimer);
   const run = upRun();
-  if (!pageIsStale() || UP.gone || (run && run.state !== "done") || reloadedTo() === UP.data.current) return;
+  const [ver, n] = reloadedTo().split("#");
+  const tries = ver === UP.data.current ? Number(n) || 1 : 0;
+  if (!pageIsStale() || UP.gone || (run && run.state !== "done") || tries >= 3) return;
   UP.reloadTimer = setTimeout(() => {
     const r = upRun();
     if (!pageIsStale() || (r && r.state !== "done")) return;
     if ($("input").value.trim() || S.files.length || S.busy || S.live || (SET.draft && isDirty())) return maybeReload(2000);
-    try { sessionStorage.setItem("gql.reloadedTo", UP.data.current); } catch {}
-    location.reload();
-  }, wait);
+    try { sessionStorage.setItem("gql.reloadedTo", `${UP.data.current}#${tries + 1}`); } catch {}
+    reloadNow();
+  }, Math.max(wait, tries * 5000));
 }
 // After an update, the first time this browser opens the new version, the Updates panel opens with the patch notes.
 function announceVersion() {

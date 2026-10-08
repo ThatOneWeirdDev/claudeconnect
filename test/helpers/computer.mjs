@@ -37,7 +37,21 @@ process.stdin.on("data", d => (prompt += d)).on("end", () => {
     process.exit(1);
   }
   out({ type: "system", subtype: "init", model: "claude-opus-5-5" });
-  out({ type: "assistant", message: { id: "m1", usage: { input_tokens: 11, cache_creation_input_tokens: 44, cache_read_input_tokens: 333, output_tokens: 22 }, content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } });
+  if (/interleave/.test(prompt)) {
+    // thinking, text, thinking, text in one reply, streamed the way Claude Code streams it
+    const ev = e => out({ type: "stream_event", event: e });
+    ev({ type: "message_start", message: { id: "m1" } });
+    const block = (i, type, text) => {
+      ev({ type: "content_block_start", index: i, content_block: type === "thinking" ? { type, thinking: "" } : { type, text: "" } });
+      ev({ type: "content_block_delta", index: i, delta: type === "thinking" ? { type: "thinking_delta", thinking: text } : { type: "text_delta", text } });
+      ev({ type: "content_block_stop", index: i });
+    };
+    block(0, "thinking", "first thought");
+    block(1, "text", "ok time for test 2");
+    block(2, "thinking", "second thought");
+    block(3, "text", "done");
+    out({ type: "assistant", message: { id: "m1", content: [{ type: "thinking", thinking: "first thought" }, { type: "text", text: "ok time for test 2" }, { type: "thinking", thinking: "second thought" }, { type: "text", text: "done" }] } });
+  } else out({ type: "assistant", message: { id: "m1", usage: { input_tokens: 11, cache_creation_input_tokens: 44, cache_read_input_tokens: 333, output_tokens: 22 }, content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } });
   // the shape of a real event, captured from Claude Code 2.1.293: fractions of each window, resets in epoch seconds
   const now = Math.floor(Date.now() / 1000);
   out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", resetsAt: now + 3 * 3600, rateLimitType: "five_hour", utilization: 0.42, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3 * 3600 }, seven_day: { utilization: 0.17, resetsAt: now + 4 * 86400 } } } });
