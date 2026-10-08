@@ -11,6 +11,8 @@ import os from "node:os";
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// The most conversations listed. Matches CHAT_LIST_MAX in site/worker.js: a list longer than the site keeps would only be cut there.
+export const MAX_SESSIONS = 3000;
 const MAX_FILE = 80 * 1024 * 1024; // bigger than this is skipped rather than read into memory
 const SCAN = 256 * 1024; // how much of each end of a file is read to find its title and folder
 const BIG_LINE = 100000; // tool output is the bulk of a file; a line this long is never a prompt or a title
@@ -160,7 +162,7 @@ const summaries = new Map(); // file -> { key, info }
 
 // Every conversation Claude Code has saved here, newest first: { id, title, folder, updated, size }. `folder` is only the
 // last part of the folder it was started in, and is empty for the working folder itself. scope: "all" | "workspace" | "off".
-export function listSessions({ root = projectsDir(), workspace = "", scope = "all", limit = 400 } = {}) {
+export function listSessions({ root = projectsDir(), workspace = "", scope = "all", limit = MAX_SESSIONS } = {}) {
   if (scope === "off") return [];
   let dirs;
   try {

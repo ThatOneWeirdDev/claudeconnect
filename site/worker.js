@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import APP_HTML from "./app.html";
 import BRAND from "./brand.js";
-import { compareVersions, isNewer, cleanManifest, validRepo, validRef } from "./version.js";
+import { parseVersion, compareVersions, isNewer, cleanManifest, validRepo, validRef } from "./version.js";
 import { cleanSiteName, cleanAddress } from "./names.js";
 import { checkImage } from "./image.js";
 
@@ -31,8 +31,14 @@ const PLANS = {
   delete: [["site", "Delete the site and its chats"], ["computer", "Clean up your computer"]]
 };
 const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
-const CHECK_EVERY = 30 * 60000;
-const CHECK_RETRY = 5 * 60000;
+// A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
+// an open page within about a minute and a half; a page opened after a long gap waits for the answer instead of showing the old one.
+const CHECK_EVERY = 60000;
+const CHECK_RETRY = 120000;
+const CHECK_WAIT = 5 * 60000;
+const UPDATE_LOG_KEEP = 8;
+// The most chats listed in the sidebar (and the most the computer is asked to report). Matches MAX_SESSIONS in agent/sessions.mjs.
+const CHAT_LIST_MAX = 3000;
 const ACK_WITHIN = 30000;
 const QUIET_LIMIT = 10 * 60000;
 const MAX_ARTIFACT = 1900000;
@@ -735,7 +741,8 @@ export class ChatgqlHub extends DurableObject {
       const prev = this.latest || (await this.ctx.storage.get("latest")) || null;
       const entry = { at: Date.now(), source: src.label, release: prev && prev.source === src.label ? prev.release : null, error: "" };
       try {
-        const r = await fetch(`${src.raw}/${src.repo}/${src.ref}/manifest.json`, { headers: { "user-agent": "ClaudeConnect-site", accept: "application/json" }, signal: AbortSignal.timeout(6000) });
+        // raw.githubusercontent.com serves each file from a cache that can be five minutes behind; a new query string gets past it
+        const r = await fetch(`${src.raw}/${src.repo}/${src.ref}/manifest.json?cb=${Date.now().toString(36)}`, { headers: { "user-agent": "ClaudeConnect-site", accept: "application/json", "cache-control": "no-cache" }, signal: AbortSignal.timeout(6000) });
         if (!r.ok) throw new Error(r.status === 404 ? "No release has been published at that address yet." : `GitHub answered ${r.status}.`);
         const text = await r.text();
         if (text.length > 100000) throw new Error("The release information was too large.");
@@ -781,19 +788,25 @@ export class ChatgqlHub extends DurableObject {
     const src = this.updateSource();
     let c = this.latest || (await this.ctx.storage.get("latest")) || null;
     if (c && c.source !== src.label) c = null;
-    const stale = !c || Date.now() - c.at > (c.error ? CHECK_RETRY : CHECK_EVERY);
-    if (force || !c) c = await this.checkLatest();
-    else if (stale) this.checkLatest().catch(() => {});
+    const age = c ? Date.now() - c.at : Infinity;
+    if (force || !c || age > envNum(this.env.UPDATE_WAIT_MS, CHECK_WAIT)) c = await this.checkLatest();
+    else if (age > (c.error ? envNum(this.env.UPDATE_RETRY_MS, CHECK_RETRY) : envNum(this.env.UPDATE_CHECK_MS, CHECK_EVERY))) this.checkLatest().catch(() => {});
     this.latest = c;
     const current = appVersion(this.env);
     const latest = c && c.release ? c.release : null;
     const run = await this.updateRun();
+    const log = (await this.ctx.storage.get("updateLog")) || [];
+    // The installed version's patch notes: from the log if it was installed by an update, else from the release if that is the one running.
+    const logged = log.find(e => e.version === current);
+    const mine = logged || (latest && latest.version === current ? latest : null);
     return {
       current,
       latest: latest ? latest.version : null,
       available: !!latest && isNewer(latest.version, current),
       notes: latest ? latest.notes : [],
       released: latest ? latest.released : "",
+      whatsNew: mine && mine.notes.length ? { version: mine.version, released: mine.released || "", notes: mine.notes, updated: !!logged } : null,
+      history: log.filter(e => compareVersions(e.version, current) < 0).slice(0, UPDATE_LOG_KEEP).map(({ version, released, notes }) => ({ version, released: released || "", notes })),
       source: src.label,
       checkedAt: c ? c.at : null,
       error: c && c.error ? c.error : "",
@@ -814,6 +827,8 @@ export class ChatgqlHub extends DurableObject {
     const now = Date.now();
     const plan = PLANS[kind].map(([key, label]) => ({ key, label }));
     const run = { id: crypto.randomUUID(), kind, plan, from: info.current, to, state: "running", acked: false, step: plan[0].key, steps: {}, message: "", info: null, cancel: false, startedAt: now, updatedAt: now, finishedAt: null, by: req.headers.get("x-chatgql-user") || "" };
+    // what the update brings, kept with the run so the panel can show it while it runs and after
+    if (kind === "update") Object.assign(run, { notes: info.notes, released: info.released });
     await this.ctx.storage.put("update", run);
     try {
       this.sendAgent(ws, { ...message, id: run.id });
@@ -891,6 +906,20 @@ export class ChatgqlHub extends DurableObject {
     const now = Date.now();
     const last = keys[keys.length - 1];
     await this.ctx.storage.put("update", { ...run, state: "done", acked: true, steps, step: last, message: "", updatedAt: now, finishedAt: now });
+    if ((run.kind || "update") === "update") await this.logUpdate(run);
+  }
+
+  // Remember what an update brought. The page that watched it is about to move to the new version, and the Updates panel
+  // there shows these notes, and the ones from earlier updates.
+  async logUpdate(run) {
+    if (!parseVersion(run.to)) return;
+    const seen = this.latest || (await this.ctx.storage.get("latest")) || null;
+    const rel = seen && seen.release && seen.release.version === run.to ? seen.release : null;
+    const notes = Array.isArray(run.notes) && run.notes.length ? run.notes : rel ? rel.notes : [];
+    const released = run.released || (rel ? rel.released : "");
+    const log = ((await this.ctx.storage.get("updateLog")) || []).filter(e => e.version !== run.to);
+    log.unshift({ version: String(run.to), released, notes, at: Date.now() });
+    await this.ctx.storage.put("updateLog", log.slice(0, UPDATE_LOG_KEEP + 2));
   }
 
   async updateAck(m) {
@@ -966,15 +995,15 @@ export class ChatgqlHub extends DurableObject {
   // ---- Claude Code's own chats on the computer, shown next to the ones started here
 
   chatList() {
-    const own = this.rows("SELECT id, title, updated, running, folder FROM chats ORDER BY updated DESC LIMIT 400");
-    const theirs = this.rows("SELECT id, title, updated, folder FROM computer_sessions WHERE id NOT IN (SELECT session_id FROM chats WHERE session_id IS NOT NULL) AND id NOT IN (SELECT id FROM chats) AND id NOT IN (SELECT id FROM hidden_sessions) ORDER BY updated DESC LIMIT 400").map(r => ({ ...r, running: null, computer: 1 }));
-    return [...own, ...theirs].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, 400);
+    const own = this.rows("SELECT id, title, updated, running, folder FROM chats ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX);
+    const theirs = this.rows("SELECT id, title, updated, folder FROM computer_sessions WHERE id NOT IN (SELECT session_id FROM chats WHERE session_id IS NOT NULL) AND id NOT IN (SELECT id FROM chats) AND id NOT IN (SELECT id FROM hidden_sessions) ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX).map(r => ({ ...r, running: null, computer: 1 }));
+    return [...own, ...theirs].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, CHAT_LIST_MAX);
   }
 
   saveSessions(list) {
     if (!Array.isArray(list)) return;
     const rows = [];
-    for (const x of list.slice(0, 600)) {
+    for (const x of list.slice(0, CHAT_LIST_MAX)) {
       if (!x || typeof x !== "object" || typeof x.id !== "string" || !SESSION_ID.test(x.id)) continue;
       const updated = Math.round(Number(x.updated));
       if (!Number.isFinite(updated) || updated < 0) continue;

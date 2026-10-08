@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { listSessions, findSession, sessionCwd, readSession, realPrompt, within, toolLabel, projectsDir, UUID } from "../../agent/sessions.mjs";
+import { MAX_SESSIONS, listSessions, findSession, sessionCwd, readSession, realPrompt, within, toolLabel, projectsDir, UUID } from "../../agent/sessions.mjs";
 
 const A = "3f8a1c2e-1111-4a2b-9c3d-000000000001";
 const B = "3f8a1c2e-1111-4a2b-9c3d-000000000002";
@@ -104,6 +104,17 @@ test("the setting decides what is shared: everything, the working folder only, o
   assert.deepEqual(listSessions({ root, workspace: WORK, scope: "workspace" }).map(s => s.id).sort(), [A, C]);
   assert.deepEqual(listSessions({ root, workspace: WORK, scope: "off" }), []);
   assert.equal(listSessions({ root, workspace: WORK, limit: 2 }).length, 2);
+});
+
+test("every conversation on the computer is listed, however many, up to the site's cap", t => {
+  const { root } = home(t);
+  const id = i => `3f8a1c2e-2222-4a2b-9c3d-${String(i).padStart(12, "0")}`;
+  const N = 450; // more than the 400 the list used to stop at
+  for (let i = 0; i < N; i++) put(root, i % 2 ? "a" : "b", id(i), [user("chat " + i)]);
+  const all = listSessions({ root, workspace: WORK });
+  assert.equal(all.length, N);
+  assert.equal(new Set(all.map(s => s.id)).size, N, "each one once");
+  assert.equal(MAX_SESSIONS, 3000);
 });
 
 test("a session that grows is read again, and one that hasn't changed is not", t => {

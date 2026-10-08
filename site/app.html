@@ -438,6 +438,10 @@ svg{display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
 .notes{margin:0 0 4px;padding-left:1.2em;color:var(--text-2)}
 .notes li{margin:.25em 0}
+.earlier{margin-top:16px}
+.earlier summary{cursor:pointer;color:var(--text-2);font-size:13px}
+.earlier .rel{margin-top:12px}
+.earlier .rel h3{margin:0 0 4px;font-size:13px}
 .what{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-3);color:var(--text-2);font-size:13.5px}
 .what div{display:flex;gap:9px}
 .what svg{width:15px;height:15px;flex:none;margin-top:3px;color:var(--text)}
@@ -640,7 +644,7 @@ const S = {
   stick: true,
   query: ""
 };
-const UP = { data: null, timer: null, failing: 0, checking: false, seen: "", dismissing: false, lastRun: null, gone: null };
+const UP = { data: null, timer: null, failing: 0, checking: false, seen: "", dismissing: false, lastRun: null, gone: null, reloadTimer: null };
 if (!MODELS.find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
 if (!MODE_NAME[S.mode]) S.mode = "code";
 if (!PERM_MODES.find(x => x.id === S.perm)) S.perm = "auto";
@@ -1874,7 +1878,7 @@ function renderLimitNote() {
 /* ---------- settings: name, look, address, updates, delete; and the checklist for whatever is running ---------- */
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const SET = { tab: "general", draft: null, address: "", confirm: "", err: "", busy: false };
+const SET = { tab: "general", draft: null, address: "", confirm: "", err: "", busy: false, justUpdated: false };
 const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
 
 function freshDraft() {
@@ -1903,6 +1907,7 @@ function openSettings(tab) {
   pollUpdate();
 }
 function closeSettings() { $("setDlg").close(); }
+$("setDlg").addEventListener("close", () => { SET.justUpdated = false; });
 
 function renderSettings() {
   const run = upRun();
@@ -1952,11 +1957,20 @@ function updatesHtml() {
   const u = UP.data;
   const v = x => "v" + x;
   if (!u) return '<p class="fine">Loading…</p>';
-  if (pageIsStale()) return `<div class="sec"><h3>Updated to ${esc(v(u.current))}</h3><p>This page is still on ${esc(v(CFG.version))}.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Confirm update</button></div></div>`;
+  if (pageIsStale()) return `<div class="sec"><h3>Updated to ${esc(v(u.current))}</h3>${whatsNewHtml(u, "Patch notes")}<p class="fine">Switching this page to ${esc(v(u.current))}.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div></div>`;
   if (u.available) {
     return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and this page shows each step as it happens.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
   }
-  return `<div class="sec"><h3>${esc(v(u.current))}${u.latest && u.latest !== u.current ? "" : " is the newest version"}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : `<p>${esc(CFG.name)} checks for new versions by itself every half hour.</p>`}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}.</p></div>`;
+  const earlier = (u.history || []).length ? `<details class="earlier"><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
+  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(u.current))}${u.latest && u.latest !== u.current ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
+}
+function notesList(notes) {
+  return `<ul class="notes">${(notes || []).map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
+}
+// The patch notes of the version that is installed, from the site.
+function whatsNewHtml(u, head) {
+  const w = u && u.whatsNew;
+  return w && w.notes.length ? `<h3>${esc(head)}</h3>${w.released ? `<p class="fine" style="margin:0 0 4px">Released ${esc(w.released)}</p>` : ""}${notesList(w.notes)}` : "";
 }
 
 function renderFoot() {
@@ -2096,6 +2110,13 @@ const UP_ICON = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>'
 };
+// What an update brings, under its checklist. A run from before the site kept the notes with it falls back to the release's.
+function runNotes(run) {
+  if ((run.kind || "update") !== "update") return "";
+  const u = UP.data;
+  const notes = run.notes && run.notes.length ? run.notes : u && u.latest === run.to ? u.notes : (u && u.whatsNew && u.whatsNew.version === run.to ? u.whatsNew.notes : []);
+  return notes.length ? `<div class="sect" style="margin-top:14px"><h3>${run.state === "done" ? "Patch notes" : "What's coming"}</h3>${notesList(notes)}</div>` : "";
+}
 function runTitle(run) {
   return { update: `Updating to v${run.to}`, settings: "Saving your changes", move: "Moving to a new address", delete: "Deleting the site" }[run.kind || "update"] || "Working";
 }
@@ -2123,7 +2144,7 @@ function renderJob() {
   } else if (run.state === "running") {
     title.textContent = runTitle(run);
     sub.textContent = kind === "update" ? `From v${run.from}` : "";
-    html = stepsHtml(run);
+    html = stepsHtml(run) + runNotes(run);
     if (kind === "move" && run.step === "access") {
       html += info.site ? `<div class="sec" style="margin-top:14px"><h3>Turn on Cloudflare Access for the new address</h3><p>Nobody can open the new site until you do. This one stays online meanwhile.</p><ol class="howto"><li>Open the <a href="${esc(info.dash || "https://dash.cloudflare.com/")}" target="_blank" rel="noopener noreferrer">Cloudflare dashboard</a>: <b>Workers &amp; Pages</b> &rarr; <b>${esc(info.name || "")}</b> &rarr; <b>Settings</b> &rarr; <b>Domains &amp; Routes</b>.</li><li>On the <b>workers.dev</b> row choose <b>Enable Cloudflare Access</b>, then <b>Manage Cloudflare Access</b> and allow only <b>your own email address</b>.</li><li>Open your <a href="${esc(info.claim || info.site)}" target="_blank" rel="noopener noreferrer">claim link</a> and sign in with that email. That makes the new site yours.</li></ol><div class="wait"><span class="spin"></span><span>Waiting for you to open the new site. This page updates by itself.</span></div><div class="dlg-actions"><a class="btn primary" href="${esc(info.claim || info.site)}" target="_blank" rel="noopener noreferrer">Open the claim link</a><button class="btn ghost" type="button" data-act="cancel">Cancel the move</button></div></div>` : "";
     } else {
@@ -2138,7 +2159,7 @@ function renderJob() {
       const to = run.to || (UP.data && UP.data.current);
       title.textContent = `Updated to v${to}`;
       sub.textContent = "Your chats are all still here.";
-      html = stepsHtml(run) + `<div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Confirm update</button></div>`;
+      html = stepsHtml(run) + runNotes(run) + `<p class="fine">Switching this page to the new version.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div>`;
     }
   } else {
     title.textContent = kind === "move" && run.step === "cleanup" ? "The new site is ready" : "That didn't finish";
@@ -2163,15 +2184,45 @@ function renderPill() {
     text = run.kind === "delete" ? "Deleting…" : `${OPEN_LABEL[run.kind || "update"]} ${done}/${total}`; short = `${done}/${total}`; cls += " busy";
   } else if (run && run.state === "error") { text = "Didn't finish"; short = "Failed"; cls += " bad"; }
   else if (run && run.state === "done" && run.kind === "settings") { text = "Reload"; short = "Reload"; }
-  else if (run && run.state === "done" && (pageIsStale() || UP.seen === run.id)) { text = "Confirm update"; short = "Confirm"; }
-  else if (pageIsStale()) { text = "Confirm update"; short = "Confirm"; }
+  else if (run && run.state === "done" && (pageIsStale() || UP.seen === run.id)) { text = "Updated · Reload"; short = "Reload"; }
+  else if (pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
   else if (u && u.available) { text = "Update available"; short = "Update"; }
   b.hidden = !text;
   b.className = cls;
   $("pillText").textContent = text;
   $("pillShort").textContent = short;
 }
-$("updatePill").onclick = () => openSettings(upRun() ? "general" : "updates");
+$("updatePill").onclick = () => {
+  const run = upRun();
+  if (pageIsStale() && (!run || run.state === "done")) return location.reload();
+  openSettings(run ? "general" : "updates");
+};
+
+// A page that is behind the site (an update finished, here or from another device) moves to the new version by itself, as
+// soon as that can't lose anything: nothing typed or attached, no reply being written, no unsaved changes in Settings. Once
+// per version in a tab, so a page that somehow stays old can't loop; the Reload buttons are still there then.
+function reloadedTo() { try { return sessionStorage.getItem("gql.reloadedTo") || ""; } catch { return ""; } }
+function maybeReload(wait) {
+  clearTimeout(UP.reloadTimer);
+  const run = upRun();
+  if (!pageIsStale() || UP.gone || (run && run.state !== "done") || reloadedTo() === UP.data.current) return;
+  UP.reloadTimer = setTimeout(() => {
+    const r = upRun();
+    if (!pageIsStale() || (r && r.state !== "done")) return;
+    if ($("input").value.trim() || S.files.length || S.busy || S.live || (SET.draft && isDirty())) return maybeReload(2000);
+    try { sessionStorage.setItem("gql.reloadedTo", UP.data.current); } catch {}
+    location.reload();
+  }, wait);
+}
+// After an update, the first time this browser opens the new version, the Updates panel opens with the patch notes.
+function announceVersion() {
+  const seen = store.get("seenVersion", "");
+  store.set("seenVersion", CFG.version);
+  const w = UP.data && UP.data.whatsNew;
+  if (seen === CFG.version || upRun() || !w || !w.updated || w.version !== CFG.version) return;
+  SET.justUpdated = true;
+  openSettings("updates");
+}
 
 function schedulePoll() {
   clearTimeout(UP.timer);
@@ -2213,7 +2264,7 @@ function applyUpdate(u) {
     UP.seen = run.id;
     if (!$("setDlg").open) openSettings();
   }
-  if (prev && prev.state === "running" && run && run.state === "done" && !$("setDlg").open) toast(run.kind === "settings" ? "Your changes are live. Reload to see them." : `Updated to v${run.to}. Confirm the update to switch.`, 8000);
+  if (prev && prev.state === "running" && run && run.state === "done" && !$("setDlg").open) toast(run.kind === "settings" ? "Your changes are live. Reload to see them." : `Updated to v${run.to}. Switching to it…`, 8000);
   // A page that loaded after a job finished has nothing to show for it.
   if (run && run.state === "done" && run.kind !== "settings" && !pageIsStale() && UP.seen !== run.id && !$("setDlg").open && !UP.dismissing) {
     UP.dismissing = true;
@@ -2224,6 +2275,7 @@ function applyUpdate(u) {
   if (!$("pmenu").hidden) $("pmenu").innerHTML = profileMenu();
   renderChrome();
   schedulePoll();
+  if (pageIsStale()) maybeReload(prev && prev.state === "running" ? 2500 : 600);
 }
 
 applyTheme();
@@ -2232,6 +2284,7 @@ renderBar();
 renderChrome();
 (async () => {
   await Promise.all([loadState(), loadChats()]);
+  announceVersion();
   const m = location.pathname.match(/^\/c\/([\w-]+)/);
   if (m) await openChat(m[1], false);
   else input.focus();

@@ -41,7 +41,8 @@ const FRONT = `export default {
 };`;
 
 // The real worker, with one extra door for tests: POST /api/__seed writes chats and messages straight into the Durable
-// Object's tables, and POST /api/__limits writes a plan-usage reading, because the real ones come from a signed-in Claude plan.
+// Object's tables, POST /api/__limits writes a plan-usage reading, because the real ones come from a signed-in Claude plan, and
+// /api/__storage reads and writes the Object's key-value storage (the update log, for one).
 const MAIN = `import Worker, { ChatgqlHub as Base } from "./worker.js";
 export class ChatgqlHub extends Base {
   async fetch(req) {
@@ -50,6 +51,14 @@ export class ChatgqlHub extends Base {
       for (const c of b.chats || []) this.sql.exec("INSERT OR REPLACE INTO chats (id, title, model, effort, session_id, started, running, created, updated) VALUES (?, ?, 'claude-opus-5-5', 'medium', ?, 1, NULL, ?, ?)", c.id, c.title, c.id, c.created, c.updated);
       for (const m of b.messages || []) this.sql.exec("INSERT OR REPLACE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, ?, ?)", m.id, m.chat, m.role, m.content, m.meta ? JSON.stringify(m.meta) : "{}", m.created);
       return Response.json({ ok: true });
+    }
+    if (new URL(req.url).pathname === "/api/__storage") {
+      if (req.method === "POST") {
+        const b = await req.json();
+        await this.ctx.storage.put(b.key, b.value);
+        return Response.json({ ok: true });
+      }
+      return Response.json({ value: (await this.ctx.storage.get(new URL(req.url).searchParams.get("key"))) ?? null });
     }
     if (new URL(req.url).pathname === "/api/__limits") {
       await this.setLimits(await req.json());
@@ -127,6 +136,8 @@ export async function startSite(opts = {}) {
   const claim = () => asOwner(`/?claim=${site.claimCode}`, { redirect: "manual" });
   const seed = data => post("/api/__seed", data);
   const setLimits = data => post("/api/__limits", data);
+  const getStorage = async key => (await api("/api/__storage?key=" + encodeURIComponent(key))).body.value;
+  const putStorage = (key, value) => post("/api/__storage", { key, value });
   return Object.assign(site, {
     mf,
     origin,
@@ -135,6 +146,8 @@ export async function startSite(opts = {}) {
     claim,
     seed,
     setLimits,
+    getStorage,
+    putStorage,
     asOwner,
     async stop() {
       await mf.dispose();
