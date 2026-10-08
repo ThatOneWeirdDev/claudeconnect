@@ -22,7 +22,8 @@ async function until(fn, what, ms = 30000) {
 // ---------------------------------------------------------------- the site
 
 async function ready(t, hello) {
-  const s = await startSite({ appVersion: "1.3.1" });
+  // this agent never answers the site's questions about Claude Code's own record of a chat, so don't wait long for it
+  const s = await startSite({ appVersion: "1.3.1", vars: { ASK_TIMEOUT_MS: "300" } });
   t.after(() => s.stop());
   await s.claim();
   const agent = await connectAgent(s, hello);

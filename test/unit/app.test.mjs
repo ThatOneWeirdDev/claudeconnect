@@ -93,7 +93,7 @@ test("a finished update has nothing to confirm: the page moves to the new versio
   assert.doesNotMatch(script, /Confirm update|Confirm the update/);
   assert.doesNotMatch(script, /Open the updated site|\?updated=/);
   assert.match(script, /data-act="reload">Reload now<\/button>/);
-  assert.match(script, /if \(act === "reload"\) return location\.reload\(\)/);
+  assert.match(script, /if \(act === "reload"\) return reloadNow\(\)/);
   // after every poll that finds the page behind the site
   assert.match(script, /if \(pageIsStale\(\)\) maybeReload\(/);
   // the dialog's X is hidden while a job's page is showing
@@ -118,12 +118,13 @@ function reloader(over = {}) {
     pageIsStale: () => ctx.UP.data.current !== "1.5.0",
     $: () => ({ value: "" }),
     sessionStorage: { getItem: k => log.stored[k] || null, setItem: (k, v) => (log.stored[k] = v) },
+    store: { get: (k, d) => (k in log.stored ? log.stored[k] : d), set: (k, v) => (log.stored[k] = v) },
     location: { reload: () => log.reloads++ },
     setTimeout: (f, ms) => (log.timers.push({ f, ms }), log.timers.length),
     clearTimeout: () => {},
     ...over
   };
-  vm.runInNewContext(lift("reloadedTo") + lift("maybeReload") + "this.maybeReload = maybeReload;", ctx);
+  vm.runInNewContext(lift("reloadedTo") + lift("reloadNow") + lift("maybeReload") + "this.maybeReload = maybeReload;", ctx);
   // run the timer that was set, as the browser would
   ctx.fire = () => log.timers.pop().f();
   return { ctx, log };
@@ -135,14 +136,23 @@ test("the page reloads itself into the new version once the update is over, and 
   r.ctx.maybeReload(0);
   assert.equal(r.log.timers.length, 0);
 
-  // behind the site and idle: it reloads, once, and remembers that it did
+  // behind the site and idle: it reloads, and remembers that it did, in this tab and in this browser
   r = reloader();
   r.ctx.maybeReload(0);
   r.ctx.fire();
   assert.equal(r.log.reloads, 1);
-  assert.equal(r.log.stored["gql.reloadedTo"], "1.6.0");
+  assert.equal(r.log.stored["gql.reloadedTo"], "1.6.0#1");
+  assert.equal(r.log.stored.reloadFor, "1.6.0", "so the notice isn't shown again for this version");
+  // if Cloudflare still hands out the old page for a moment, it tries again, further apart, and stops after three
   r.ctx.maybeReload(0);
-  assert.equal(r.log.timers.length, 0, "not again for the same version in this tab, so a page that stays old can't loop");
+  assert.equal(r.log.timers[0].ms, 5000);
+  r.ctx.fire();
+  r.ctx.maybeReload(0);
+  assert.equal(r.log.timers[0].ms, 10000);
+  r.ctx.fire();
+  assert.equal(r.log.reloads, 3);
+  r.ctx.maybeReload(0);
+  assert.equal(r.log.timers.length, 0, "not a fourth time, so a page that stays old can't loop");
 
   // nothing is lost: a message being typed, a file attached, a reply on its way, unsaved settings
   for (const [what, over] of [
@@ -344,4 +354,38 @@ test("a claude.ai conversation keeps its text, thinking, attached file names and
   assert.equal(c.messages[2].created, 0);
   assert.equal(ctx.fromExport({ uuid: "x", chat_messages: [] }), null, "an empty conversation isn't brought over");
   assert.equal(ctx.fromExport({ name: "no id" }), null);
+});
+
+test("only a newer site makes the page out of date, and once Reload was pressed for a version the notice stays away", () => {
+  const ctx = { CFG: { version: "1.7.0" }, UP: { data: { current: "1.7.0" } }, stored: {} };
+  ctx.store = { get: (k, d) => (k in ctx.stored ? ctx.stored[k] : d), set: (k, v) => (ctx.stored[k] = v) };
+  vm.runInNewContext(lift("pageIsStale") + lift("newerThan") + lift("reloadAsked") + "this.pageIsStale = pageIsStale; this.reloadAsked = reloadAsked;", ctx);
+  assert.equal(ctx.pageIsStale(), false);
+  ctx.UP.data.current = "1.6.0";
+  assert.equal(ctx.pageIsStale(), false, "the page is the new one and the site hasn't caught up yet: nothing to reload");
+  ctx.UP.data.current = "1.10.0";
+  assert.equal(ctx.pageIsStale(), true);
+  assert.equal(ctx.reloadAsked(), false);
+  ctx.stored.reloadFor = "1.10.0";
+  assert.equal(ctx.reloadAsked(), true, "already reloaded for it: no more 'Updated · Reload'");
+  ctx.UP.data.current = "1.11.0";
+  assert.equal(ctx.reloadAsked(), false, "the next update is a new notice");
+  // the pill hides it, and one click on it reloads
+  assert.match(lift("renderPill"), /else if \(pageIsStale\(\) && !reloadAsked\(\)\)/);
+  assert.match(script, /if \(run \? run\.state === "done" : pageIsStale\(\)\) return reloadNow\(\);/);
+});
+
+test("a reply shows its thinking, text and tools in the order they happened", () => {
+  const ctx = { esc: v => String(v), md: t => `[${t}]`, fmtDur: ms => ms + "ms", I: { chev: "" }, MD_ARTS: null };
+  vm.runInNewContext(lift("partsOf") + lift("partsHtml") + lift("thinkHtml") + lift("toolsHtml") + "this.partsOf = partsOf; this.partsHtml = partsHtml;", ctx);
+  const meta = { thinking: "plan Aplan B", tools: [{ id: "t1", label: "Read a", done: true }, { id: "t2", label: "Edit b", done: true }], parts: [{ t: "think", n: 6, ms: 900 }, { t: "text", n: 9 }, { t: "tool", id: "t1" }, { t: "tool", id: "t2" }, { t: "think", n: 6, ms: 400 }, { t: "text", n: 7 }] };
+  const content = "ok test 1ok test2";
+  meta.parts[5].n = content.length - 9;
+  assert.equal(ctx.partsOf(meta, content + "!"), null, "lengths that don't add up to the text are not trusted");
+  const ok = ctx.partsOf(meta, content);
+  assert.deepEqual(JSON.parse(JSON.stringify(ok.map(p => p.type))), ["think", "text", "tool", "tool", "think", "text"]);
+  const html = ctx.partsHtml(ok, meta.tools, { live: false, open: {} });
+  const order = ["plan A", "[ok test 1]", "Used 2 tools", "plan B", "[ok test2]"].map(x => html.indexOf(x));
+  assert.ok(order.every((x, i) => x >= 0 && (i === 0 || x > order[i - 1])), html);
+  assert.equal(ctx.partsOf({ thinking: "x" }, "y"), null, "an older reply has no pieces");
 });

@@ -26,7 +26,15 @@ npx github:ThatOneWeirdDev/claudeconnect
 
 Each of these runs `ClaudeConnect.mjs`, a small launcher. It downloads the current release from this repository, checks every file against [`manifest.json`](manifest.json), and runs the setup that came with it. Nothing about ClaudeConnect itself is stored inside the launcher.
 
-Setup asks for a name, signs you in to Cloudflare, creates the site, then walks you through turning on Cloudflare Access and opening a one-time claim link. Running it again on a computer that is already set up offers **update**, **reset** or **leave it**.
+Setup asks for a name, signs you in to Cloudflare, creates the site, then walks you through turning on Cloudflare Access and opening a one-time claim link. Running it again on a computer that is already set up offers **update** (in place, no questions), **reset** or **leave it**.
+
+## From a terminal
+
+| Command | What it does |
+| --- | --- |
+| `<command> update` | Updates the site and this computer to the newest version, in place. It asks nothing: your chats, name, look and settings are kept. |
+| `<command> edit` | Goes through the settings one at a time, each with what it is now and a y/n: the name, logo, tab icon, Fable 5.1 in the model picker, starting when you log in, and showing your usage credit balance. Then it shows what will change and asks once more before saving. |
+| `<command> help` | Lists the rest: start, stop, logs, status, open, claim and so on. |
 
 ## Everything from the site
 
@@ -63,7 +71,9 @@ These need the program on your computer to be 1.4.0 or newer. On an older one th
 
 It also shows your **usage credits** (claude.ai's "extra usage"): whether they're on, in use because you're past a plan limit, close to the spending limit you set, used up, or off (and why, when Claude says). Past a plan limit with credits on, replies carry on, so the page says you're using credits rather than that you've hit a limit. "You've hit a limit" only shows when replies really have stopped, and only until the limit resets.
 
-**Use usage credits from this site** is a switch on the same page, kept on the site so it applies on every device. Turned off, the site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1 (which runs on credits) is paused. A reply already under way can still go past the limit; that part is Claude's. Your credit balance, promotional credits and spending limit are only on claude.ai, which doesn't share them with other sites, so the page links there.
+**Use usage credits from this site** is a switch on the same page, kept on the site so it applies on every device. Turned off, the site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1 (which runs on credits) is paused. A reply already under way can still go past the limit; that part is Claude's.
+
+**Your balance, promotional credits and this month's spending** can show on the same page too. That needs your Claude account, and claude.ai doesn't let other sites in, so it's done by the program on your computer with Claude Code's own sign-in, the same way Claude Code's `/usage` asks. It's off until you turn it on: run `<command> edit` and answer **y** to showing your usage credit balance. The sign-in is read on your computer and sent only to Anthropic; the site only ever gets the numbers. It's read each time you open Plan usage. These come from parts of Claude's API that Claude Code uses but Anthropic hasn't published, so a future change on their side could make them disappear; the page then says it couldn't read them, and they're always on claude.ai.
 
 Plans billed per token (an API key) don't report these, so nothing is shown. Claude Code marks this field as internal, so a future version could change it; if it disappears, the page just shows nothing.
 
@@ -108,7 +118,7 @@ The file is opened in your browser; only the conversations in it are sent, to yo
 
 ## Updating
 
-The site checks this repository for a newer version every minute (skipping GitHub's own five-minute cache) and shows **Update available**. Click it for the patch notes, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done the page switches to the new version by itself, as soon as nothing you were typing, attaching or waiting for could be lost (**Reload now** is there if you'd rather not wait). It's the same address, so there's no new link. Once a page has loaded the new version, **Updated** and **Reload** are gone, on every device, until the next update (the same goes for a change in Settings). You can also run `<command> update` in a terminal.
+The site checks this repository for a newer version every minute (skipping GitHub's own five-minute cache) and shows **Update available**. Click it for the patch notes, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done the page switches to the new version by itself, as soon as nothing you were typing, attaching or waiting for could be lost (**Reload now** is there if you'd rather not wait). It's the same address, so there's no new link. Once a page has loaded the new version, **Updated** and **Reload** are gone, on every device, until the next update (the same goes for a change in Settings). If Cloudflare still hands out the old page for a moment after you reload, the page quietly tries again rather than asking you to. You can also run `<command> update` in a terminal.
 
 The **Updates** panel in Settings keeps the patch notes: what an update brings is shown while it installs and when it's done, the first time each browser opens the new version it opens on them, and **Earlier updates** lists the last few.
 

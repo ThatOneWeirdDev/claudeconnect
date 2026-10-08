@@ -182,7 +182,8 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     ["open", `open ${NAME} in your browser`],
     ["logs", "show recent activity"],
     ["status", "show whether it's running"],
-    ["update", "check for a new version and update"],
+    ["update", "update to the newest version, keeping your chats and settings"],
+    ["edit", "change the name, logo, tab icon and other settings"],
     ["claim", "print a fresh link to make the site yours (after turning Cloudflare Access on or off)"],
     ["version", "show the installed version"]
   ];
@@ -241,6 +242,15 @@ if (cmd === "update") {
     process.exit(1);
   }
   const r = spawnSync(process.execPath, [loader, "--update", ...process.argv.slice(3)], { stdio: "inherit" });
+  process.exit(r.status === null ? 1 : r.status);
+}
+if (cmd === "edit") {
+  const installer = join(HERE, "installer.mjs");
+  if (!existsSync(installer)) {
+    console.log(`The settings program isn't on this computer. Run ${COMMAND} update once, then try again.`);
+    process.exit(1);
+  }
+  const r = spawnSync(process.execPath, [installer, "--edit"], { stdio: "inherit" });
   process.exit(r.status === null ? 1 : r.status);
 }
 if (cmd === "status") {
@@ -584,14 +594,18 @@ function runClaude(m, prompt, sessionArgs, pre, where = WORKSPACE) {
         st.buffer = "";
       }
     };
+    // Text and thinking are each sent in small batches, and always in the order they came: what was buffered of the other
+    // goes first, so the page can show thoughts and text interleaved the way they happened.
     const addText = t => {
       if (!t) return;
+      if (st.tbuffer) flush();
       st.text += t;
       st.buffer += t;
       if (!st.timer) st.timer = setTimeout(flush, 70);
     };
     const addThinking = t => {
       if (!t) return;
+      if (st.buffer) flush();
       st.thinking += t;
       st.tbuffer += t;
       if (!st.timer) st.timer = setTimeout(flush, 70);
@@ -783,6 +797,65 @@ async function probeLimits() {
   } finally {
     probing = false;
   }
+}
+
+// ---- Usage credit balance, only when it's been turned on with `<command> edit` (config.json "credits": true). Claude Code's
+// own sign-in on this computer is used to ask Anthropic, the way Claude Code's /usage does: the extra usage spent this month and
+// its limit, the prepaid balance, and promotional credits. The sign-in is read here and sent only to Anthropic; the site gets
+// the numbers. If the sign-in has expired, the tiny message that reads the plan percentages has Claude Code renew it.
+const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(os.homedir(), ".claude");
+const ANTHROPIC_API = (process.env.CLAUDECONNECT_ANTHROPIC_API || "https://api.anthropic.com").replace(/\/+$/, "");
+
+function claudeSignIn() {
+  let raw = "";
+  if (process.platform === "darwin" && !process.env.CLAUDE_CONFIG_DIR) {
+    const r = spawnSync("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], { encoding: "utf8", timeout: 5000 });
+    if (r.status === 0) raw = String(r.stdout || "").trim();
+  }
+  if (!raw) {
+    try {
+      raw = readFileSync(join(CLAUDE_DIR, ".credentials.json"), "utf8");
+    } catch {}
+  }
+  let o = null;
+  try {
+    o = JSON.parse(raw).claudeAiOauth;
+  } catch {}
+  if (!o || typeof o.accessToken !== "string" || !o.accessToken) return null;
+  if (Number(o.expiresAt) && Number(o.expiresAt) < Date.now() + 30000) return { expired: true };
+  let org = "";
+  try {
+    const g = JSON.parse(readFileSync(process.env.CLAUDE_CONFIG_DIR ? join(CLAUDE_DIR, ".claude.json") : join(os.homedir(), ".claude.json"), "utf8"));
+    org = (g.oauthAccount && g.oauthAccount.organizationUuid) || "";
+  } catch {}
+  return { token: o.accessToken, org: UUID.test(String(org)) ? org : "" };
+}
+
+async function readCredits() {
+  if (!cfg.credits) return;
+  const s = claudeSignIn();
+  if (!s || s.expired) return send({ type: "credits", credits: { error: s ? "expired" : "signin" } });
+  const headers = { authorization: "Bearer " + s.token, "anthropic-beta": "oauth-2025-04-20", accept: "application/json", "user-agent": `ClaudeConnect/${VERSION}` };
+  const get = async path => {
+    try {
+      const r = await fetch(ANTHROPIC_API + path, { headers, signal: AbortSignal.timeout(8000) });
+      return r.ok ? await r.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  const num = v => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const out = {};
+  const u = await get("/api/oauth/usage");
+  const e = u && u.extra_usage && typeof u.extra_usage === "object" ? u.extra_usage : null;
+  if (e) out.extra = { enabled: e.is_enabled === true, limit: num(e.monthly_limit), used: num(e.used_credits) };
+  const p = s.org ? await get(`/api/oauth/organizations/${s.org}/prepaid/credits`) : null;
+  if (p && num(p.amount) !== null) {
+    const promos = (Array.isArray(p.promo_tranches) ? p.promo_tranches : []).filter(t => t && num(t.remaining_amount_minor_units) > 0);
+    out.balance = { amount: p.amount, currency: typeof p.currency === "string" ? p.currency : "", promos: promos.slice(0, 10).map(t => ({ amount: t.remaining_amount_minor_units, currency: typeof t.currency === "string" ? t.currency : "", expires: Date.parse(t.expires_at) || null, name: typeof t.name === "string" ? t.name : "" })) };
+  }
+  if (!out.extra && !out.balance) out.error = "unavailable";
+  send({ type: "credits", credits: out });
 }
 
 async function handleRun(m) {
@@ -1031,7 +1104,7 @@ function onMessage(raw) {
   else if (m.type === "token") saveSignIn(m.token, m.exp);
   else if (m.type === "update") startUpdate(m).catch(e => log("Update failed to start:", e.message || e));
   else if (m.type === "admin") startAdmin(m).catch(e => log("Couldn't start that:", e.message || e));
-  else if (m.type === "limits_refresh") probeLimits().catch(() => {});
+  else if (m.type === "limits_refresh") probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
   else if (m.type === "transcript") handleTranscript(m);
 }
 
@@ -1106,7 +1179,7 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"])], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(cfg.credits ? ["credits"] : [])], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);
