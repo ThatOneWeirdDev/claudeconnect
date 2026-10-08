@@ -45,16 +45,13 @@ test("a manifest from the internet is trimmed down to what the site shows", () =
   assert.equal(cleanManifest([]), null);
 });
 
-import { cleanSiteName, cleanAiName, cleanAddress, toSlug } from "../../site/names.js";
+import { cleanSiteName, cleanAddress, toSlug } from "../../site/names.js";
 import { sniffImage, decodeBase64, checkImage, MAX_IMG } from "../../site/image.js";
 
-test("site names, AI names and addresses are only ever text, and only the allowed text", () => {
+test("site names and addresses are only ever text, and only the allowed text", () => {
   assert.equal(cleanSiteName("  My   Site "), "My Site");
   assert.equal(cleanSiteName("Mine_2.0-final"), "Mine_2.0-final");
   for (const bad of ["", "-x", " ", "x".repeat(41), "a/b", "a<b", "é", 42, null, undefined, {}, ["a"]]) assert.equal(cleanSiteName(bad), "", String(bad));
-  assert.equal(cleanAiName("  Buddy\n\r the  bot "), "Buddy the bot");
-  assert.equal(cleanAiName("x".repeat(100)).length, 60);
-  assert.equal(cleanAiName(42), "");
   assert.equal(cleanAddress("  My-Site "), "my-site");
   for (const bad of ["", "-a", "a-", "a_b", "a b", "a.b", "a".repeat(64), 5, null]) assert.equal(cleanAddress(bad), "", String(bad));
   assert.equal(toSlug("My Site!"), "my-site");

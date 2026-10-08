@@ -34,7 +34,7 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 
 | Settings page | What it does |
 | --- | --- |
-| **General** | The site's name, what the AI calls itself, and whether Fable 5.1 shows in the model picker. The site is redeployed in place, so **your chats are kept**. |
+| **General** | The site's name, and whether Fable 5.1 shows in the model picker. The site is redeployed in place, so **your chats are kept**. |
 | **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. Same in-place redeploy. |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
 | **Updates** | Shows when a new version is out and installs it in place. |
@@ -43,6 +43,18 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 Nothing destructive happens before its replacement works: a move only deletes the old site after the new one is claimed and your computer is connected to it, and a failed step puts everything back.
 
 The command you run on your computer (`<command> help` lists them) doesn't change when you rename the site.
+
+### Under the message box
+
+| Control | What it does |
+| --- | --- |
+| **+** | Add files. |
+| **Claude** / **Claude Code** | **Claude** is plain chat: no tools, no folder, nothing on your computer is touched. **Claude Code** is the real thing, working in the folder on your computer with its own default instructions. You can switch in the middle of a chat; the next reply reads the whole conversation again, and the page says so. |
+| **Auto** / **Accept edits** / **Plan** | How freely Claude Code acts (Claude Code only). **Auto** lets it decide what is safe. **Accept edits** edits files without asking and skips anything else that would need approval. **Plan** looks around and writes a plan without changing anything. Nobody can be asked mid-reply from a web page, so there is no "ask me each time". |
+| **Model** and **Effort** | Show what is picked and open a list to change it. Haiku has no effort setting, so its button is hidden. |
+| **Ring** | How much of the model's context window the chat has used, from the last reply. When it gets full the conversation is compacted automatically. |
+
+These need the program on your computer to be 1.4.0 or newer. On an older one the page hides the Claude / Claude Code switch and the permission mode and everything runs as Claude Code; updating from the site brings it up to date.
 
 ### Plan usage
 
@@ -58,7 +70,7 @@ Lost your claim link, or turned Access off and on again? Run `<command> claim` o
 
 ## Updating
 
-The site checks this repository for a newer version every half hour and shows **Update available**. Click it for what's new, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. You can also run `<command> update` in a terminal.
+The site checks this repository for a newer version every half hour and shows **Update available**. Click it for what's new, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done, **Confirm update** reloads the page onto the new version. It's the same address, so there's no new link. You can also run `<command> update` in a terminal.
 
 **First time only:** versions before 1.3.0 can't do any of this from the page, because the program on your computer doesn't know how yet. Run the install command above once and choose **update**.
 
@@ -67,7 +79,7 @@ The site checks this repository for a newer version every half hour and shows **
 By default `main` of this repository, saved at install and used for every later update:
 
 ```sh
-node ClaudeConnect.mjs --ref v1.3.0                  # a tag or commit, so nothing changes until you decide
+node ClaudeConnect.mjs --ref v1.4.0                  # a tag or commit, so nothing changes until you decide
 node ClaudeConnect.mjs --repo yourname/claudeconnect # your own fork
 ```
 

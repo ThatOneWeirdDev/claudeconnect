@@ -71,7 +71,8 @@ const cfgOf = pc => JSON.parse(pc.read("config.json"));
 test("changing settings from the site redeploys in place, restarts the agent and keeps the address", async t => {
   const { site, pc, cf, finished } = await boot(t);
   const oldPid = pc.pid();
-  const r = await site.post("/api/admin/settings", { displayName: "Renamed", aiName: "Buddy", fable: true, logo: { b64: PNG } });
+  writeFileSync(join(pc.dir, "config.json"), JSON.stringify({ ...cfgOf(pc), aiName: "Old name" }, null, 2)); // what an install from before this version saved
+  const r = await site.post("/api/admin/settings", { displayName: "Renamed", fable: true, logo: { b64: PNG } });
   assert.equal(r.status, 200, r.text);
   const run = await finished("the settings change to finish");
   assert.equal(run.state, "done", `${run.state}: ${run.message}\n${pc.updateLog()}`);
@@ -83,14 +84,15 @@ test("changing settings from the site redeploys in place, restarts the agent and
   assert.equal(deploys[0].name, "test-site", "same Worker, same address");
   assert.equal(deploys[0].account_id, "acct-123");
   assert.equal(deploys[0].kv_namespaces[0].id, "kv-123");
-  assert.deepEqual(deploys[0].vars, { SITE_NAME: "Renamed", AI_NAME: "Buddy", COMMAND: "TestConnect", SHOW_FABLE: "1", APP_VERSION: "1.3.0", UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "test-site" });
+  assert.deepEqual(deploys[0].vars, { SITE_NAME: "Renamed", COMMAND: "TestConnect", SHOW_FABLE: "1", APP_VERSION: "1.3.0", UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "test-site" });
   assert.deepEqual(cf.deleted, [], "nothing was deleted");
   assert.equal(cf.created.length, 0, "no new site");
   assert.match(pc.read("site/brand.js"), new RegExp(PNG.slice(0, 40)));
   assert.match(pc.read("site/brand.js"), /"image\/png"/);
 
   const cfg = cfgOf(pc);
-  assert.deepEqual([cfg.displayName, cfg.aiName, cfg.fable, cfg.command, cfg.name, cfg.site], ["Renamed", "Buddy", true, "TestConnect", "test-site", pc.config.site]);
+  assert.deepEqual([cfg.displayName, cfg.fable, cfg.command, cfg.name, cfg.site], ["Renamed", true, "TestConnect", "test-site", pc.config.site]);
+  assert.equal(cfg.aiName, undefined, "the name an older install saved for the AI is dropped");
   assert.notEqual(pc.pid(), oldPid);
   assert.equal(pc.alive(oldPid), false);
   assert.equal((await site.api("/api/state")).body.agent.online, true);
@@ -116,7 +118,7 @@ test("a deploy that Cloudflare refuses leaves the computer as it was, and says s
   const before = cfgOf(pc);
   const oldPid = pc.pid();
   pc.failDeploys(true);
-  await site.post("/api/admin/settings", { aiName: "Buddy" });
+  await site.post("/api/admin/settings", { fable: true });
   const run = await finished("the change to fail");
   assert.equal(run.state, "error");
   assert.equal(run.step, "site");

@@ -10,20 +10,31 @@ import { AGENT_SECRET } from "./site.mjs";
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const FAKE_CLAUDE = `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
 const a = process.argv.slice(2);
+const home = process.env.HOME;
 if (a[0] === "--version") { console.log("2.1.300 (Claude Code)"); process.exit(0); }
 if (a[0] === "auth") { console.log(JSON.stringify({ authMethod: "claude.ai" })); process.exit(0); }
+if (a[0] === "--help") {
+  // an old Claude Code has no --system-prompt-snapshot; the file "old-claude" in the home folder makes this one old
+  console.log("Usage: claude [options]\\n  --tools <tools...>  Specify the list of available tools\\n  --system-prompt <prompt>  System prompt to use for the session");
+  if (!fs.existsSync(path.join(home, "old-claude"))) console.log("  --system-prompt-snapshot <on|off>  Record the system prompt once per conversation");
+  process.exit(0);
+}
 let prompt = "";
 process.stdin.on("data", d => (prompt += d)).on("end", () => {
+  // every real run leaves its arguments and what it was asked, for the tests to look at
+  fs.appendFileSync(path.join(home, "claude-runs.jsonl"), JSON.stringify({ args: a, prompt }) + "\\n");
   const out = o => console.log(JSON.stringify(o));
   out({ type: "system", subtype: "init", model: "claude-opus-5-5" });
-  out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } });
+  out({ type: "assistant", message: { id: "m1", usage: { input_tokens: 11, cache_creation_input_tokens: 44, cache_read_input_tokens: 333, output_tokens: 22 }, content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } });
   // the shape of a real event, captured from Claude Code 2.1.293: fractions of each window, resets in epoch seconds
   const now = Math.floor(Date.now() / 1000);
   out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", resetsAt: now + 3 * 3600, rateLimitType: "five_hour", utilization: 0.42, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3 * 3600 }, seven_day: { utilization: 0.17, resetsAt: now + 4 * 86400 } } } });
   out({ type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0.0123,
     usage: { input_tokens: 11, output_tokens: 22, cache_read_input_tokens: 333, cache_creation_input_tokens: 44 },
-    modelUsage: { "claude-opus-5-5": { inputTokens: 11, outputTokens: 22, cacheReadInputTokens: 333, cacheCreationInputTokens: 44, costUSD: 0.0123 } },
+    modelUsage: { "claude-opus-5-5": { inputTokens: 11, outputTokens: 22, cacheReadInputTokens: 333, cacheCreationInputTokens: 44, costUSD: 0.0123, contextWindow: 200000, maxOutputTokens: 64000 } },
     permission_denials: [] });
 });
 `;
@@ -99,7 +110,7 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(dir, "agent.mjs")}" "$@"\n`);
   chmodSync(shim, 0o755);
   const config = {
-    name: "test-site", displayName: "Test Site", command: "TestConnect", aiName: "Testy", fable: false,
+    name: "test-site", displayName: "Test Site", command: "TestConnect", fable: false,
     accountId: "acct-123", kvId: "kv-123", site: site.origin, secret: AGENT_SECRET, workspace: join(home, "ws"),
     permissionMode: "auto", shim, version: oldVersion, repo: "ThatOneWeirdDev/claudeconnect", ref: "main",
     token: site.jwt, tokenExp: Math.floor(Date.now() / 1000) + 86400 * 30, claudePath: join(bin, "claude"), id: "agent-real"
@@ -133,6 +144,8 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   return {
     home, dir, env, config, read, pid: pids, alive, log, updateLog,
     deploys: () => (existsSync(join(home, "deploys")) ? readdirSync(join(home, "deploys")).sort().map(f => JSON.parse(readFileSync(join(home, "deploys", f), "utf8").replace(/^﻿/, ""))) : []),
+    claudeRuns: () => (existsSync(join(home, "claude-runs.jsonl")) ? readFileSync(join(home, "claude-runs.jsonl"), "utf8").trim().split("\n").filter(Boolean).map(l => JSON.parse(l)) : []),
+    oldClaude: () => writeFileSync(join(home, "old-claude"), "1"),
     npxLog: () => (existsSync(join(home, "npx.log")) ? readFileSync(join(home, "npx.log"), "utf8") : ""),
     failDeploys: on => (on ? writeFileSync(join(home, "fail-deploy"), "1") : rmSync(join(home, "fail-deploy"), { force: true })),
     startAgent() {
