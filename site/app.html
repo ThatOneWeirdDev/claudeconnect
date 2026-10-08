@@ -338,7 +338,7 @@ svg{display:block}
 .viz-cap small{color:var(--ink-3);font-size:12.5px}
 .viz-plot{position:relative;border-radius:8px;outline-offset:4px;touch-action:pan-y}
 .viz-plot svg{display:block;overflow:visible}
-.viz-bar{fill:color-mix(in srgb,var(--accent) 62%,var(--raise))}
+.viz-bar{fill:color-mix(in srgb,var(--accent) 80%,var(--raise))}
 .viz-bar.now{fill:var(--accent)}
 .viz-bar.hot{fill:var(--accent);filter:brightness(1.1)}
 .viz-grid{stroke:var(--line-2);stroke-width:1}
@@ -466,10 +466,10 @@ svg{display:block}
       <div class="viz-plot" id="usagePlot" tabindex="0" role="group"></div>
       <div class="viz-tip" id="usageTip" role="status" hidden></div>
     </figure>
+    <p class="fine" id="usageNote" style="margin-top:6px"></p>
     <button class="linkish" id="usageTableBtn" type="button"></button>
     <div class="tbl" id="usageTable" hidden></div>
     <div class="sect" id="usageModels" hidden></div>
-    <p class="fine" id="usageNote"></p>
   </div>
 </dialog>
 <dialog class="dlg narrow" id="updateDlg" aria-labelledby="updateTitle">
@@ -1552,6 +1552,17 @@ function barPath(x, y, w, h, r) {
   return `M${x} ${y + h}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h}Z`;
 }
 function series() { return U.data ? (U.range === "daily" ? U.data.daily : U.data.weekly) : []; }
+function localKey(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+// Token and cost figures only exist from the day tracking began; replies go back as far as the chats do.
+function untracked(b) {
+  if (U.metric === "replies" || !U.data || !U.data.trackedSince) return false;
+  const last = U.range === "daily" ? b.key : localKey(keyDate(b.key).getTime() + 6 * 86400000);
+  return last < localKey(U.data.trackedSince);
+}
+function trackedFrom() { return new Date(U.data.trackedSince).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 
 function renderUsage() {
   const d = U.data;
@@ -1602,7 +1613,7 @@ function drawChart(list) {
   const m = U.metric;
   const W = Math.max(260, Math.floor(plot.clientWidth || plot.parentElement.clientWidth || 600));
   const H = 216;
-  const L = 46, R = 6, T = 8, B = 26;
+  const L = 46, R = 10, T = 8, B = 26;
   const pw = W - L - R, ph = H - T - B;
   const n = list.length;
   const slot = pw / n;
@@ -1625,8 +1636,10 @@ function drawChart(list) {
     const top = y(b[m]);
     geo.bars.push({ cx, top: b[m] > 0 ? top : T + ph });
     if (b[m] > 0) svg += `<path class="viz-bar${i === n - 1 ? " now" : ""}" data-i="${i}" d="${barPath(cx - bw / 2, top, bw, Math.max(h, 1.5), 4)}"/>`;
-    if ((n - 1 - i) % every === 0) svg += `<text class="viz-tick" x="${cx}" y="${H - 7}" text-anchor="${i === n - 1 && n > 8 ? "end" : "middle"}">${esc(i === n - 1 ? (U.range === "daily" ? "Today" : "This week") : shortDate(b.key))}</text>`;
+    if ((n - 1 - i) % every === 0) svg += `<text class="viz-tick" x="${cx}" y="${H - 7}" text-anchor="middle">${esc(i === n - 1 ? (U.range === "daily" ? "Today" : "This week") : shortDate(b.key))}</text>`;
   });
+  const firstTracked = list.findIndex(b => !untracked(b));
+  if (firstTracked * slot > 96) svg += `<text class="viz-tick" x="${L + (slot * firstTracked) / 2}" y="${T + ph - 8}" text-anchor="middle">Not counted yet</text>`;
   svg += "</svg>";
   plot.innerHTML = svg;
   U.geo = geo;
@@ -1650,10 +1663,12 @@ function setActive(i) {
   tip.textContent = "";
   const mk = (cls, text) => { const e = document.createElement("div"); e.className = cls; e.textContent = text; return e; };
   const row = (k, v) => { const e = document.createElement("div"); e.className = "r"; const a = document.createElement("span"); a.textContent = k; const c = document.createElement("b"); c.textContent = v; e.append(a, c); return e; };
-  tip.append(mk("h", bucketTitle(b, U.range)), mk("v", m === "tokens" ? `${fmtFull(m, b.tokens)} tokens` : m === "replies" ? `${fmtFull(m, b.replies)} ${b.replies === 1 ? "reply" : "replies"}` : fmtCost(b.cost)));
-  tip.append(row("Replies", b.replies.toLocaleString()));
-  if (U.data.trackedSince) {
-    tip.append(row("Input", compact(b.input)), row("Output", compact(b.output)), row("Re-read from cache", compact(b.cached)), row("Est. cost", fmtCost(b.cost)));
+  if (untracked(b)) {
+    tip.append(mk("h", bucketTitle(b, U.range)), mk("v", "Not counted yet"), row("Replies", b.replies.toLocaleString()), mk("h", `${m === "cost" ? "Cost" : "Token"} counts start ${trackedFrom()}.`));
+  } else {
+    tip.append(mk("h", bucketTitle(b, U.range)), mk("v", m === "tokens" ? `${fmtFull(m, b.tokens)} tokens` : m === "replies" ? `${fmtFull(m, b.replies)} ${b.replies === 1 ? "reply" : "replies"}` : fmtCost(b.cost)));
+    tip.append(row("Replies", b.replies.toLocaleString()));
+    if (U.data.trackedSince) tip.append(row("Input", compact(b.input)), row("Output", compact(b.output)), row("Re-read from cache", compact(b.cached)), row("Est. cost", fmtCost(b.cost)));
   }
   tip.hidden = false;
   const g = U.geo.bars[i];
@@ -1676,8 +1691,12 @@ function indexAt(ev) {
   if (x < 0 || x > U.geo.pw) return -1;
   return Math.min(series().length - 1, Math.floor(x / U.geo.slot));
 }
-$("usagePlot").addEventListener("pointermove", ev => { const i = indexAt(ev); if (i < 0) hideTip(); else if (i !== U.active || $("usageTip").hidden) setActive(i); });
-$("usagePlot").addEventListener("pointerleave", () => { if (document.activeElement !== $("usagePlot")) { U.active = -1; hideTip(); } });
+const probe = ev => { const i = indexAt(ev); if (i < 0) hideTip(); else if (i !== U.active || $("usageTip").hidden) setActive(i); };
+$("usagePlot").addEventListener("pointermove", probe);
+$("usagePlot").addEventListener("pointerdown", probe);
+// A finger lifting is not the pointer leaving: keep the readout until the next tap elsewhere.
+$("usagePlot").addEventListener("pointerleave", ev => { if (ev.pointerType !== "touch" && document.activeElement !== $("usagePlot")) { U.active = -1; hideTip(); } });
+$("usageDlg").addEventListener("pointerdown", ev => { if (!ev.target.closest("#usagePlot")) hideTip(); });
 $("usagePlot").addEventListener("focus", () => { if (U.geo && !$("usagePlot").matches(":hover")) setActive(series().length - 1); });
 $("usagePlot").addEventListener("blur", () => { U.active = -1; hideTip(); });
 $("usagePlot").addEventListener("keydown", ev => {
@@ -1754,7 +1773,7 @@ function upKind() {
   const run = upRun();
   if (run && run.state === "running") return "running";
   if (run && run.state === "error") return "error";
-  if (run && run.state === "done" && pageIsStale()) return "done";
+  if (run && run.state === "done" && (pageIsStale() || UP.seen === run.id)) return "done";
   if (pageIsStale()) return "stale";
   if (u && u.available) return "offer";
   return "current";
@@ -1816,11 +1835,11 @@ function renderUpdateDlg() {
   } else if (kind === "error") {
     title.textContent = "The update didn't finish";
     sub.textContent = `${v(run.from)} to ${v(run.to)}`;
-    html = stepsHtml(run) + `<div class="note err">${esc(run.message || "Something went wrong.")}</div><p class="fine">Your chats are safe. You can also run ${cmd} on your computer to see what happened.</p><div class="dlg-actions">${u.available ? `<button class="btn primary" type="button" data-up="retry"${u.blocked ? " disabled" : ""}>Try again</button>` : ""}<button class="btn ghost" type="button" data-up="dismiss">Dismiss</button></div>${u.blocked && u.available ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}`;
+    html = stepsHtml(run) + `<div class="note err">${esc(run.message || "Something went wrong.")}</div><p class="fine">Your chats are safe.${run.message && run.message.includes(CFG.command) ? "" : ` You can also run ${cmd} on your computer to see what happened.`}</p><div class="dlg-actions">${u.available ? `<button class="btn primary" type="button" data-up="retry"${u.blocked ? " disabled" : ""}>Try again</button>` : ""}<button class="btn ghost" type="button" data-up="dismiss">Dismiss</button></div>${u.blocked && u.available ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}`;
   } else if (kind === "offer") {
     title.textContent = "Update available";
     sub.textContent = u.released ? `Released ${u.released}` : "";
-    html = `<div class="vrow"><b>${v(u.current)}</b>${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'}<b>${v(u.latest)}</b></div>`;
+    html = `<div class="vrow"><b>${esc(v(u.current))}</b>${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'}<b>${esc(v(u.latest))}</b></div>`;
     if (u.notes.length) html += `<div class="sect" style="margin-top:0"><h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>`;
     html += `<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and this page shows each step as it happens.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>`;
     if (u.blocked) html += `<div class="note soft">${esc(u.blocked.message)}</div>`;
@@ -1862,7 +1881,7 @@ function applyUpdate(u) {
   }
   if (prev && prev.state === "running" && run && run.state === "done" && !$("updateDlg").open) toast(`Updated to v${run.to}. Reload to use it.`, 8000);
   // A page that loaded after the update has nothing to show for a finished run.
-  if (run && run.state === "done" && !pageIsStale() && !$("updateDlg").open && !UP.dismissing) {
+  if (run && run.state === "done" && !pageIsStale() && UP.seen !== run.id && !$("updateDlg").open && !UP.dismissing) {
     UP.dismissing = true;
     api("/api/update/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {}).finally(() => { UP.dismissing = false; });
   }

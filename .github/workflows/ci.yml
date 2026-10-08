@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Manifest and unit tests
+        run: npm test
+      - name: Worker and update end-to-end tests
+        run: npm run test:e2e
+      - name: Shipped files changed, so the version must too
+        if: github.event_name == 'pull_request'
+        run: node scripts/release.mjs --check --against origin/${{ github.base_ref }}

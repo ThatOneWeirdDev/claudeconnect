@@ -294,6 +294,10 @@ test("only the agent's key can post progress, and only for the current update", 
   const big = await s.mf.dispatchFetch(s.origin + "/agent/progress", { method: "POST", headers: { "cf-access-token": s.jwt, "x-chatgql-key": AGENT_SECRET }, body: "x".repeat(30000) });
   assert.equal(big.status, 413);
   assert.equal((await s.api("/api/update")).body.run.steps.site, undefined);
+  for (const junk of ["null", "5", "[]", "not json", '"text"']) {
+    const r = await s.mf.dispatchFetch(s.origin + "/agent/progress", { method: "POST", headers: { "cf-access-token": s.jwt, "x-chatgql-key": AGENT_SECRET }, body: junk });
+    assert.equal(r.status, 400, junk);
+  }
 });
 
 test("the owner's browser can't start an update from another origin", async t => {

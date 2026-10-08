@@ -741,12 +741,11 @@ export class ChatgqlHub extends DurableObject {
   async agentProgress(req) {
     if (req.method !== "POST") return json({ error: "Expected POST" }, 405);
     if (!this.env.AGENT_SECRET || !safeEqual(req.headers.get("x-agent-key") || "", this.env.AGENT_SECRET)) return json({ error: "Forbidden" }, 403);
-    let b;
+    let b = null;
     try {
       b = JSON.parse(await req.text());
-    } catch {
-      return json({ error: "Bad request" }, 400);
-    }
+    } catch {}
+    if (!b || typeof b !== "object" || Array.isArray(b)) return json({ error: "Bad request" }, 400);
     const run = await this.ctx.storage.get("update");
     if (!run || run.id !== b.id) return json({ error: "No such update" }, 404);
     if (run.state !== "running") return json({ ok: true });

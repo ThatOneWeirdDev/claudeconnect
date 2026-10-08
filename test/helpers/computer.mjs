@@ -33,6 +33,7 @@ const a = process.argv.slice(2).join(" ");
 const home = process.env.HOME;
 appendFileSync(join(home, "npx.log"), a + " (cwd " + process.cwd() + ")\\n");
 if (/auth token/.test(a)) { console.log(JSON.stringify({ token: "fake-cloudflare-token" })); process.exit(0); }
+if (/secret bulk/.test(a)) { const f = process.argv[process.argv.indexOf("bulk") + 1]; copyFileSync(f, join(home, "secrets-" + Date.now() + ".json")); process.exit(0); }
 if (/ deploy /.test(" " + a + " ")) {
   if (existsSync(join(home, "fail-deploy"))) { console.error("✘ [ERROR] A request to the Cloudflare API failed: authentication error"); process.exit(1); }
   mkdirSync(join(home, "deploys"), { recursive: true });
@@ -44,6 +45,13 @@ if (/ deploy /.test(" " + a + " ")) {
 console.error("fake npx: unexpected " + a); process.exit(3);
 `;
 
+export function makeFakes(bin) {
+  writeFileSync(join(bin, "claude"), FAKE_CLAUDE);
+  writeFileSync(join(bin, "npx"), FAKE_NPX);
+  chmodSync(join(bin, "claude"), 0o755);
+  chmodSync(join(bin, "npx"), 0o755);
+}
+
 export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   const home = mkdtempSync(join(tmpdir(), "cc-computer-"));
   const dir = join(home, ".claudeconnect");
@@ -51,10 +59,7 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   mkdirSync(dir, { recursive: true });
   mkdirSync(bin, { recursive: true });
   mkdirSync(join(home, "ws"), { recursive: true });
-  writeFileSync(join(bin, "claude"), FAKE_CLAUDE);
-  writeFileSync(join(bin, "npx"), FAKE_NPX);
-  chmodSync(join(bin, "claude"), 0o755);
-  chmodSync(join(bin, "npx"), 0o755);
+  makeFakes(bin);
   // the previous version, as an earlier install would have left it
   copyFileSync(join(ROOT, "agent", "agent.mjs"), join(dir, "agent.mjs"));
   copyFileSync(join(ROOT, "ClaudeConnect.mjs"), join(dir, "ClaudeConnect.mjs"));
