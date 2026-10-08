@@ -2,12 +2,14 @@
 // ClaudeConnect setup. ClaudeConnect.mjs downloads a release from GitHub, checks it, and runs this from the download folder.
 // Run it with --remote-update (no questions) to update an existing install in place, which is what the site's Update button does.
 import { spawnSync, spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, accessSync, chmodSync, rmSync, statSync, readdirSync, openSync, readSync, closeSync, constants } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, accessSync, chmodSync, rmSync, statSync, readdirSync, openSync, readSync, closeSync, renameSync, cpSync, constants } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import crypto from "node:crypto";
 import { createInterface } from "node:readline/promises";
+import { SLUG_RE, NAME_RE, toSlug, cleanSiteName, cleanAiName, cleanAddress } from "./site/names.js";
+import { MAX_IMG, sniffImage, checkImage } from "./site/image.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = process.platform === "win32";
@@ -20,9 +22,6 @@ const CONFIG = join(DIR, "config.json");
 const DEFAULT_REPO = "ThatOneWeirdDev/claudeconnect";
 const WR = "npx --yes wrangler@4";
 const API = process.env.CLAUDECONNECT_CF_API || "https://api.cloudflare.com/client/v4";
-const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
-const MAX_IMG = 512 * 1024;
 const RESERVED = ["alias", "assoc", "bg", "break", "builtin", "call", "case", "cat", "cd", "chdir", "claude", "clear", "cls", "color", "command", "continue", "copy", "cp", "curl", "date", "declare", "del", "dir", "do", "done", "echo", "elif", "else", "endlocal", "erase", "esac", "eval", "exec", "exit", "export", "false", "fc", "fg", "fi", "for", "ftype", "function", "gc", "gci", "gcm", "git", "gl", "goto", "gp", "gps", "gu", "gv", "hash", "help", "history", "if", "in", "jobs", "kill", "let", "local", "logout", "ls", "man", "md", "mkdir", "mklink", "move", "mv", "node", "npm", "npx", "open", "path", "pause", "popd", "prompt", "ps", "pushd", "pwd", "rd", "read", "rem", "ren", "rename", "return", "rm", "rmdir", "select", "set", "setlocal", "shift", "sl", "sleep", "sort", "source", "start", "tee", "test", "then", "time", "title", "trap", "true", "type", "ulimit", "umask", "unalias", "unset", "until", "ver", "verify", "vol", "wait", "wget", "where", "which", "while", "wrangler", "write"];
 const argv = process.argv.slice(2);
 const flag = n => argv.includes(n);
@@ -30,8 +29,10 @@ const opt = n => {
   const i = argv.indexOf(n);
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : null;
 };
-const REMOTE = flag("--remote-update");
+const REMOTE_OP = opt("--remote-op");
+const REMOTE = flag("--remote-update") || !!REMOTE_OP;
 const UPDATE_ID = opt("--update-id");
+const JOB_FILE = opt("--job-file");
 const REPO = process.env.CLAUDECONNECT_REPO || DEFAULT_REPO;
 const REF = process.env.CLAUDECONNECT_REF || "main";
 const tty = !REMOTE && process.stdin.isTTY && process.stdout.isTTY;
@@ -152,10 +153,6 @@ function readJson(p) {
   }
 }
 
-function toSlug(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 63).replace(/-+$/, "");
-}
-
 function stopLocal() {
   for (const d of [DIR, LEGACY_DIR]) {
     const agent = join(d, "agent.mjs");
@@ -243,18 +240,6 @@ function pickWorkspace(name) {
   return join(HOME, `${name} Workspace`);
 }
 
-function sniff(b) {
-  if (b.length < 4) return null;
-  if (b[0] === 0x89 && b.toString("latin1", 1, 4) === "PNG") return "image/png";
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
-  if (b.toString("latin1", 0, 4) === "GIF8") return "image/gif";
-  if (b.length > 12 && b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP") return "image/webp";
-  if (b[0] === 0 && b[1] === 0 && b[2] === 1 && b[3] === 0) return "image/x-icon";
-  const head = b.toString("utf8", 0, Math.min(b.length, 1024)).replace(/^﻿/, "").trimStart().toLowerCase();
-  if (/^(<svg|<\?xml|<!--|<!doctype svg)/.test(head) && b.toString("utf8").toLowerCase().includes("<svg")) return "image/svg+xml";
-  return null;
-}
-
 async function loadImage(src) {
   src = src.trim().replace(/^["']|["']$/g, "");
   if (!IS_WIN) src = src.replace(/\\ /g, " ");
@@ -275,7 +260,7 @@ async function loadImage(src) {
     buf = readFileSync(p);
   }
   if (buf.length > MAX_IMG) throw new Error("it's bigger than 512 KB");
-  const type = sniff(buf);
+  const type = sniffImage(buf);
   if (!type) throw new Error("it isn't a PNG, JPEG, GIF, WebP, ICO or SVG image");
   return { type, b64: buf.toString("base64") };
 }
@@ -398,24 +383,31 @@ function wranglerConfig(o) {
     durable_objects: { bindings: [{ name: "HUB", class_name: "ChatgqlHub" }] },
     migrations: [{ tag: "v1", new_sqlite_classes: ["ChatgqlHub"] }],
     kv_namespaces: [{ binding: "TOKENS", id: o.kvId }],
-    vars: { SITE_NAME: o.displayName, AI_NAME: o.aiName, COMMAND: o.command, SHOW_FABLE: o.fable ? "1" : "0", APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref },
+    vars: { SITE_NAME: o.displayName, AI_NAME: o.aiName, COMMAND: o.command, SHOW_FABLE: o.fable ? "1" : "0", APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug },
     observability: { enabled: true }
   };
 }
 
-// Tells the site how a remote update is going. The site keeps this for you, so it survives the site and this computer restarting.
-async function report(step, status, message) {
-  if (!REMOTE || !UPDATE_ID) return;
-  const c = readJson(CONFIG);
-  if (!c || !c.site) return;
+// Tells the site how a remote job is going. The site keeps this for you, so it survives the site and this computer restarting.
+// It answers with whether you've asked to cancel. `REPORT_TO` pins reporting to one site: a move keeps telling the old site
+// until that site is deleted.
+let REPORT_TO = null;
+
+async function report(step, status, message, info) {
+  if (!REMOTE || !UPDATE_ID) return null;
+  const c = REPORT_TO || readJson(CONFIG);
+  if (!c || !c.site) return null;
   try {
-    await fetch(c.site.replace(/\/$/, "") + "/agent/progress", {
+    const r = await fetch(c.site.replace(/\/$/, "") + "/agent/progress", {
       method: "POST",
       headers: { "content-type": "application/json", "cf-access-token": c.token || "", "x-chatgql-key": c.secret || "", "x-agent-id": c.id || "" },
-      body: JSON.stringify({ id: UPDATE_ID, step, status, message }),
+      body: JSON.stringify({ id: UPDATE_ID, step, status, message, info }),
       signal: AbortSignal.timeout(8000)
     });
-  } catch {}
+    return await r.json().catch(() => null);
+  } catch {
+    return null;
+  }
 }
 
 function agentPid() {
@@ -480,13 +472,7 @@ async function remoteUpdate(manifest) {
     if (!token) fail(`Cloudflare didn't accept the saved sign-in. Run ${old.command || "ClaudeConnect"} update on your computer to sign in again.`);
     installSite(manifest);
     writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", aiName: old.aiName || old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
-    const dep = sh(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE, capture: true });
-    process.stdout.write(String(dep.stdout || ""));
-    process.stderr.write(String(dep.stderr || ""));
-    if (dep.status !== 0) {
-      const why = (String(dep.stderr || "") + String(dep.stdout || "")).split(/\r?\n/).map(l => l.trim()).filter(l => /error|fail|unauthori|login|auth/i.test(l)).slice(-2).join(" ");
-      fail(`Cloudflare didn't accept the new version.${why ? " " + why.slice(0, 200) : ""} Run ${old.command || "ClaudeConnect"} update on your computer to see the details.`);
-    }
+    deploy(SITE, old, "the new version");
     await report("site", "done");
     at = "computer";
     await report("computer", "active");
@@ -525,10 +511,298 @@ async function remoteUpdate(manifest) {
   process.exit(0);
 }
 
+// ---- changes to the site itself, started from its Settings page. They use the site files already on this computer (the
+// version that is deployed), so nothing is downloaded and nothing gets updated by accident.
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function jobInput() {
+  let job = {};
+  if (JOB_FILE) {
+    try {
+      job = JSON.parse(readFileSync(JOB_FILE, "utf8"));
+    } catch {}
+    try {
+      unlinkSync(JOB_FILE);
+    } catch {}
+  }
+  return job && typeof job === "object" ? job : {};
+}
+
+function requireInstall() {
+  const old = readJson(CONFIG);
+  if (!old || !old.accountId || !old.kvId || !old.name || !old.site) fail("This computer isn't set up yet, so there's nothing to change. Run ClaudeConnect.mjs and choose to set it up.");
+  if (!existsSync(join(SITE, "worker.js"))) fail(`The site's files aren't on this computer. Run ${old.command || "ClaudeConnect"} update first.`);
+  return old;
+}
+
+function signIn(old) {
+  token = cloudflareToken();
+  if (!token) fail(`Cloudflare didn't accept the saved sign-in. Run ${old.command || "ClaudeConnect"} update on your computer to sign in again.`);
+}
+
+function deploy(dir, old, what) {
+  const dep = sh(`${WR} deploy -c wrangler.jsonc`, { cwd: dir, capture: true });
+  process.stdout.write(String(dep.stdout || ""));
+  process.stderr.write(String(dep.stderr || ""));
+  if (dep.status === 0) return;
+  const why = (String(dep.stderr || "") + String(dep.stdout || "")).split(/\r?\n/).map(l => l.trim()).filter(l => /error|fail|unauthori|login|auth/i.test(l)).slice(-2).join(" ");
+  fail(`Cloudflare didn't accept ${what}.${why ? " " + why.slice(0, 200) : ""} Run ${old.command || "ClaudeConnect"} update on your computer to see the details.`);
+}
+
+async function restartAgent() {
+  const logPath = join(DIR, "agent.log");
+  let from = 0;
+  try {
+    from = statSync(logPath).size;
+  } catch {}
+  await stopAgentQuietly();
+  spawnSync(process.execPath, [join(DIR, "agent.mjs"), "background"], { stdio: "ignore" });
+  return waitForConnected(logPath, from, 120000);
+}
+
+function failure(e) {
+  return e instanceof Stop ? e.message : `Something unexpected went wrong: ${String((e && e.message) || e).slice(0, 200)}`;
+}
+
+async function kvValue(kvId, key) {
+  try {
+    const r = await fetch(`${API}/accounts/${accountId}/storage/kv/namespaces/${kvId}/values/${key}`, { headers: { authorization: "Bearer " + token }, signal: AbortSignal.timeout(15000) });
+    return r.ok ? JSON.parse(await r.text()) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Name, what the AI calls itself, Fable, logo and tab icon: the same site, redeployed with new settings. Chats are untouched.
+async function remoteSettings(old, job) {
+  accountId = old.accountId;
+  let at = "site";
+  try {
+    await report("site", "active");
+    signIn(old);
+    const displayName = cleanSiteName(job.displayName) || old.displayName || "ClaudeConnect";
+    const aiName = cleanAiName(job.aiName) || old.aiName || displayName;
+    const fable = typeof job.fable === "boolean" ? job.fable : !!old.fable;
+    const brand = readBrand();
+    for (const k of ["logo", "favicon"]) {
+      if (!(k in job)) continue;
+      if (job[k] === null) {
+        brand[k] = null;
+        continue;
+      }
+      const img = checkImage(job[k] && job[k].b64);
+      if (img.error) fail(`The ${k === "logo" ? "logo" : "tab icon"} didn't work: ${img.error}.`);
+      brand[k] = { type: img.type, b64: img.b64 };
+    }
+    writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify(brand) + ";\n");
+    const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, aiName, command: old.command || "ClaudeConnect", fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    deploy(SITE, old, "the changes");
+    await report("site", "done");
+    at = "computer";
+    await report("computer", "active");
+    const cfg = readJson(CONFIG) || old;
+    Object.assign(cfg, { displayName, aiName, fable });
+    writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    await report("computer", "done");
+    at = "restart";
+    await report("restart", "active");
+    const online = await restartAgent();
+    await report("restart", "done");
+    at = "online";
+    await report("online", "active");
+    if (!online) fail(`The changes are in, but ${displayName} hasn't reconnected yet. Run ${old.command || "ClaudeConnect"} logs on your computer to see why.`);
+    await report("online", "done");
+    console.log("Settings changed.");
+  } catch (e) {
+    const msg = failure(e);
+    console.error(msg);
+    await report(at, "error", msg);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// A new address is a new Worker. The old site stays up and in use until the new one is claimed and this computer has connected to
+// it, so a mistake anywhere before then leaves everything as it was. Only then is the old site deleted.
+async function remoteMove(old, job) {
+  accountId = old.accountId;
+  const slug = cleanAddress(job.address);
+  let at = "prepare";
+  let touched = false;
+  let madeKv = null;
+  let committed = false;
+  let stopped = false;
+  let swapped = false;
+  const next = join(DIR, "site-next");
+  const prev = join(DIR, "site-old");
+  let newSite = "";
+  try {
+    await report("prepare", "active");
+    if (!slug) fail("That address won't work. Use 1 to 63 lowercase letters, numbers or dashes.");
+    if (slug === old.name) fail("That's the address it already has.");
+    signIn(old);
+    const scripts = await cf("GET", `/accounts/${accountId}/workers/scripts`);
+    if (!scripts.ok) fail(`Couldn't check your Cloudflare account (${scripts.error}).`);
+    if ((scripts.result || []).some(x => x.id === slug)) fail(`There's already a worker called ${slug} in this Cloudflare account. Pick a different address.`);
+    const sub = await cf("GET", `/accounts/${accountId}/workers/subdomain`);
+    if (!sub.result || !sub.result.subdomain) fail("Couldn't work out your workers.dev address.");
+    newSite = process.env.CLAUDECONNECT_SITE_ORIGIN || `https://${slug}.${sub.result.subdomain}.workers.dev`; // the override is for tests
+    await report("prepare", "done");
+
+    at = "create";
+    await report("create", "active");
+    const kvTitle = `${slug}-signin`;
+    const kvs = await cf("GET", `/accounts/${accountId}/storage/kv/namespaces?per_page=100`);
+    let kvId = ((kvs.result || []).find(k => k.title === kvTitle) || {}).id || null;
+    if (!kvId) {
+      const made = await cf("POST", `/accounts/${accountId}/storage/kv/namespaces`, { title: kvTitle });
+      if (!made.ok || !made.result) fail(`Couldn't create the new site's storage (${made.error}).`);
+      kvId = made.result.id;
+      madeKv = kvId;
+    }
+    rmSync(next, { recursive: true, force: true });
+    cpSync(SITE, next, { recursive: true });
+    const secret = crypto.randomBytes(32).toString("base64url");
+    const claim = crypto.randomBytes(18).toString("base64url");
+    const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
+    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", aiName: old.aiName || old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    touched = true;
+    deploy(next, old, "the new site");
+    const tmp = join(DIR, `secrets-${crypto.randomBytes(6).toString("hex")}.json`);
+    writeFileSync(tmp, JSON.stringify({ CLAIM_CODE: claim, AGENT_SECRET: secret }), { mode: 0o600 });
+    const sec = sh(`${WR} secret bulk ${q(tmp)} -c wrangler.jsonc`, { cwd: next });
+    try {
+      unlinkSync(tmp);
+    } catch {}
+    if (sec.status !== 0) fail("Couldn't save the new site's secrets.");
+    await report("create", "done");
+
+    // The owner has to turn Cloudflare Access on for the new address. The page shows how, keeps this alive, and learns when
+    // it worked: the new site only ever stores a sign-in once someone has passed Access and claimed it.
+    at = "access";
+    const info = { site: newSite, claim: `${newSite}/?claim=${claim}`, dash: `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/settings`, name: slug };
+    let found = null;
+    const until = Date.now() + 60 * 60000;
+    while (Date.now() < until) {
+      const r = await report("access", "active", undefined, info);
+      if (r && r.cancel) fail("Cancelled. The old site is untouched.");
+      found = await kvValue(kvId, "agent-token");
+      if (found && typeof found.token === "string" && typeof found.exp === "number") break;
+      found = null;
+      await sleep(5000);
+    }
+    if (!found) fail("Timed out waiting for the new site to be claimed. The old site is untouched.");
+    await report("access", "done", undefined, info);
+
+    at = "switch";
+    await report("switch", "active");
+    REPORT_TO = readJson(CONFIG);
+    await stopAgentQuietly();
+    stopped = true;
+    writeFileSync(CONFIG, JSON.stringify({ ...old, name: slug, site: newSite, secret, kvId, token: found.token, tokenExp: found.exp }, null, 2), { mode: 0o600 });
+    rmSync(prev, { recursive: true, force: true });
+    renameSync(SITE, prev);
+    swapped = true;
+    renameSync(next, SITE);
+    const logPath = join(DIR, "agent.log");
+    let from = 0;
+    try {
+      from = statSync(logPath).size;
+    } catch {}
+    spawnSync(process.execPath, [join(DIR, "agent.mjs"), "background"], { stdio: "ignore" });
+    if (!(await waitForConnected(logPath, from, 120000))) fail("This computer couldn't connect to the new site. The old site is untouched.");
+    committed = true;
+    stopped = false;
+    await report("switch", "done");
+
+    at = "cleanup";
+    await report("cleanup", "active", undefined, info);
+    await sleep(3500); // the page is polling: let it see this step before the site it is polling goes away
+    const gone = await cf("DELETE", `/accounts/${accountId}/workers/scripts/${encodeURIComponent(old.name)}?force=true`);
+    if (!gone.ok && gone.status !== 404) fail(`${old.displayName || "The site"} now lives at ${newSite}, but the old site couldn't be deleted (${gone.error}). You can delete ${old.name} in the Cloudflare dashboard.`);
+    await cf("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${old.kvId}`);
+    rmSync(prev, { recursive: true, force: true });
+    console.log(`Moved to ${newSite}. The old site is gone.`);
+  } catch (e) {
+    const msg = failure(e);
+    console.error(msg);
+    if (!committed) {
+      // Put everything back as it was.
+      try {
+        if (swapped) {
+          rmSync(SITE, { recursive: true, force: true });
+          renameSync(prev, SITE);
+        }
+        if (stopped) {
+          await stopAgentQuietly();
+          writeFileSync(CONFIG, JSON.stringify(old, null, 2), { mode: 0o600 });
+          spawnSync(process.execPath, [join(DIR, "agent.mjs"), "background"], { stdio: "ignore" });
+        }
+        if (touched) await cf("DELETE", `/accounts/${accountId}/workers/scripts/${encodeURIComponent(slug)}?force=true`);
+        if (madeKv) await cf("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${madeKv}`);
+        rmSync(next, { recursive: true, force: true });
+      } catch {}
+    }
+    await report(at, "error", msg);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// The Delete button: the site and every chat in it are removed, and this computer stops serving it. The folder Claude works in is kept.
+async function remoteDelete(old) {
+  accountId = old.accountId;
+  let at = "site";
+  try {
+    await report("site", "active");
+    signIn(old);
+    await sleep(3500); // the page is polling: let it see this step before the site it is polling goes away
+    const gone = await cf("DELETE", `/accounts/${accountId}/workers/scripts/${encodeURIComponent(old.name)}?force=true`);
+    if (!gone.ok && gone.status !== 404) fail(`Cloudflare wouldn't delete the site (${gone.error}).`);
+    await cf("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${old.kvId}`);
+    at = "computer";
+    const agentPath = join(DIR, "agent.mjs");
+    spawnSync(process.execPath, [agentPath, "autostart", "off"], { stdio: "ignore" });
+    await stopAgentQuietly();
+    removeShims([old.command, "chatgql"], [old.shim]);
+    rmSync(CONFIG, { force: true });
+    console.log("Deleted the site and its chats.");
+  } catch (e) {
+    const msg = failure(e);
+    console.error(msg);
+    await report(at, "error", msg);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+if (REMOTE_OP) {
+  const first = { settings: "site", move: "prepare", delete: "site" }[REMOTE_OP];
+  const job = jobInput();
+  if (!first) {
+    console.error(`This version doesn't know how to ${REMOTE_OP}.`);
+    await report("site", "error", "This version doesn't know how to do that.");
+    process.exit(1);
+  }
+  let old = null;
+  try {
+    old = requireInstall();
+  } catch (e) {
+    console.error(failure(e));
+    await report(first, "error", failure(e));
+    process.exit(1);
+  }
+  if (REMOTE_OP === "settings") await remoteSettings(old, job);
+  else if (REMOTE_OP === "move") await remoteMove(old, job);
+  else await remoteDelete(old);
+}
+
 const major = Number(process.versions.node.split(".")[0]);
 let payload;
 try {
-  if (major < 20) fail(`This needs Node.js 20 or newer, and you have ${process.version}. Install the current LTS from nodejs.org, then run this again.`);
+  if (major < 22) fail(`This needs Node.js 22 or newer, and you have ${process.version}. Install the current LTS from nodejs.org, then run this again.`);
   payload = loadPayload();
 } catch (e) {
   if (!(e instanceof Stop)) throw e;

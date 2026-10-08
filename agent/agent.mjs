@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, statSync, unlinkSync, renameSync, openSync, closeSync } from "node:fs";
 import { join, basename, dirname, extname, relative, resolve as resolvePath, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomBytes } from "node:crypto";
 import os from "node:os";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -172,6 +173,7 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     ["logs", "show recent activity"],
     ["status", "show whether it's running"],
     ["update", "check for a new version and update"],
+    ["claim", "print a fresh link to make the site yours (after turning Cloudflare Access on or off)"],
     ["version", "show the installed version"]
   ];
   const w = Math.max(...rows.map(r => (COMMAND + " " + r[0]).trim().length)) + 2;
@@ -188,6 +190,34 @@ if (cmd === "logs") {
 }
 if (cmd === "stop") {
   stopOther();
+  process.exit(0);
+}
+if (cmd === "claim") {
+  // Whoever can run this has this computer's Cloudflare sign-in, which is exactly who should be able to take the site back.
+  const t = spawnSync("npx --yes wrangler@4 auth token --json", { shell: true, encoding: "utf8", windowsHide: true, env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: cfg.accountId || "" } });
+  let token = null;
+  try {
+    token = JSON.parse(String(t.stdout).slice(String(t.stdout).indexOf("{"))).token || null;
+  } catch {}
+  if (!token) {
+    console.log("Couldn't get your Cloudflare sign-in. Run: npx wrangler login");
+    process.exit(1);
+  }
+  const code = randomBytes(18).toString("base64url");
+  let r;
+  try {
+    r = await fetch(`${API}/accounts/${cfg.accountId}/workers/scripts/${encodeURIComponent(SLUG)}/secrets`, { method: "PUT", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify({ name: "CLAIM_CODE", text: code, type: "secret_text" }) });
+  } catch (e) {
+    console.log(`Couldn't reach Cloudflare (${e.message || e}).`);
+    process.exit(1);
+  }
+  if (!r.ok) {
+    console.log(`Cloudflare didn't accept the new claim link (${r.status}). Make sure you're signed in to the right account.`);
+    process.exit(1);
+  }
+  const link = `${cfg.site.replace(/\/$/, "")}/?claim=${code}`;
+  console.log(`Open this link while signed in with the email you want to own ${NAME}. It works once:\n\n  ${link}\n`);
+  openUrl(link);
   process.exit(0);
 }
 if (cmd === "version" || cmd === "--version" || cmd === "-v") {
@@ -687,6 +717,8 @@ function runClaude(m, prompt, sessionArgs, pre) {
           if (w && !b.is_error) w.ok = true;
           send({ type: "tool_done", runId: m.runId, chatId: m.chatId, id: b.tool_use_id, error: !!b.is_error });
         }
+      } else if (o.type === "rate_limit_event") {
+        noteLimits(o.rate_limit_info);
       } else if (o.type === "result") {
         final = o;
       }
@@ -700,20 +732,54 @@ function runClaude(m, prompt, sessionArgs, pre) {
   });
 }
 
-function usageOf(f, model) {
-  if (!f) return [];
-  const n = v => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
-  const out = [];
-  if (f.modelUsage && typeof f.modelUsage === "object") {
-    for (const [id, u] of Object.entries(f.modelUsage)) {
-      if (!u || typeof u !== "object") continue;
-      out.push({ model: id.replace(/\[.*\]$/, ""), input: n(u.inputTokens), output: n(u.outputTokens), cacheRead: n(u.cacheReadInputTokens), cacheWrite: n(u.cacheCreationInputTokens), cost: n(u.costUSD) });
+// The plan percentages. Claude Code reads them from Anthropic's response headers and reports them on every reply in a
+// rate_limit_event, as fractions of each window (5 hours, 7 days). API-key sessions don't get them, so they're simply absent.
+const LIMIT_KEYS = ["five_hour", "seven_day", "seven_day_overage_included"];
+let LIMITS = null;
+let limitsTimer = null;
+
+function limitsFrom(info) {
+  if (!info || typeof info !== "object") return null;
+  const windows = {};
+  const w = info.unifiedWindows && typeof info.unifiedWindows === "object" ? info.unifiedWindows : {};
+  for (const key of LIMIT_KEYS) {
+    const x = w[key];
+    if (x && Number.isFinite(x.utilization) && Number.isFinite(x.resetsAt)) windows[key] = { pct: x.utilization * 100, resetsAt: x.resetsAt };
+  }
+  // Older builds only name the window that is limiting right now.
+  if (!Object.keys(windows).length && Number.isFinite(info.utilization) && Number.isFinite(info.resetsAt) && (info.rateLimitType === "five_hour" || info.rateLimitType === "seven_day")) windows[info.rateLimitType] = { pct: info.utilization * 100, resetsAt: info.resetsAt };
+  return Object.keys(windows).length ? { windows, status: info.status } : null;
+}
+
+function noteLimits(info) {
+  const got = limitsFrom(info);
+  if (!got) return;
+  LIMITS = { windows: { ...((LIMITS && LIMITS.windows) || {}), ...got.windows }, status: got.status };
+  clearTimeout(limitsTimer);
+  limitsTimer = setTimeout(() => LIMITS && send({ type: "limits", limits: LIMITS }), 400);
+}
+
+let probing = false;
+
+// A one-token message to the cheapest model, only to read the current percentages. Nothing is saved and no tools are offered.
+async function probeLimits() {
+  if (probing || procs.size || !CLAUDE) return;
+  probing = true;
+  try {
+    const args = ["-p", "--output-format", "stream-json", "--verbose", "--model", "claude-haiku-5-5", "--no-session-persistence", "--tools", "", "--system-prompt", "Reply with: ok"];
+    const r = await capture(args, "ok", 90000);
+    for (const line of String(r.stdout).split("\n")) {
+      let o;
+      try {
+        o = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (o && o.type === "rate_limit_event") noteLimits(o.rate_limit_info);
     }
+  } finally {
+    probing = false;
   }
-  if (!out.length && f.usage && typeof f.usage === "object") {
-    out.push({ model, input: n(f.usage.input_tokens), output: n(f.usage.output_tokens), cacheRead: n(f.usage.cache_read_input_tokens), cacheWrite: n(f.usage.cache_creation_input_tokens), cost: n(f.total_cost_usd) });
-  }
-  return out.filter(u => u.input || u.output || u.cacheRead || u.cacheWrite || u.cost);
 }
 
 async function handleRun(m) {
@@ -755,7 +821,7 @@ async function handleRun(m) {
   }
   const text = result.st.text || (!error && f && typeof f.result === "string" ? f.result : "");
   const artifacts = collectArtifacts(result.st.writes || []);
-  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, usage: usageOf(f, result.st.model || m.model), denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
+  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
   log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s${artifacts.length ? `, with ${artifacts.length} file${artifacts.length === 1 ? "" : "s"}` : ""}`);
 }
 
@@ -805,42 +871,60 @@ function stopRun(m) {
 
 let updating = false;
 
-// The update runs in its own detached process: it replaces this program's files and restarts it, so it can't live inside it.
-async function startUpdate(m) {
+// Updates and changes to the site run in their own detached process: they replace this program's files, restart it, or delete
+// it, so they can't live inside it. The process tells the site how it's going, so the page can follow along.
+async function runJob(m, script, args, what) {
   const refuse = error => send({ type: "update_ack", id: m.id, ok: false, error });
-  const loader = join(HERE, "ClaudeConnect.mjs");
-  // A failed updater tells the site before it exits, so a quick retry can arrive while it is still winding down.
+  // A failed job tells the site before it exits, so a quick retry can arrive while it is still winding down.
   for (let i = 0; i < 30 && updating; i++) await new Promise(r => setTimeout(r, 100));
-  if (updating) return refuse("An update is already running on your computer.");
-  if (procs.size) return refuse("A reply is still being written on your computer. Wait for it to finish, then update.");
-  if (!existsSync(loader)) return refuse(`The updater isn't on your computer. Run ClaudeConnect.mjs there once with node, then updating from here will work.`);
+  if (updating) return refuse("Something is already running on your computer.");
+  if (procs.size) return refuse("A reply is still being written on your computer. Wait for it to finish, then try again.");
+  if (!existsSync(script)) return refuse(`The program that does this isn't on your computer. Run ClaudeConnect.mjs there once with node, then it can be done from here.`);
   let out = "ignore";
   try {
     out = openSync(join(HERE, "update.log"), "a");
   } catch {}
   try {
-    const args = [loader, "--remote-update", "--update-id", String(m.id), "--expect", String(m.to || "")];
-    const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", out, out], windowsHide: true, cwd: HERE });
+    const child = spawn(process.execPath, [script, ...args], { detached: true, stdio: ["ignore", out, out], windowsHide: true, cwd: HERE });
     child.on("error", e => {
       updating = false;
-      log("Update couldn't start:", e.message || e);
-      refuse(`The update couldn't start (${String((e && e.message) || e).slice(0, 120)}).`);
+      log("Couldn't start:", e.message || e);
+      refuse(`That couldn't start (${String((e && e.message) || e).slice(0, 120)}).`);
     });
     // A clean exit means it either finished or reported its own failure; anything else died before it could say so.
     child.on("exit", code => {
       updating = false;
-      if (code) refuse(`The updater stopped unexpectedly (exit code ${code}). ${COMMAND} update on your computer shows why.`);
+      if (code) refuse(`It stopped unexpectedly (exit code ${code}). ${COMMAND} logs on your computer shows why.`);
     });
     child.unref();
   } catch (e) {
-    return refuse(`The update couldn't start (${String((e && e.message) || e).slice(0, 120)}).`);
+    return refuse(`That couldn't start (${String((e && e.message) || e).slice(0, 120)}).`);
   } finally {
     if (typeof out === "number") closeSync(out);
   }
   updating = true;
-  setTimeout(() => (updating = false), 15 * 60000).unref();
-  log(`Updating to ${m.to || "the newest version"}. This will restart ${NAME}.`);
+  setTimeout(() => (updating = false), 90 * 60000).unref();
+  log(what);
   send({ type: "update_ack", id: m.id, ok: true });
+}
+
+async function startUpdate(m) {
+  await runJob(m, join(HERE, "ClaudeConnect.mjs"), ["--remote-update", "--update-id", String(m.id), "--expect", String(m.to || "")], `Updating to ${m.to || "the newest version"}. This will restart ${NAME}.`);
+}
+
+const ADMIN_OPS = { settings: "Changing this site's settings", move: "Moving this site to a new address", delete: "Deleting this site" };
+
+// The details go in a file only this user can read: they can include a logo, and a command line is visible to other programs.
+async function startAdmin(m) {
+  const what = ADMIN_OPS[m.op];
+  if (!what) return send({ type: "update_ack", id: m.id, ok: false, error: "This version doesn't know how to do that." });
+  const file = join(HERE, `job-${String(m.id).replace(/[^A-Za-z0-9-]/g, "")}.json`);
+  try {
+    writeFileSync(file, JSON.stringify(m.payload || {}), { mode: 0o600 });
+  } catch (e) {
+    return send({ type: "update_ack", id: m.id, ok: false, error: `Couldn't save the details on your computer (${String((e && e.message) || e).slice(0, 100)}).` });
+  }
+  await runJob(m, join(HERE, "installer.mjs"), ["--remote-op", m.op, "--update-id", String(m.id), "--job-file", file], `${what}.`);
 }
 
 const parts = new Map();
@@ -873,6 +957,8 @@ function onMessage(raw) {
   } else if (m.type === "stop") stopRun(m);
   else if (m.type === "token") saveSignIn(m.token, m.exp);
   else if (m.type === "update") startUpdate(m).catch(e => log("Update failed to start:", e.message || e));
+  else if (m.type === "admin") startAdmin(m).catch(e => log("Couldn't start that:", e.message || e));
+  else if (m.type === "limits_refresh") probeLimits().catch(() => {});
 }
 
 let pingTimer = null;
@@ -946,10 +1032,11 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "usage"], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits"], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);
+    if (LIMITS) send({ type: "limits", limits: LIMITS });
     setTimeout(() => {
       if (finished) return;
       if (!announced) {

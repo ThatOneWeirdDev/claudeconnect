@@ -1,56 +1,73 @@
 # ClaudeConnect
 
-Use Claude Code from any browser. ClaudeConnect puts a chat site on your own Cloudflare account, locked to you with Cloudflare Access, and a small program on your computer that does the actual work with your Claude plan.
+Use Claude Code from any browser. ClaudeConnect puts a chat site on your own Cloudflare account, closed to everyone except you by Cloudflare Access, and a small program on your computer that does the actual work with your Claude plan.
+
+You need Node.js 22 or newer, a Cloudflare account (the free plan is enough) and a Claude plan.
 
 ## Install
 
-You need Node.js 22 or newer and a free Cloudflare account.
+macOS and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ThatOneWeirdDev/claudeconnect/main/ClaudeConnect.mjs -o ClaudeConnect.mjs
-node ClaudeConnect.mjs
+curl -fsSL https://raw.githubusercontent.com/ThatOneWeirdDev/claudeconnect/main/install.sh | sh
 ```
 
-On Windows (PowerShell):
+Windows (PowerShell):
 
 ```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/ThatOneWeirdDev/claudeconnect/main/ClaudeConnect.mjs -OutFile ClaudeConnect.mjs
-node ClaudeConnect.mjs
+irm https://raw.githubusercontent.com/ThatOneWeirdDev/claudeconnect/main/install.ps1 | iex
 ```
 
-`ClaudeConnect.mjs` is only a launcher. It downloads the current release from this repository, checks every file against [`manifest.json`](manifest.json), and runs the setup that came with it. Nothing about ClaudeConnect itself is stored inside that file.
+Or with npm, no download step:
 
-Setup walks you through naming the site, signing in to Cloudflare, turning on Cloudflare Access and opening the one-time claim link. Running it again on a computer that is already set up offers **update**, **reset** or **leave it**.
+```sh
+npx github:ThatOneWeirdDev/claudeconnect
+```
 
-## Usage
+Each of these runs `ClaudeConnect.mjs`, a small launcher. It downloads the current release from this repository, checks every file against [`manifest.json`](manifest.json), and runs the setup that came with it. Nothing about ClaudeConnect itself is stored inside the launcher.
 
-The chart icon at the top right opens **Usage**: tokens, replies and estimated cost, by day (last 30 days) or by week (last 12), in your time zone. Hover, tap or use the arrow keys to read a day, or switch to the table view.
+Setup asks for a name, signs you in to Cloudflare, creates the site, then walks you through turning on Cloudflare Access and opening a one-time claim link. Running it again on a computer that is already set up offers **update**, **reset** or **leave it**.
 
-- **Tokens** are what Claude read in and wrote out. Chat history it re-read from its cache is shown separately and isn't counted.
-- **Est. cost** is calculated at API prices. It is not what your Claude plan charges.
-- Token and cost figures start from the day you installed this version. Replies go back as far as your chats do.
+## Everything from the site
+
+Open your site, click your account at the bottom of the sidebar, and choose **Settings**. Whatever you change here, your computer carries out and the page follows along step by step, from any device.
+
+| Settings page | What it does |
+| --- | --- |
+| **General** | The site's name, what the AI calls itself, and whether Fable 5.1 shows in the model picker. The site is redeployed in place, so **your chats are kept**. |
+| **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. Same in-place redeploy. |
+| **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
+| **Updates** | Shows when a new version is out and installs it in place. |
+| **Delete site** | Deletes the site and every chat in it, then removes the setup from your computer. The folder Claude works in is kept. You type the site's name to confirm. |
+
+Nothing destructive happens before its replacement works: a move only deletes the old site after the new one is claimed and your computer is connected to it, and a failed step puts everything back.
+
+The command you run on your computer (`<command> help` lists them) doesn't change when you rename the site.
+
+### Plan usage
+
+**Plan usage** in the account menu shows how much of your Claude plan you've used: the current 5-hour session and the weekly limit, as percentages, with when each resets. These are the real numbers from your Claude account, not an estimate. Claude Code reads them from Anthropic's responses to every reply and reports them to ClaudeConnect, so they're as fresh as your last message. **Refresh** sends one tiny message to the cheapest model to read the latest.
+
+Plans billed per token (an API key) don't report these, so nothing is shown. Claude Code marks this field as internal, so a future version could change it; if it disappears, the page just shows nothing.
+
+### If the site is locked
+
+A site that isn't behind Cloudflare Access is closed to **everyone**, including you. The locked page has an **I'm the owner** button that shows what to do: in the Cloudflare dashboard open your Worker, then **Settings** → **Domains & Routes** → **workers.dev** → **Enable Cloudflare Access**, and allow only your own email. A visitor from any other account can sign in to Access and still not get in: the site stays closed unless the sign-in is the one that claimed it.
+
+Lost your claim link, or turned Access off and on again? Run `<command> claim` on your computer for a fresh one. It works because that computer holds your Cloudflare sign-in.
 
 ## Updating
 
-The site checks this repository for a newer version every half hour. When there is one, an **Update available** button appears at the top. Click it to see what's new and start the update from the page:
+The site checks this repository for a newer version every half hour and shows **Update available**. Click it for what's new, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. You can also run `<command> update` in a terminal.
 
-1. Your computer downloads the release and checks every file against the manifest.
-2. It redeploys the site **in place**. The site is never deleted, so it stays up and your chats are kept.
-3. It updates and restarts the program on your computer.
-4. The page ends with a link to the updated site.
-
-The site keeps the progress, so you can watch from any device and come back to it after the restarts. If a step fails, the page says which one and why, nothing on your computer is changed unless the site step succeeded, and **Try again** is one click.
-
-You can also update from a terminal with `<your command> update` (the command is the site's name, shown by `<your command> help`).
-
-**First time only:** versions before 1.2.0 can't update from the page, because the program on your computer doesn't know how yet. Download the new `ClaudeConnect.mjs` as above, run it and choose **update**. From then on the button works.
+**First time only:** versions before 1.3.0 can't do any of this from the page, because the program on your computer doesn't know how yet. Run the install command above once and choose **update**.
 
 ### Where updates come from
 
-By default `main` of this repository. The choice is saved at install and used for every later update:
+By default `main` of this repository, saved at install and used for every later update:
 
 ```sh
-node ClaudeConnect.mjs --ref v1.2.0                 # a tag or commit, so nothing changes until you decide
+node ClaudeConnect.mjs --ref v1.3.0                  # a tag or commit, so nothing changes until you decide
 node ClaudeConnect.mjs --repo yourname/claudeconnect # your own fork
 ```
 
@@ -61,7 +78,7 @@ An update runs code from that source on your computer and in your Cloudflare acc
 `manifest.json` holds the version and a SHA-256 for every file that ships. The site, the launcher and the installer all trust it, so keep it in step with the files:
 
 ```sh
-node scripts/release.mjs 1.3.0   # sets the version in manifest.json and package.json, refreshes the hashes
+node scripts/release.mjs 1.4.0   # sets the version in manifest.json and package.json, refreshes the hashes
 # edit "notes" in manifest.json: these lines are what people see under "What's new"
 node scripts/release.mjs         # refresh the hashes after editing
 ```
@@ -74,12 +91,13 @@ A site is deployed before the program on your computer is replaced, so a new sit
 
 | Path | What it is |
 | --- | --- |
+| `install.sh`, `install.ps1` | One-line installs. They check for Node, download the launcher and run it. |
 | `ClaudeConnect.mjs` | Launcher: downloads, verifies, runs the installer. A copy is kept on your computer for updates. |
-| `installer.mjs` | Setup wizard, and the no-questions `--remote-update` the site's Update button uses. |
-| `agent/agent.mjs` | The program on your computer that runs Claude Code. |
-| `site/worker.js` | The Cloudflare Worker and its Durable Object (chats, usage, update state). |
-| `site/app.html` | The web app. |
-| `site/usage.js`, `site/version.js` | Usage bucketing and version checks, kept separate so they can be tested. |
+| `installer.mjs` | Setup wizard, plus the no-questions operations the site's Settings use: `--remote-update`, and `--remote-op settings`, `move` or `delete`. |
+| `agent/agent.mjs` | The program on your computer that runs Claude Code and carries out what the site asks. |
+| `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
+| `site/app.html` | The web app. Its colours and type follow OpenAI's published ChatGPT design tokens. |
+| `site/names.js`, `site/image.js`, `site/version.js` | Shared checks for names, addresses, images and versions, kept separate so the site and the installer use the same rules and they can be tested. |
 | `manifest.json` | Version, release notes, file checksums. |
 | `scripts/release.mjs` | Keeps the manifest honest. |
 
@@ -88,7 +106,7 @@ A site is deployed before the program on your computer is replaced, so a new sit
 ```sh
 npm install
 npm test            # manifest check and unit tests
-npm run test:e2e    # the real worker in workerd (miniflare), plus a full update with real processes
+npm run test:e2e    # the real worker in workerd (miniflare), and full runs with real processes
 ```
 
-The end-to-end tests run the unmodified worker with real Access-JWT verification against a throwaway key. One of them runs the real agent, launcher and installer together on a temporary home folder, with only `claude` and `wrangler` replaced by fakes, and drives a complete update from the site's API.
+The end-to-end tests run the unmodified worker with real Access-JWT verification against a throwaway key. The heavier ones run the real agent, launcher and installer together on a temporary home folder, with only `claude`, `wrangler` and Cloudflare's API replaced by fakes, and drive a complete update, a settings change, a move (including the old site being deleted only after the new one is claimed, and a cancel that rolls everything back) and a delete.

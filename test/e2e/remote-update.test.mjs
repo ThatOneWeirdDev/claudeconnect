@@ -49,19 +49,17 @@ async function boot(t) {
   return { site, pc, github, agent, chat };
 }
 
-test("a real agent reports usage from the CLI's result, and it reaches the chart", async t => {
+test("a real agent reports the plan percentages Claude Code gives it, and the site serves them", async t => {
   const { site, chat } = await boot(t);
+  assert.equal((await site.api("/api/state")).body.limits, null, "nothing is shown before there is a real reading");
   const done = await chat("first message");
   assert.match(done.message.content, /You said: first message/);
-  await sleep(200);
-  const u = (await site.api("/api/usage?tz=UTC")).body;
-  assert.equal(u.totals.today.replies, 1);
-  assert.equal(u.totals.today.input, 11 + 44);
-  assert.equal(u.totals.today.output, 22);
-  assert.equal(u.totals.today.cached, 333);
-  assert.equal(u.totals.today.tokens, 77);
-  assert.ok(Math.abs(u.totals.today.cost - 0.0123) < 1e-9);
-  assert.equal(u.models[0].model, "claude-opus-5-5");
+  const l = await until(async () => (await site.api("/api/state")).body.limits, "the plan usage to arrive");
+  assert.equal(l.windows.five_hour.pct, 42);
+  assert.equal(l.windows.seven_day.pct, 17);
+  assert.equal(l.windows.five_hour.reset, false);
+  assert.ok(l.windows.five_hour.resetsAt > Date.now() / 1000);
+  assert.equal(l.status, "allowed");
 });
 
 test("updating from the site: the site stays up, progress is shown, the computer is updated and restarted", async t => {
@@ -113,7 +111,8 @@ test("updating from the site: the site stays up, progress is shown, the computer
   assert.equal(sha(join(pc.dir, "ClaudeConnect.mjs")), RELEASE.files["ClaudeConnect.mjs"]);
   assert.equal(sha(join(pc.dir, "installer.mjs")), RELEASE.files["installer.mjs"]);
   assert.equal(sha(join(pc.dir, "site", "worker.js")), RELEASE.files["site/worker.js"]);
-  assert.equal(sha(join(pc.dir, "site", "usage.js")), RELEASE.files["site/usage.js"]);
+  assert.equal(sha(join(pc.dir, "site", "names.js")), RELEASE.files["site/names.js"]);
+  assert.equal(sha(join(pc.dir, "site", "image.js")), RELEASE.files["site/image.js"]);
   assert.equal(JSON.parse(pc.read("manifest.json")).version, RELEASE.version);
   const cfg = JSON.parse(pc.read("config.json"));
   assert.equal(cfg.version, RELEASE.version);
@@ -133,11 +132,9 @@ test("updating from the site: the site stays up, progress is shown, the computer
   assert.equal(state.agent.version, RELEASE.version);
   await until(() => pc.log().includes("Connected."), "the new agent to log that it connected", 10000);
 
-  // and it still answers, with usage still recorded
+  // and it still answers
   const after = await chat("after the update");
   assert.match(after.message.content, /You said: after the update/);
-  await sleep(200);
-  assert.equal((await site.api("/api/usage?tz=UTC")).body.totals.today.replies, 2);
 });
 
 test("if the site can't be deployed, nothing on the computer is touched and the page says why", async t => {

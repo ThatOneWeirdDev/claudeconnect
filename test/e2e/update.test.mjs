@@ -259,7 +259,7 @@ test("an agent that never answers is reported as such rather than leaving the pa
   await sleep(500);
   const run = (await s.api("/api/update")).body.run;
   assert.equal(run.state, "error");
-  assert.match(run.message, /didn't pick up the update/);
+  assert.match(run.message, /didn't pick up the request/);
 });
 
 test("an update that goes quiet is reported, and still completes if the new version appears later", async t => {
