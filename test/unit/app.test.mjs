@@ -88,12 +88,136 @@ test("the theme buttons in Settings say what is picked each time they are drawn,
   assert.match(script, /data-theme-set="\$\{k\}" class="\$\{k === curTheme \? "on" : ""\}" aria-pressed="\$\{k === curTheme\}"/);
 });
 
-test("a finished update asks to be confirmed and reloads, with no link and no X", () => {
-  assert.match(script, /data-act="reload">Confirm update<\/button>/);
+test("a finished update has nothing to confirm: the page moves to the new version by itself, with a Reload button if it can't", () => {
+  assert.doesNotMatch(script, /Confirm update|Confirm the update/);
   assert.doesNotMatch(script, /Open the updated site|\?updated=/);
+  assert.match(script, /data-act="reload">Reload now<\/button>/);
   assert.match(script, /if \(act === "reload"\) return location\.reload\(\)/);
+  // after every poll that finds the page behind the site
+  assert.match(script, /if \(pageIsStale\(\)\) maybeReload\(/);
   // the dialog's X is hidden while a job's page is showing
   assert.match(script, /\$\("setClose"\)\.style\.display = run \|\| UP\.gone \? "none" : ""/);
+});
+
+// The functions are lifted out of the page and run against stand-ins for the parts of the page they touch.
+function lift(name) {
+  const m = new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n`).exec(script);
+  assert.ok(m, name + " is in the page");
+  return m[0];
+}
+function reloader(over = {}) {
+  const log = { reloads: 0, timers: [], stored: {} };
+  const ctx = {
+    UP: { data: { current: "1.6.0" }, gone: null, reloadTimer: null },
+    S: { files: [], busy: false, live: null },
+    SET: { draft: null },
+    run: null,
+    isDirty: () => false,
+    upRun: () => ctx.run,
+    pageIsStale: () => ctx.UP.data.current !== "1.5.0",
+    $: () => ({ value: "" }),
+    sessionStorage: { getItem: k => log.stored[k] || null, setItem: (k, v) => (log.stored[k] = v) },
+    location: { reload: () => log.reloads++ },
+    setTimeout: (f, ms) => (log.timers.push({ f, ms }), log.timers.length),
+    clearTimeout: () => {},
+    ...over
+  };
+  vm.runInNewContext(lift("reloadedTo") + lift("maybeReload") + "this.maybeReload = maybeReload;", ctx);
+  // run the timer that was set, as the browser would
+  ctx.fire = () => log.timers.pop().f();
+  return { ctx, log };
+}
+
+test("the page reloads itself into the new version once the update is over, and only when nothing can be lost", () => {
+  // up to date: nothing to do
+  let r = reloader({ pageIsStale: () => false });
+  r.ctx.maybeReload(0);
+  assert.equal(r.log.timers.length, 0);
+
+  // behind the site and idle: it reloads, once, and remembers that it did
+  r = reloader();
+  r.ctx.maybeReload(0);
+  r.ctx.fire();
+  assert.equal(r.log.reloads, 1);
+  assert.equal(r.log.stored["gql.reloadedTo"], "1.6.0");
+  r.ctx.maybeReload(0);
+  assert.equal(r.log.timers.length, 0, "not again for the same version in this tab, so a page that stays old can't loop");
+
+  // nothing is lost: a message being typed, a file attached, a reply on its way, unsaved settings
+  for (const [what, over] of [
+    ["typed text", { $: () => ({ value: "half a thought" }) }],
+    ["an attached file", { S: { files: [{ name: "a.txt" }], busy: false, live: null } }],
+    ["a reply being sent", { S: { files: [], busy: true, live: null } }],
+    ["a reply streaming", { S: { files: [], busy: false, live: {} } }],
+    ["unsaved settings", { SET: { draft: {} }, isDirty: () => true }]
+  ]) {
+    r = reloader(over);
+    r.ctx.maybeReload(0);
+    r.ctx.fire();
+    assert.equal(r.log.reloads, 0, what + " holds the reload back");
+    assert.equal(r.log.timers.length, 1, "and it looks again shortly");
+    assert.equal(r.log.timers[0].ms, 2000);
+  }
+
+  // while the update is still running, or after it failed, the page stays to show that
+  for (const state of ["running", "error"]) {
+    r = reloader();
+    r.ctx.run = { state };
+    r.ctx.maybeReload(0);
+    assert.equal(r.log.timers.length, 0, state);
+  }
+  r = reloader();
+  r.ctx.run = { state: "done" };
+  r.ctx.maybeReload(0);
+  r.ctx.fire();
+  assert.equal(r.log.reloads, 1, "a finished one is the cue");
+});
+
+test("a deleted or moved site doesn't try to reload itself", () => {
+  const r = reloader();
+  r.ctx.UP.gone = { kind: "delete" };
+  r.ctx.maybeReload(0);
+  assert.equal(r.log.timers.length, 0);
+});
+
+test("the Updates panel opens once with the patch notes the first time this browser is on a version an update brought", () => {
+  const run = (seen, update, extra = {}) => {
+    const opened = [];
+    const stored = { seenVersion: seen };
+    const ctx = {
+      CFG: { version: "1.6.0" },
+      store: { get: (k, d) => (k in stored && stored[k] !== undefined ? stored[k] : d), set: (k, v) => (stored[k] = v) },
+      UP: { data: { whatsNew: update } },
+      SET: { justUpdated: false },
+      upRun: () => null,
+      openSettings: tab => opened.push(tab),
+      ...extra
+    };
+    vm.runInNewContext(lift("announceVersion") + "announceVersion();", ctx);
+    return { opened, stored, ctx };
+  };
+  const brought = { version: "1.6.0", notes: ["A thing"], updated: true };
+  let r = run("1.5.0", brought);
+  assert.deepEqual(r.opened, ["updates"]);
+  assert.equal(r.ctx.SET.justUpdated, true, "the panel says 'Updated to'");
+  assert.equal(r.stored.seenVersion, "1.6.0");
+  assert.deepEqual(run("1.6.0", brought).opened, [], "once per version");
+  assert.deepEqual(run("", brought).opened, ["updates"], "a browser that hasn't recorded a version yet (it was on 1.5) still sees them");
+  assert.deepEqual(run("1.5.0", { ...brought, updated: false }).opened, [], "a fresh install has no update to announce");
+  assert.deepEqual(run("1.5.0", null).opened, []);
+  assert.deepEqual(run("1.5.0", { ...brought, version: "1.7.0" }).opened, [], "notes for some other version");
+  assert.deepEqual(run("1.5.0", brought, { upRun: () => ({ state: "running" }) }).opened, [], "not on top of a job");
+  assert.equal(run("1.5.0", null).stored.seenVersion, "1.6.0", "recorded either way");
+});
+
+test("the Updates panel shows the patch notes of the installed version, the update that is running, and earlier updates", () => {
+  assert.match(script, /whatsNewHtml\(u, "What's new"\)/);
+  assert.match(script, /whatsNewHtml\(u, "Patch notes"\)/);
+  assert.match(script, /<summary>Earlier updates<\/summary>/);
+  assert.match(script, /runNotes\(run\)/);
+  assert.doesNotMatch(script, /every half hour/);
+  // notes are text from the internet: through esc()
+  assert.match(script, /function notesList\(notes\) \{\n  return `<ul class="notes">\$\{\(notes \|\| \[\]\)\.map\(n => `<li>\$\{esc\(n\)\}<\/li>`\)/);
 });
 
 test("everything the owner can change is behind a confirmation or a typed name", () => {

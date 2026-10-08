@@ -79,6 +79,8 @@ Every chat here, in **Claude** or **Claude Code**, is a normal Claude Code conve
 
 Only a list (titles and the last part of each folder's name) goes to the site until you open a chat; then that chat's text is copied. Very long chats bring the latest part (up to 300 turns and about 3.5 MB), and the rest stays on your computer. Chats from claude.ai in the browser aren't stored on your computer, so they can't be shown here.
 
+The sidebar lists up to 3,000 chats. It can only list what Claude Code still has: Claude Code deletes chats it hasn't touched for 30 days unless you raise `cleanupPeriodDays` in `~/.claude/settings.json` (to keep them all, set it to a large number such as `36500`). A chat you've opened on the site stays on the site even after Claude Code has deleted its copy.
+
 If you'd rather share less, set `history` in `config.json` in the ClaudeConnect folder on your computer (`~/.claudeconnect`) and restart `<command>`:
 
 | `history` | What the site can list and open |
@@ -91,7 +93,9 @@ This needs the program on your computer to be 1.5.0 or newer. Updating from the 
 
 ## Updating
 
-The site checks this repository for a newer version every half hour and shows **Update available**. Click it for what's new, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done, **Confirm update** reloads the page onto the new version. It's the same address, so there's no new link. You can also run `<command> update` in a terminal.
+The site checks this repository for a newer version every minute (skipping GitHub's own five-minute cache) and shows **Update available**. Click it for the patch notes, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done the page switches to the new version by itself, as soon as nothing you were typing, attaching or waiting for could be lost (**Reload now** is there if you'd rather not wait). It's the same address, so there's no new link. You can also run `<command> update` in a terminal.
+
+The **Updates** panel in Settings keeps the patch notes: what an update brings is shown while it installs and when it's done, the first time each browser opens the new version it opens on them, and **Earlier updates** lists the last few.
 
 **First time only:** versions before 1.3.0 can't do any of this from the page, because the program on your computer doesn't know how yet. Run the install command above once and choose **update**.
 
@@ -116,7 +120,7 @@ node scripts/release.mjs 1.4.0   # sets the version in manifest.json and package
 node scripts/release.mjs         # refresh the hashes after editing
 ```
 
-Merge to `main` and every site offers the update within half an hour (or straight away with **Check again**). CI fails if the hashes are stale, and on pull requests it fails if shipped files changed without a new version.
+Merge to `main` and every open site offers the update within about a minute and a half (or straight away with **Check again**). CI fails if the hashes are stale, and on pull requests it fails if shipped files changed without a new version.
 
 A site is deployed before the program on your computer is replaced, so a new site has to keep working with the previous agent.
 

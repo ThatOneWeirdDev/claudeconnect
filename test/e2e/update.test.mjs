@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { ROOT } from "../helpers/computer.mjs";
 import { startSite, connectAgent, AGENT_SECRET } from "../helpers/site.mjs";
 
 const RELEASE = { name: "claudeconnect", version: "1.2.0", released: "2026-10-08", notes: ["Usage chart", "Update from the site"], files: {} };
@@ -309,4 +312,110 @@ test("the owner's browser can't start an update from another origin", async t =>
   const t2 = await s.api("/api/update/start", { method: "POST", body: "to=1.2.0", headers: { "content-type": "text/plain" } });
   assert.equal(t2.status, 415);
   assert.equal((await s.api("/api/update")).body.run, null);
+});
+
+test("a new release is looked for every minute, getting past GitHub's cache", async t => {
+  const s = await ready({ vars: { UPDATE_CHECK_MS: "150" } });
+  t.after(() => s.stop());
+  await s.api("/api/update");
+  assert.match(s.fetched[0], /manifest\.json\?cb=[0-9a-z]+$/, "a changing query string, so GitHub's five-minute cache is skipped");
+  // with no click on Check again, the next look after the interval sees the new release
+  s.release = { ...RELEASE, version: "1.2.1", notes: ["Faster"] };
+  assert.equal((await s.api("/api/update")).body.latest, "1.2.0", "within the interval the answer is the one it has");
+  await sleep(250);
+  await s.api("/api/update"); // starts the look in the background
+  await sleep(150);
+  const u = (await s.api("/api/update")).body;
+  assert.equal(u.latest, "1.2.1");
+  assert.deepEqual(u.notes, ["Faster"]);
+  assert.notEqual(s.fetched[0], s.fetched[1], "each look is its own address");
+});
+
+test("the usual look is every minute, not every half hour", () => {
+  const src = readFileSync(join(ROOT, "site", "worker.js"), "utf8");
+  assert.match(src, /const CHECK_EVERY = 60000;/);
+  assert.doesNotMatch(src, /30 \* 60000/);
+});
+
+test("a page opened after a long gap is answered with a fresh look, not the old one", async t => {
+  const s = await ready({ vars: { UPDATE_WAIT_MS: "200" } });
+  t.after(() => s.stop());
+  assert.equal((await s.api("/api/update")).body.latest, "1.2.0");
+  s.release = { ...RELEASE, version: "1.3.0" };
+  await sleep(350);
+  assert.equal((await s.api("/api/update")).body.latest, "1.3.0");
+});
+
+test("finishing an update keeps its patch notes, once, whichever way it finishes", async t => {
+  const s = await ready();
+  t.after(() => s.stop());
+  const old = await connectAgent(s, { agent: "1.1.9" });
+  const { body: started } = await s.post("/api/update/start", { to: "1.2.0" });
+  assert.deepEqual(started.run.notes, RELEASE.notes, "the run carries what it brings, for the panel");
+  assert.equal(started.run.released, "2026-10-08");
+  assert.equal(await s.getStorage("updateLog"), null, "nothing is logged until it has happened");
+  await progress(s, { id: started.run.id, step: "online", status: "done" });
+  let log = await s.getStorage("updateLog");
+  assert.equal(log.length, 1);
+  assert.deepEqual([log[0].version, log[0].released, log[0].notes], ["1.2.0", "2026-10-08", RELEASE.notes]);
+  // the new program saying hello afterwards doesn't add it again
+  old.close();
+  await sleep(100);
+  await connectAgent(s, { agent: "1.2.0" }, "agent-1");
+  log = await s.getStorage("updateLog");
+  assert.equal(log.length, 1);
+});
+
+test("an update from a site that didn't keep notes with the run still logs them, from the release it looked at", async t => {
+  const s = await ready();
+  t.after(() => s.stop());
+  await connectAgent(s, { agent: "1.1.9" });
+  const { body: started } = await s.post("/api/update/start", { to: "1.2.0" });
+  // as a run started by an older version of the site would be: no notes on it
+  const run = await s.getStorage("update");
+  delete run.notes;
+  delete run.released;
+  await s.putStorage("update", run);
+  await progress(s, { id: started.run.id, step: "online", status: "done" });
+  assert.deepEqual((await s.getStorage("updateLog"))[0].notes, RELEASE.notes);
+});
+
+test("the Updates panel gets the installed version's patch notes, and the updates before it", async t => {
+  const s = await ready({ appVersion: "1.2.0" });
+  t.after(() => s.stop());
+  // not installed by an update (a fresh install): the release that is running says what's in it
+  let u = (await s.api("/api/update")).body;
+  assert.deepEqual(u.whatsNew, { version: "1.2.0", released: "2026-10-08", notes: RELEASE.notes, updated: false });
+  assert.deepEqual(u.history, []);
+
+  await s.putStorage("updateLog", [
+    { version: "1.2.0", released: "2026-10-08", notes: ["Usage chart", "Update from the site"], at: 3 },
+    { version: "1.1.0", released: "2026-09-01", notes: ["Older things"], at: 2 },
+    { version: "1.0.0", released: "2026-08-01", notes: ["First"], at: 1 },
+    { version: "1.3.0", released: "2027-01-01", notes: ["From the future"], at: 4 }
+  ]);
+  u = (await s.api("/api/update")).body;
+  assert.deepEqual(u.whatsNew, { version: "1.2.0", released: "2026-10-08", notes: ["Usage chart", "Update from the site"], updated: true });
+  assert.deepEqual(u.history.map(h => h.version), ["1.1.0", "1.0.0"], "newest first, only what came before this version");
+  assert.deepEqual(u.history[0], { version: "1.1.0", released: "2026-09-01", notes: ["Older things"] });
+  assert.deepEqual((await s.api("/api/state")).body.update.history.length, 2, "the page gets it with every state");
+});
+
+test("the log keeps the last few updates only", async t => {
+  const s = await ready();
+  t.after(() => s.stop());
+  for (let i = 1; i <= 14; i++) {
+    const v = "1.1." + i;
+    s.release = { ...RELEASE, version: v, notes: ["Change " + i] };
+    await s.post("/api/update/check");
+    const agent = await connectAgent(s, { agent: "1.1.9" }, "agent-" + i);
+    const { body: started } = await s.post("/api/update/start", { to: v });
+    await progress(s, { id: started.run.id, step: "online", status: "done" });
+    await s.post("/api/update/dismiss");
+    agent.close();
+    await sleep(60);
+  }
+  const log = await s.getStorage("updateLog");
+  assert.ok(log.length <= 10);
+  assert.equal(log[0].version, "1.1.14", "newest first");
 });

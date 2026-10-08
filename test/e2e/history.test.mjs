@@ -79,7 +79,10 @@ test("the computer's chats are listed with the site's own, newest first, and wha
   agent.send({ type: "sessions", sessions: "nonsense" });
   agent.send({ type: "sessions", sessions: Array.from({ length: 800 }, (_, i) => session(`5b0c9a10-2222-4c3d-8e4f-${String(i).padStart(12, "0")}`, "c" + i, T0 + i)) });
   await sleep(300);
-  assert.ok((await list(s)).length <= 400, "never more than the list shows");
+  assert.equal((await list(s)).length, 801, "all 800 of the computer's chats and the site's own are listed; none is dropped");
+  agent.send({ type: "sessions", sessions: Array.from({ length: 3300 }, (_, i) => session(`5b0c9a10-3333-4c3d-8e4f-${String(i).padStart(12, "0")}`, "c" + i, T0 + i)) });
+  await sleep(600);
+  assert.equal((await list(s)).length, 3000, "an absurd number is cut at 3000, newest first");
 });
 
 test("opening a chat that is only on the computer copies it over, and it is the same chat from then on", async t => {
