@@ -14,10 +14,6 @@ export function cleanSiteName(v) {
   return NAME_RE.test(n) && toSlug(n) ? n : "";
 }
 
-export function cleanAiName(v) {
-  return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, 60) : "";
-}
-
 // The part of a workers.dev address a person can choose. Returns "" when it can't be one.
 export function cleanAddress(v) {
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";

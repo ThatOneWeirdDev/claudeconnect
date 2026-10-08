@@ -1,20 +1,22 @@
 {
   "name": "claudeconnect",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "released": "2026-10-08",
   "notes": [
-    "The model button now says Choose model, and the list shows the models.",
-    "Haiku no longer shows an effort chooser, since it has no effort setting.",
-    "Tidier spacing in the effort chooser."
+    "The model and effort buttons now sit under the message box and show what is picked, with a ring that fills as the chat uses up its context.",
+    "Switch between Claude (plain chat, no tools) and Claude Code under the message box, and choose how freely Claude Code acts: Auto, Accept edits or Plan.",
+    "Claude Code now runs with its own default instructions. The setting for what the AI calls itself is gone.",
+    "Updating no longer ends with a new link: one Confirm update button reloads the page onto the new version.",
+    "Fixed: the theme buttons in Settings show your choice when you leave that tab and come back."
   ],
   "files": {
     "ClaudeConnect.mjs": "2ad4647b8c16dceb459dbc7ce243a30223035c5cf5c0ac96ff4639d739c35fd7",
-    "installer.mjs": "b7c4ec417558e70e4f9fc11c7024ddd7bf39e4d43277a07ba72266dd8dd2d137",
-    "agent/agent.mjs": "369f43fa6881917d901b2e9655928d7b1a8b42ad6d9b020f8c5f45b06aa87f47",
-    "site/worker.js": "b6145ad1914940171362bc298e48622e1773c23a1e1894cc079ce3729d4e8615",
-    "site/app.html": "7b708e871295c2f4ace7a935cc9041b2b426f65cb6ab53cbbc131aa8293cbb28",
+    "installer.mjs": "f302b63efbc2ee000497073367e3e79e837856aa78bddfe3457dfbcfb37593e0",
+    "agent/agent.mjs": "6988462757c3f1670c979c1d1cf9b5dfa2789374b60ff1ed4b8b88cdaf0f3838",
+    "site/worker.js": "58bd71c2779a40dc399459ec8787adec7242690f699f1c0247e87453b2136332",
+    "site/app.html": "e4700aaf86867b21ff66e47a59593db5946a6db456f7ca8f8012beca39b1e5e6",
     "site/version.js": "13cbf80951c6c37d24ef63839932e07960647b39b3975864a58a0554853b9339",
-    "site/names.js": "2975b72cbbe15ade8424d806a242079471f8b1577f1c95f193d8bb5302f6b857",
+    "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
   }
 }

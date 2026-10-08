@@ -34,15 +34,51 @@ test("the usage chart and token counting are gone", () => {
   assert.doesNotMatch(readFileSync(join(ROOT, "site", "worker.js"), "utf8"), /recordUsage|buildUsage|\/api\/usage/);
 });
 
-test("the model button says Choose model, and only models with an effort setting get an effort chooser", () => {
-  assert.match(html, /<button class="picker-btn" id="pickerBtn"[^>]*><span>Choose model<\/span>/);
-  // the button no longer shows the model or its effort, so nothing in the script writes to those parts
-  assert.doesNotMatch(html, /pbName|pbEffort|pbMeter/);
-  // the effort chooser is built only when the picked model has efforts; a model without them gets no chooser and no note
-  assert.match(script, /\(m\.efforts\.length\s*\? `<div class="effort">[\s\S]*?\s*: ""\)/);
-  assert.doesNotMatch(html, /answers without an effort setting/);
-  // Haiku is the model without efforts
+test("the model and effort choosers sit under the message box, show their current choice, and Haiku has no effort chooser", () => {
+  // the buttons are in the bar under the text, not in the top bar, and show the model and effort rather than a fixed label
+  assert.match(html, /<div class="c-row">[\s\S]*id="modelBtn"[\s\S]*id="effortBtn"[\s\S]*id="ctxBtn"[\s\S]*id="sendBtn"/);
+  assert.doesNotMatch(html, /pickerBtn|picker-btn|renderPickerBtn/);
+  assert.match(script, /\$\("modelName"\)\.textContent = m\.name/);
+  assert.match(script, /\$\("effortName"\)\.textContent = EFF_LABEL\[e\]/);
+  // Haiku is the model without efforts, and its chooser is hidden rather than shown empty
   assert.match(script, /id: "claude-haiku-5-5"[^\n]*efforts: \[\]/);
+  assert.match(script, /\$\("effortBtn"\)\.hidden = !m\.efforts\.length/);
+  assert.doesNotMatch(html, /answers without an effort setting/);
+});
+
+test("the bar has add file, the Claude / Claude Code switch and permission mode on the left, and no record button", () => {
+  const left = /<div class="c-left">([\s\S]*?)<div class="c-right">/.exec(html)[1];
+  assert.ok(left.indexOf('id="attachBtn"') < left.indexOf('id="modes"') && left.indexOf('id="modes"') < left.indexOf('id="permBtn"'));
+  assert.match(left, /data-mode="claude"[\s\S]*data-mode="code"/);
+  assert.doesNotMatch(html, /record|dictat|microphone|id="mic/i);
+  // what is sent says which mode and permission mode it is
+  assert.match(script, /mode: modeNow\(\), perm: S\.perm/);
+  // the permission modes are only ones Claude Code can run without anyone to ask
+  assert.deepEqual([...script.matchAll(/\{ id: "(auto|acceptEdits|plan)", name:/g)].map(m => m[1]), ["auto", "acceptEdits", "plan"]);
+  assert.doesNotMatch(script, /bypassPermissions/);
+});
+
+test("the context ring is drawn from the last reply and warns only when nearly full", () => {
+  assert.match(html, /id="ctxBar"[^>]*stroke-dasharray="56\.549"/);
+  assert.match(script, /S\.ctx = ctxOf\(m\.meta\)/);
+  assert.match(script, /f >= 0\.92 \? " high" : f >= 0\.8 \? " mid" : ""/);
+});
+
+test("there is no AI name anywhere in the page", () => {
+  assert.doesNotMatch(html, /calls itself|aiName|CFG\.ai\b|fAi\b/);
+});
+
+test("the theme buttons in Settings say what is picked each time they are drawn, with no extra line under Theme", () => {
+  assert.doesNotMatch(html, /This browser only/);
+  assert.match(script, /data-theme-set="\$\{k\}" class="\$\{k === curTheme \? "on" : ""\}" aria-pressed="\$\{k === curTheme\}"/);
+});
+
+test("a finished update asks to be confirmed and reloads, with no link and no X", () => {
+  assert.match(script, /data-act="reload">Confirm update<\/button>/);
+  assert.doesNotMatch(script, /Open the updated site|\?updated=/);
+  assert.match(script, /if \(act === "reload"\) return location\.reload\(\)/);
+  // the dialog's X is hidden while a job's page is showing
+  assert.match(script, /\$\("setClose"\)\.style\.display = run \|\| UP\.gone \? "none" : ""/);
 });
 
 test("everything the owner can change is behind a confirmation or a typed name", () => {

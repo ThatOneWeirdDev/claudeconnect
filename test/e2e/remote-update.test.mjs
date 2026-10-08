@@ -101,7 +101,7 @@ test("updating from the site: the site stays up, progress is shown, the computer
   assert.equal(d.vars.UPDATE_REPO, "ThatOneWeirdDev/claudeconnect");
   assert.equal(d.vars.UPDATE_REF, "main");
   assert.equal(d.vars.SITE_NAME, "Test Site");
-  assert.equal(d.vars.AI_NAME, "Testy");
+  assert.equal(d.vars.AI_NAME, undefined, "there is no AI name any more");
   assert.equal(d.vars.COMMAND, "TestConnect");
   assert.equal(d.vars.SHOW_FABLE, "0");
   assert.match(pc.npxLog(), /auth token/);

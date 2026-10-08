@@ -18,9 +18,17 @@ const IS_WIN = process.platform === "win32";
 const CONFIG_PATH = join(HERE, "config.json");
 const LOG_PATH = join(HERE, "agent.log");
 const PID_PATH = join(HERE, "agent.pid");
-const SYSTEM_PATH = join(HERE, "system-prompt.txt");
+const OLD_SYSTEM_PATH = join(HERE, "system-prompt.txt"); // older versions wrote "You are <name>" here; nothing reads it now
 const SETTINGS_PATH = join(HERE, "claude-settings.json");
 const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|jsonl|xml|html?|css|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|c|h|cpp|hpp|cs|php|sh|ps1|bat|sql|ya?ml|toml|ini|cfg|log|tex)$/i;
+// "Claude" is plain chat: no tools, no folder, a short chat prompt in place of Claude Code's. "Claude Code" is the real thing,
+// with its own default instructions. The permission mode only applies to Claude Code; "auto" means whatever this computer is set to.
+const CHAT_PROMPT = [
+  "You are Claude, an AI assistant made by Anthropic, talking with the person in a chat window.",
+  "Answer directly and conversationally. Use Markdown when it helps, and put code in fenced blocks that name the language.",
+  "In this chat you can't browse the web, run code, or read or change files, so don't offer to. If the person wants that, tell them to switch to Claude Code with the switch under the message box."
+].join(" ");
+const PERMS = new Set(["auto", "acceptEdits", "plan"]);
 const ARTIFACT_MAX = 1900000;
 const ARTIFACT_TOTAL = 8000000;
 
@@ -37,7 +45,6 @@ if (!cfg.id) {
 }
 const NAME = cfg.displayName || "ClaudeConnect";
 const COMMAND = cfg.command || "ClaudeConnect";
-const AI_NAME = cfg.aiName || NAME;
 const SLUG = String(cfg.name || "claudeconnect").replace(/[^a-z0-9-]/gi, "").toLowerCase() || "claudeconnect";
 const WORKSPACE = cfg.workspace || join(os.homedir(), NAME);
 const API = cfg.api || "https://api.cloudflare.com/client/v4";
@@ -278,7 +285,9 @@ try {
   if (existsSync(LOG_PATH) && statSync(LOG_PATH).size > 2000000) renameSync(LOG_PATH, LOG_PATH + ".old");
 } catch {}
 mkdirSync(join(WORKSPACE, "uploads"), { recursive: true });
-writeFileSync(SYSTEM_PATH, `You are ${AI_NAME}`);
+try {
+  unlinkSync(OLD_SYSTEM_PATH);
+} catch {}
 writeFileSync(SETTINGS_PATH, JSON.stringify({ showThinkingSummaries: true }));
 
 let WS = globalThis.WebSocket;
@@ -372,6 +381,9 @@ function versionAtLeast(v, want) {
 
 let CLAUDE = findClaude();
 let CLAUDE_VERSION = "";
+// Newer Claude Code records a chat's system prompt on its first request and reuses it on every resume. Switching between
+// Claude and Claude Code in one chat needs the prompt rendered fresh each time, and older versions don't have the switch.
+let FRESH_PROMPT = false;
 let WARNING = "";
 let WARNING_CODE = "";
 
@@ -386,6 +398,8 @@ async function checkClaude() {
   const v = await capture(["--version"], "", 30000);
   const m = String(v.stdout).match(/\d+\.\d+\.\d+/);
   CLAUDE_VERSION = m ? m[0] : "";
+  const help = await capture(["--help"], "", 30000);
+  FRESH_PROMPT = /--system-prompt-snapshot/.test(help.stdout);
   const a = await capture(["auth", "status"], "", 30000);
   let method = "";
   try {
@@ -583,9 +597,16 @@ function saveFiles(files, chatId) {
   });
 }
 
-function composePrompt(prompt, saved) {
+function composePrompt(prompt, saved, chat) {
   if (!saved.length) return prompt;
   let out = prompt || "Take a look at the attached files.";
+  if (chat) {
+    // no file tools in plain chat: say which attachments can't be read instead of pointing at paths it can't open
+    const unread = saved.filter(f => f.text === null);
+    if (unread.length) out += "\n\n(Attached, but this chat can't open them. Switch to Claude Code for that: " + unread.map(f => f.name).join(", ") + ")";
+    for (const f of saved) if (f.text !== null) out += `\n\n<file name="${f.name.replace(/"/g, "'")}">\n${f.text}\n</file>`;
+    return out;
+  }
   out += "\n\nAttached files:\n" + saved.map(f => `- ${f.rel}`).join("\n");
   for (const f of saved) if (f.text !== null) out += `\n\n<file name="${f.rel.replace(/"/g, "'")}">\n${f.text}\n</file>`;
   return out;
@@ -627,8 +648,14 @@ function runClaude(m, prompt, sessionArgs, pre) {
       if (st.text.endsWith("\n\n")) return;
       addText(st.text.endsWith("\n") ? "\n" : "\n\n");
     };
-    const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", m.model, "--permission-mode", cfg.permissionMode || "auto", "--system-prompt-file", SYSTEM_PATH, "--settings", SETTINGS_PATH];
-    if (versionAtLeast(CLAUDE_VERSION, "2.1.259")) args.push("--permission-prompts", "none");
+    const chat = m.mode === "claude";
+    const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", m.model, "--settings", SETTINGS_PATH];
+    if (chat) args.push("--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--system-prompt", CHAT_PROMPT);
+    else {
+      args.push("--permission-mode", PERMS.has(m.perm) && m.perm !== "auto" ? m.perm : cfg.permissionMode || "auto");
+      if (versionAtLeast(CLAUDE_VERSION, "2.1.259")) args.push("--permission-prompts", "none");
+    }
+    if (FRESH_PROMPT) args.push("--system-prompt-snapshot", "off");
     if (m.effort) args.push("--effort", m.effort);
     args.push(...sessionArgs);
     let child;
@@ -687,6 +714,7 @@ function runClaude(m, prompt, sessionArgs, pre) {
           blocks.delete(ev.index);
         }
       } else if (o.type === "assistant" && !o.parent_tool_use_id && o.message) {
+        if (o.message.usage) st.usage = o.message.usage;
         const streamed = o.message.id && st.streamed.has(o.message.id);
         for (const b of o.message.content || []) {
           if (b.type === "thinking" && !streamed && b.thinking) {
@@ -730,6 +758,17 @@ function runClaude(m, prompt, sessionArgs, pre) {
     child.stdin.on("error", () => {});
     child.stdin.end(prompt);
   });
+}
+
+// Tokens in the context after the last request, against the model's window. The last request holds the whole chat so far.
+function contextOf(final, st, model) {
+  const u = (st && st.usage) || (final && final.usage && Array.isArray(final.usage.iterations) && final.usage.iterations[final.usage.iterations.length - 1]) || null;
+  if (!u) return null;
+  const used = ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"].reduce((n, k) => n + (Number(u[k]) || 0), 0);
+  const per = final && final.modelUsage && typeof final.modelUsage === "object" ? final.modelUsage : {};
+  const mu = per[(st && st.model) || model] || per[model] || Object.values(per)[0] || null;
+  const window = mu && Number(mu.contextWindow) > 0 ? Number(mu.contextWindow) : 0;
+  return used > 0 && window > 0 ? { used, window } : null;
 }
 
 // The plan percentages. Claude Code reads them from Anthropic's response headers and reports them on every reply in a
@@ -795,7 +834,7 @@ async function handleRun(m) {
       result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: `${NAME} is missing a piece it needs to answer. Run the setup again to fix it, then restart ${COMMAND}.` };
     } else {
       const saved = saveFiles(m.files, m.chatId);
-      const prompt = composePrompt(m.prompt, saved);
+      const prompt = composePrompt(m.prompt, saved, m.mode === "claude");
       const primary = m.resume ? ["--resume", m.sessionId] : ["--session-id", m.sessionId];
       const alternate = m.resume ? ["--session-id", m.sessionId] : ["--resume", m.sessionId];
       result = await runClaude(m, prompt, primary);
@@ -821,7 +860,7 @@ async function handleRun(m) {
   }
   const text = result.st.text || (!error && f && typeof f.result === "string" ? f.result : "");
   const artifacts = collectArtifacts(result.st.writes || []);
-  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
+  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, context: contextOf(f, result.st, m.model), cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
   log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s${artifacts.length ? `, with ${artifacts.length} file${artifacts.length === 1 ? "" : "s"}` : ""}`);
 }
 
@@ -1032,7 +1071,7 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits"], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes"], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);

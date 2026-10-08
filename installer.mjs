@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import crypto from "node:crypto";
 import { createInterface } from "node:readline/promises";
-import { SLUG_RE, NAME_RE, toSlug, cleanSiteName, cleanAiName, cleanAddress } from "./site/names.js";
+import { SLUG_RE, NAME_RE, toSlug, cleanSiteName, cleanAddress } from "./site/names.js";
 import { MAX_IMG, sniffImage, checkImage } from "./site/image.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -383,7 +383,7 @@ function wranglerConfig(o) {
     durable_objects: { bindings: [{ name: "HUB", class_name: "ChatgqlHub" }] },
     migrations: [{ tag: "v1", new_sqlite_classes: ["ChatgqlHub"] }],
     kv_namespaces: [{ binding: "TOKENS", id: o.kvId }],
-    vars: { SITE_NAME: o.displayName, AI_NAME: o.aiName, COMMAND: o.command, SHOW_FABLE: o.fable ? "1" : "0", APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug },
+    vars: { SITE_NAME: o.displayName, COMMAND: o.command, SHOW_FABLE: o.fable ? "1" : "0", APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug },
     observability: { enabled: true }
   };
 }
@@ -471,7 +471,7 @@ async function remoteUpdate(manifest) {
     token = cloudflareToken();
     if (!token) fail(`Cloudflare didn't accept the saved sign-in. Run ${old.command || "ClaudeConnect"} update on your computer to sign in again.`);
     installSite(manifest);
-    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", aiName: old.aiName || old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
     deploy(SITE, old, "the new version");
     await report("site", "done");
     at = "computer";
@@ -582,7 +582,6 @@ async function remoteSettings(old, job) {
     await report("site", "active");
     signIn(old);
     const displayName = cleanSiteName(job.displayName) || old.displayName || "ClaudeConnect";
-    const aiName = cleanAiName(job.aiName) || old.aiName || displayName;
     const fable = typeof job.fable === "boolean" ? job.fable : !!old.fable;
     const brand = readBrand();
     for (const k of ["logo", "favicon"]) {
@@ -597,13 +596,14 @@ async function remoteSettings(old, job) {
     }
     writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify(brand) + ";\n");
     const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
-    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, aiName, command: old.command || "ClaudeConnect", fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, command: old.command || "ClaudeConnect", fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
     deploy(SITE, old, "the changes");
     await report("site", "done");
     at = "computer";
     await report("computer", "active");
     const cfg = readJson(CONFIG) || old;
-    Object.assign(cfg, { displayName, aiName, fable });
+    Object.assign(cfg, { displayName, fable });
+    delete cfg.aiName; // older installs saved a name for the AI; Claude runs with its own default instructions now
     writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
     await report("computer", "done");
     at = "restart";
@@ -667,7 +667,7 @@ async function remoteMove(old, job) {
     const secret = crypto.randomBytes(32).toString("base64url");
     const claim = crypto.randomBytes(18).toString("base64url");
     const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
-    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", aiName: old.aiName || old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
     touched = true;
     deploy(next, old, "the new site");
     const tmp = join(DIR, `secrets-${crypto.randomBytes(6).toString("hex")}.json`);
@@ -928,8 +928,6 @@ for (;;) {
   displayName = n;
   break;
 }
-const aiDef = mode === "update" && prior.aiName && prior.aiName !== prior.displayName ? prior.aiName : displayName;
-let aiName = String(opt("--ai-name") || (await ask(`  What should the AI call itself? [${aiDef}] `, aiDef)) || aiDef).replace(/[\r\n]+/g, " ").trim().slice(0, 60) || aiDef;
 const priorBrand = mode === "update" && !legacy ? readBrand() : { logo: null, favicon: null };
 if (priorBrand.logo || priorBrand.favicon) note("Type default to go back to the built-in logo or tab icon.");
 const logo = await askImage("Logo", "the current one", "the built-in one", "--logo", priorBrand.logo);
@@ -966,7 +964,7 @@ stopLocal();
 removeShims([prior.command, "chatgql"], [prior.shim]);
 installSite(payload);
 writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify({ logo, favicon }) + ";\n");
-writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, aiName, command, fable, version: payload.version, repo: REPO, ref: REF }), null, 2));
+writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, fable, version: payload.version, repo: REPO, ref: REF }), null, 2));
 if (sh(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE }).status !== 0) fail("Cloudflare didn't accept the site. The messages above say why.");
 const secret = same && prior.secret ? prior.secret : crypto.randomBytes(32).toString("base64url");
 const claim = crypto.randomBytes(18).toString("base64url");
@@ -990,7 +988,7 @@ mkdirSync(workspace, { recursive: true });
 mkdirSync(binDir, { recursive: true });
 const agentPath = join(DIR, "agent.mjs");
 const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
-const cfg = { name: slug, displayName, command, aiName, fable, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
+const cfg = { name: slug, displayName, command, fable, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
 if (same && prior.id) cfg.id = prior.id;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;

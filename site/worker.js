@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import APP_HTML from "./app.html";
 import BRAND from "./brand.js";
 import { compareVersions, isNewer, cleanManifest, validRepo, validRef } from "./version.js";
-import { cleanSiteName, cleanAiName, cleanAddress } from "./names.js";
+import { cleanSiteName, cleanAddress } from "./names.js";
 import { checkImage } from "./image.js";
 
 const enc = new TextEncoder();
@@ -10,6 +10,10 @@ const dec = new TextDecoder();
 const CHUNK = 400000;
 const ISS_RE = /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/;
 const ALL_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+// "claude" is plain chat with no tools; "code" is Claude Code working in the folder on the computer. In Claude Code, the
+// permission mode says how freely it acts: "auto" is whatever the computer is set to (normally auto), "plan" only plans.
+const MODES = ["claude", "code"];
+const PERMS = ["auto", "acceptEdits", "plan"];
 const MODELS = {
   "claude-fable-5-1": { name: "Fable 5.1", efforts: ALL_EFFORTS },
   "claude-opus-5-5": { name: "Opus 5.5", efforts: ALL_EFFORTS },
@@ -49,12 +53,17 @@ function commandName(env) {
   return String(env.COMMAND || "ClaudeConnect").slice(0, 60);
 }
 
-function appVersion(env) {
-  return String(env.APP_VERSION || "0.0.0").slice(0, 32);
+// How much of the model's context window the chat fills after a reply. Anything that isn't a plain pair of counts is dropped.
+function cleanContext(c) {
+  if (!c || typeof c !== "object" || typeof c.used !== "number" || typeof c.window !== "number") return null;
+  const used = Math.round(c.used);
+  const window = Math.round(c.window);
+  if (!Number.isFinite(used) || !Number.isFinite(window) || used < 0 || window < 1000 || window > 1e8) return null;
+  return { used: Math.min(used, window * 4), window };
 }
 
-function aiName(env) {
-  return String(env.AI_NAME || siteName(env)).slice(0, 60);
+function appVersion(env) {
+  return String(env.APP_VERSION || "0.0.0").slice(0, 32);
 }
 
 function escHtml(v) {
@@ -266,7 +275,7 @@ function appPage(env) {
   const name = siteName(env);
   const logo = brandAsset("logo");
   const mark = logo ? `<img src="/logo" alt="">` : DEFAULT_MARK;
-  const cfg = JSON.stringify({ name, ai: aiName(env), command: commandName(env), fable: env.SHOW_FABLE === "1", version: appVersion(env) }).replace(/</g, "\\u003c");
+  const cfg = JSON.stringify({ name, command: commandName(env), fable: env.SHOW_FABLE === "1", version: appVersion(env) }).replace(/</g, "\\u003c");
   const html = APP_HTML.split("__SITE_NAME__").join(escHtml(name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg);
   return new Response(html, { headers: PAGE_HEADERS });
 }
@@ -643,7 +652,7 @@ export class ChatgqlHub extends DurableObject {
     return {
       email: req.headers.get("x-chatgql-user") || "",
       version: appVersion(this.env),
-      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "" } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
       update: await this.updateInfo()
     };
@@ -807,7 +816,7 @@ export class ChatgqlHub extends DurableObject {
     return String(this.env.WORKER_NAME || (this.host || "").split(".")[0] || "");
   }
 
-  // Name, what the AI calls itself, Fable, logo and tab icon. Same site, same chats.
+  // Name, Fable, logo and tab icon. Same site, same chats.
   async startSettings(req) {
     const b = await req.json().catch(() => null);
     if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
@@ -816,10 +825,6 @@ export class ChatgqlHub extends DurableObject {
       const n = cleanSiteName(b.displayName);
       if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
       if (n !== siteName(this.env)) change.displayName = n;
-    }
-    if ("aiName" in b) {
-      const n = cleanAiName(b.aiName);
-      if (n && n !== aiName(this.env)) change.aiName = n;
     }
     if ("fable" in b && typeof b.fable === "boolean" && b.fable !== (this.env.SHOW_FABLE === "1")) change.fable = b.fable;
     for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
@@ -913,6 +918,9 @@ export class ChatgqlHub extends DurableObject {
     const chat = this.one("SELECT id, title, model, effort, running, created, updated FROM chats WHERE id = ?", id);
     if (!chat) return json({ error: "That chat doesn't exist anymore." }, 404);
     const messages = this.rows("SELECT id, role, content, meta, created FROM messages WHERE chat_id = ? ORDER BY created ASC, rowid ASC", id).map(m => ({ ...m, meta: m.meta ? JSON.parse(m.meta) : {} }));
+    const lastSent = [...messages].reverse().find(x => x.role === "user");
+    chat.mode = (lastSent && lastSent.meta.mode) || "code";
+    chat.perm = (lastSent && lastSent.meta.perm) || "auto";
     let partial = null;
     if (chat.running) {
       const r = this.runs.get(chat.running);
@@ -951,6 +959,8 @@ export class ChatgqlHub extends DurableObject {
     const allowed = req.headers.get("x-show-fable") === "1" ? MODELS : Object.fromEntries(Object.entries(MODELS).filter(([id]) => id !== "claude-fable-5-1"));
     const model = allowed[b.model] ? b.model : DEFAULT_MODEL;
     const effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
+    const mode = MODES.includes(b.mode) ? b.mode : "code";
+    const perm = mode === "code" && PERMS.includes(b.perm) ? b.perm : "auto";
     const ws = this.agent();
     if (!ws) return json({ error: `${siteName(this.env)} is offline right now. Run ${commandName(this.env)} to bring it back online, then send again.`, code: "offline" }, 503);
     const now = Date.now();
@@ -960,13 +970,13 @@ export class ChatgqlHub extends DurableObject {
     }
     const runId = crypto.randomUUID();
     const fileMeta = files.map(f => ({ name: f.name.slice(0, 200), size: Math.floor(f.data.length * 0.75), type: String(f.type || "") }));
-    const userMsg = { id: "u-" + runId, role: "user", content: text, meta: { files: fileMeta, model, effort }, created: now };
+    const userMsg = { id: "u-" + runId, role: "user", content: text, meta: { files: fileMeta, model, effort, mode, perm }, created: now };
     this.sql.exec("INSERT INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'user', ?, ?, ?)", userMsg.id, chat.id, text, JSON.stringify(userMsg.meta), now);
     this.sql.exec("UPDATE chats SET running = ?, model = ?, effort = ?, updated = ? WHERE id = ?", runId, model, effort, now, chat.id);
     const ts = new TransformStream();
-    this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], model, effort, closed: false, status: "", heard: false, timer: null });
+    this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
-    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
+    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
     this.armRun(runId, 30000, `${siteName(this.env)} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
     return new Response(ts.readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
   }
@@ -1046,7 +1056,7 @@ export class ChatgqlHub extends DurableObject {
     const tools = Array.isArray(m.tools) ? m.tools.slice(0, 200) : (r ? r.tools : []);
     const thinking = typeof m.thinking === "string" && m.thinking ? m.thinking : (r ? r.thinking : "");
     const artifacts = this.saveArtifacts(chat.id, m.runId, Array.isArray(m.artifacts) ? m.artifacts : [], text);
-    const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
+    const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, mode: r ? r.mode : "code", perm: r ? r.perm : "auto", context: cleanContext(m.context), tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);
     if (m.started) this.sql.exec("UPDATE chats SET started = 1 WHERE id = ?", chat.id);
     if (chat.running === m.runId) this.sql.exec("UPDATE chats SET running = NULL, updated = ? WHERE id = ?", now, chat.id);

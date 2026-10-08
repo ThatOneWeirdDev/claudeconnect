@@ -19,20 +19,20 @@ async function ready(opts = {}) {
 test("changing settings tells the computer only what changed", async t => {
   const { s, agent } = await ready();
   t.after(() => s.stop());
-  const r = await s.post("/api/admin/settings", { displayName: "  My   Site ", aiName: "Buddy", fable: true });
+  const r = await s.post("/api/admin/settings", { displayName: "  My   Site ", fable: true });
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.run.kind, "settings");
   assert.deepEqual(r.body.run.plan.map(x => x.key), ["site", "computer", "restart", "online"]);
   const msg = await agent.next(m => m.type === "admin");
   assert.equal(msg.op, "settings");
   assert.equal(msg.id, r.body.run.id);
-  assert.deepEqual(msg.payload, { displayName: "My Site", aiName: "Buddy", fable: true });
+  assert.deepEqual(msg.payload, { displayName: "My Site", fable: true });
 });
 
 test("settings that are already what the site has are not a change", async t => {
   const { s } = await ready();
   t.after(() => s.stop());
-  const r = await s.post("/api/admin/settings", { displayName: "Test Site", aiName: "Testy", fable: false });
+  const r = await s.post("/api/admin/settings", { displayName: "Test Site", fable: false });
   assert.equal(r.status, 400);
   assert.equal(r.body.code, "nochange");
   assert.equal((await s.api("/api/update")).body.run, null);
@@ -76,7 +76,7 @@ test("a logo and a tab icon go through as images, and null puts the built-in one
 test("a settings job finishes on its last step, not when the agent says hello", async t => {
   const { s, agent } = await ready();
   t.after(() => s.stop());
-  const { body } = await s.post("/api/admin/settings", { aiName: "Buddy" });
+  const { body } = await s.post("/api/admin/settings", { fable: true });
   const id = body.run.id;
   agent.close();
   await sleep(100);
@@ -95,7 +95,7 @@ test("changes need a computer that is online, able to do it, and not busy", asyn
   const s = await startSite({ appVersion: "1.3.0" });
   t.after(() => s.stop());
   await s.claim();
-  const offline = await s.post("/api/admin/settings", { aiName: "Buddy" });
+  const offline = await s.post("/api/admin/settings", { fable: true });
   assert.equal(offline.status, 409);
   assert.equal(offline.body.code, "offline");
   assert.equal((await s.api("/api/update")).body.blockedAdmin.code, "offline");
@@ -111,7 +111,7 @@ test("changes need a computer that is online, able to do it, and not busy", asyn
   const agent = await connectAgent(s, { agent: "1.3.0" }, "agent-2");
   const sent = await s.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "busy", model: "claude-opus-5-5" }) });
   const run = await agent.next(m => m.type === "run");
-  const busy = await s.post("/api/admin/settings", { aiName: "Buddy" });
+  const busy = await s.post("/api/admin/settings", { fable: true });
   assert.equal(busy.status, 409);
   assert.equal(busy.body.code, "busy");
   agent.send({ type: "done", runId: run.runId, chatId: run.chatId, text: "ok", started: true, tools: [] });
@@ -121,8 +121,8 @@ test("changes need a computer that is online, able to do it, and not busy", asyn
 test("only one thing happens at a time", async t => {
   const { s } = await ready();
   t.after(() => s.stop());
-  assert.equal((await s.post("/api/admin/settings", { aiName: "One" })).status, 200);
-  const second = await s.post("/api/admin/settings", { aiName: "Two" });
+  assert.equal((await s.post("/api/admin/settings", { fable: true })).status, 200);
+  const second = await s.post("/api/admin/settings", { displayName: "Another Name" });
   assert.equal(second.status, 409);
   assert.equal(second.body.code, "running");
   assert.equal((await s.post("/api/admin/move", { address: "elsewhere" })).status, 409);
@@ -181,7 +181,7 @@ test("cancelling a move reaches the computer through its next progress report", 
 test("only a move can be cancelled", async t => {
   const { s } = await ready();
   t.after(() => s.stop());
-  await s.post("/api/admin/settings", { aiName: "Buddy" });
+  await s.post("/api/admin/settings", { fable: true });
   assert.equal((await s.post("/api/admin/cancel")).status, 409);
 });
 
@@ -215,9 +215,9 @@ test("changes can't be started from another origin or by a form post", async t =
   const { s } = await ready();
   t.after(() => s.stop());
   for (const path of ["/api/admin/settings", "/api/admin/move", "/api/admin/delete", "/api/admin/cancel"]) {
-    const cross = await s.post(path, { aiName: "x", address: "x", confirm: "Test Site" }, { origin: "https://evil.example" });
+    const cross = await s.post(path, { fable: true, address: "x", confirm: "Test Site" }, { origin: "https://evil.example" });
     assert.equal(cross.status, 403, path);
-    const form = await s.api(path, { method: "POST", body: "aiName=x", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const form = await s.api(path, { method: "POST", body: "fable=true", headers: { "content-type": "application/x-www-form-urlencoded" } });
     assert.equal(form.status, 415, path);
   }
   assert.equal((await s.api("/api/update")).body.run, null);
@@ -226,7 +226,7 @@ test("changes can't be started from another origin or by a form post", async t =
 test("a dismissed or finished job clears, and a running one can't be dismissed", async t => {
   const { s } = await ready();
   t.after(() => s.stop());
-  const { body } = await s.post("/api/admin/settings", { aiName: "Buddy" });
+  const { body } = await s.post("/api/admin/settings", { fable: true });
   assert.equal((await s.post("/api/update/dismiss")).body.run.state, "running");
   await progress(s, { id: body.run.id, step: "online", status: "done" });
   assert.equal((await s.post("/api/update/dismiss")).body.run, null);
