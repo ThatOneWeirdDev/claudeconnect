@@ -37,6 +37,11 @@ const prior = readJson(CONFIG) || {};
 const REPO = opt("--repo") || process.env.CLAUDECONNECT_REPO || prior.repo || "ThatOneWeirdDev/claudeconnect";
 const REF = opt("--ref") || process.env.CLAUDECONNECT_REF || prior.ref || "main";
 const RAW = (process.env.CLAUDECONNECT_RAW || "https://raw.githubusercontent.com").replace(/\/+$/, "");
+// GitHub's API says which commit REF is right now, so every file comes from that one commit. Without it (offline from the
+// API, or a test pointing RAW elsewhere), every request skips GitHub's raw-file cache instead.
+const GH_API = (process.env.CLAUDECONNECT_GH_API || (process.env.CLAUDECONNECT_RAW ? "" : "https://api.github.com")).replace(/\/+$/, "");
+let AT = REF;
+let pinned = false;
 const color = (code, s) => (process.stdout.isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
 const bold = s => color("1", s);
 const teal = s => color("36", s);
@@ -69,8 +74,27 @@ async function stop(message) {
   process.exit(1);
 }
 
-async function get(path, bust) {
-  const url = `${RAW}/${REPO}/${REF}/${path}${bust ? `?cb=${Date.now().toString(36)}` : ""}`;
+// raw.githubusercontent.com keeps each file of a branch for up to five minutes, separately, so right after a release it can
+// hand out the old manifest with the new files. A commit's files never change, so a pinned download is consistent; an
+// unpinned one gets past that cache on every request.
+async function pinRef() {
+  if (/^[0-9a-f]{40}$/i.test(REF)) {
+    pinned = true;
+    return;
+  }
+  if (!GH_API) return;
+  try {
+    const r = await fetch(`${GH_API}/repos/${REPO}/commits/${encodeURIComponent(REF)}`, { headers: { accept: "application/vnd.github.sha", "user-agent": "ClaudeConnect-setup" }, signal: AbortSignal.timeout(8000) });
+    const sha = r.ok ? (await r.text()).trim() : "";
+    if (/^[0-9a-f]{40}$/i.test(sha)) {
+      AT = sha;
+      pinned = true;
+    }
+  } catch {}
+}
+
+async function get(path) {
+  const url = `${RAW}/${REPO}/${AT}/${path}${pinned ? "" : `?cb=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`}`;
   let r;
   try {
     r = await fetch(url, { headers: { "user-agent": "ClaudeConnect-setup" }, signal: AbortSignal.timeout(30000) });
@@ -109,7 +133,9 @@ async function manifestWithRetry() {
   let last = null;
   for (let i = 0; i < 4; i++) {
     try {
-      const raw = await get("manifest.json", i > 0);
+      // the release asked for may have landed after this pinned an older commit
+      if (i > 0 && pinned && AT !== REF) await pinRef();
+      const raw = await get("manifest.json");
       let parsed = null;
       try {
         parsed = JSON.parse(raw.toString("utf8"));
@@ -130,38 +156,47 @@ async function manifestWithRetry() {
 async function main() {
   console.log(bold("\nClaudeConnect") + dim(`  ${REPO}@${REF}`));
   await report("download", "active");
-  let rel;
-  try {
-    rel = await manifestWithRetry();
-  } catch (e) {
-    await stop(`${e.message}. Check your connection and run this again.`);
-  }
-  const { manifest, raw } = rel;
-  console.log(`${teal("▸ ")}${bold("Downloading " + manifest.version)}`);
-  rmSync(STAGE, { recursive: true, force: true });
-  mkdirSync(STAGE, { recursive: true });
-  const names = Object.keys(manifest.files);
-  for (const name of names) {
-    let ok = false;
+  await pinRef();
+  // A release merged in the middle of this can leave the manifest and a file from different commits (unpinned only): then
+  // the manifest is read again and the download starts over, once.
+  let manifest, raw, names;
+  for (let round = 0; ; round++) {
+    let rel;
+    try {
+      rel = await manifestWithRetry();
+    } catch (e) {
+      await stop(`${e.message}. Check your connection and run this again.`);
+    }
+    ({ manifest, raw } = rel);
+    console.log(`${teal("▸ ")}${bold("Downloading " + manifest.version)}`);
+    rmSync(STAGE, { recursive: true, force: true });
+    mkdirSync(STAGE, { recursive: true });
+    names = Object.keys(manifest.files);
     let why = "";
-    for (let i = 0; i < 3 && !ok; i++) {
-      try {
-        const buf = await get(name, i > 0);
-        if (sha256(buf) === manifest.files[name]) {
-          const dest = join(STAGE, name);
-          mkdirSync(dirname(dest), { recursive: true });
-          writeFileSync(dest, buf);
-          ok = true;
-        } else {
-          why = `${name} didn't match its checksum`;
+    for (const name of names) {
+      let ok = false;
+      for (let i = 0; i < 3 && !ok; i++) {
+        try {
+          const buf = await get(name);
+          if (sha256(buf) === manifest.files[name]) {
+            const dest = join(STAGE, name);
+            mkdirSync(dirname(dest), { recursive: true });
+            writeFileSync(dest, buf);
+            ok = true;
+          } else {
+            why = `${name} didn't match its checksum`;
+            await sleep(RETRY_MS);
+          }
+        } catch (e) {
+          why = e.message;
           await sleep(RETRY_MS);
         }
-      } catch (e) {
-        why = e.message;
-        await sleep(RETRY_MS);
       }
+      if (!ok) break;
+      why = "";
     }
-    if (!ok) {
+    if (!why) break;
+    if (pinned || round > 0) {
       step = "verify";
       await stop(`${why}. Nothing was changed. Try again in a minute.`);
     }

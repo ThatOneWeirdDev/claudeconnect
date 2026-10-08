@@ -16,10 +16,15 @@ export async function startGithub(release, opts = {}) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://x");
     hits.push(req.url);
+    // GitHub's API: which commit a branch is on (opts.sha)
+    const api = /^\/api\/repos\/[^/]+\/[^/]+\/commits\/([^/]+)$/.exec(url.pathname);
+    if (api) return opts.sha ? res.writeHead(200).end(opts.sha) : res.writeHead(404).end();
     const m = /^\/([^/]+\/[^/]+)\/([^/]+)\/(.+)$/.exec(url.pathname);
     if (!m) return res.writeHead(404).end();
     const path = decodeURIComponent(m[3]);
     if (path === "manifest.json") {
+      // opts.staleBranch: the branch's cached manifest, whatever the query string; only a commit's own files are fresh
+      if (opts.staleBranch && m[2] !== opts.sha) return res.writeHead(200).end(opts.staleBranch);
       if (opts.staleManifest && !url.searchParams.has("cb")) return res.writeHead(200).end(opts.staleManifest);
       return res.writeHead(200).end(release.manifestText);
     }

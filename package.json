@@ -1,6 +1,6 @@
 {
   "name": "claudeconnect",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "private": true,
   "type": "module",
   "description": "Use Claude Code from any browser, through a site that only you can open.",

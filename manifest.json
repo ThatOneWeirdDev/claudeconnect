@@ -1,16 +1,12 @@
 {
   "name": "claudeconnect",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "released": "2026-10-08",
   "notes": [
-    "Pressing Reload once is enough: after an update the notice doesn't come back, even if Cloudflare hands out the old page for a moment (the page quietly tries again instead).",
-    "Thinking shows where it happened: a reply that thinks, writes, then thinks again shows each in turn, the way Claude Code does, instead of one big block of thoughts at the top.",
-    "Your usage credit balance, promotional credits and this month's spending can show on Plan usage. Turn it on with the edit command on your computer; it uses Claude Code's sign-in there, which never leaves your computer.",
-    "Updating from a terminal asks nothing anymore. To change the name, logo, tab icon or other settings, run the new edit command, which goes through them one at a time with a y/n.",
-    "Import claude.ai chats is only in Settings → Chats now, not in the account menu."
+    "Updating right after a new version comes out works straight away. Before, for a few minutes it could stop with \"installer.mjs didn't match its checksum\", because GitHub handed out an old copy of the release list with the new files. Now everything is downloaded from one exact version."
   ],
   "files": {
-    "ClaudeConnect.mjs": "2ad4647b8c16dceb459dbc7ce243a30223035c5cf5c0ac96ff4639d739c35fd7",
+    "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
     "installer.mjs": "f69d01e0a6536690f6f487d3d16ece7a159d46c8d3b9d0fefe564630c6be0265",
     "agent/agent.mjs": "8c692a31e10c3eebd79661575802d211fb70a86a7887394f6cc8786834d93dbb",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
