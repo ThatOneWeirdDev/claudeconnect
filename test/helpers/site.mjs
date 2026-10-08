@@ -181,7 +181,7 @@ export async function connectAgent(s, hello = {}, id = "agent-1") {
       }),
     close: () => ws.close(1000, "test over")
   };
-  agent.send({ type: "hello", agent: "1.3.0", caps: ["update", "admin", "limits", "modes"], warning: "", tokenExp: 0, active: [], ...hello });
+  agent.send({ type: "hello", agent: "1.3.0", caps: ["update", "admin", "limits", "modes", "history"], warning: "", tokenExp: 0, active: [], ...hello });
   await new Promise(r => setTimeout(r, 50));
   return agent;
 }

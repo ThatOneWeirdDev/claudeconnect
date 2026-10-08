@@ -47,7 +47,7 @@ test("the model and effort choosers sit under the message box, show their curren
 });
 
 test("the bar has add file, the Claude / Claude Code switch and permission mode on the left, and no record button", () => {
-  const left = /<div class="c-left">([\s\S]*?)<div class="c-right">/.exec(html)[1];
+  const left = /<div class="c-row">([\s\S]*?)<div class="c-right">/.exec(html)[1];
   assert.ok(left.indexOf('id="attachBtn"') < left.indexOf('id="modes"') && left.indexOf('id="modes"') < left.indexOf('id="permBtn"'));
   assert.match(left, /data-mode="claude"[\s\S]*data-mode="code"/);
   assert.doesNotMatch(html, /record|dictat|microphone|id="mic/i);
@@ -56,6 +56,21 @@ test("the bar has add file, the Claude / Claude Code switch and permission mode 
   // the permission modes are only ones Claude Code can run without anyone to ask
   assert.deepEqual([...script.matchAll(/\{ id: "(auto|acceptEdits|plan)", name:/g)].map(m => m[1]), ["auto", "acceptEdits", "plan"]);
   assert.doesNotMatch(script, /bypassPermissions/);
+});
+
+test("on a phone the Claude / Claude Code switch and permission mode get a row of their own at the bottom of the box", () => {
+  // the mode controls are one group, a sibling of add file and the right-hand controls, so CSS can move just them
+  assert.match(html, /<\/button>\s*<input type="file" id="fileInput" multiple hidden>\s*<div class="c-modes">[\s\S]*?id="modes"[\s\S]*?id="permBtn"[\s\S]*?<div class="c-right">/);
+  const phone = /@media \(max-width:700px\)\{([\s\S]*?)\n\}/.exec(html)[1];
+  assert.match(phone, /\.c-modes\{order:3;flex:1 1 100%/, "after everything else, taking a whole row");
+  assert.match(phone, /\.c-right\{order:2\}/);
+  assert.match(phone, /\.modes \.pre\{display:inline\}/, "there is room for the full name down there");
+});
+
+test("there is no pencil in the top corner", () => {
+  assert.doesNotMatch(html, /newChatTop/);
+  // New chat is still in the sidebar
+  assert.match(html, /id="newChat"/);
 });
 
 test("the context ring is drawn from the last reply and warns only when nearly full", () => {

@@ -5,6 +5,7 @@ import { join, basename, dirname, extname, relative, resolve as resolvePath, isA
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import os from "node:os";
+import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID, within } from "./sessions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -48,6 +49,8 @@ const COMMAND = cfg.command || "ClaudeConnect";
 const SLUG = String(cfg.name || "claudeconnect").replace(/[^a-z0-9-]/gi, "").toLowerCase() || "claudeconnect";
 const WORKSPACE = cfg.workspace || join(os.homedir(), NAME);
 const API = cfg.api || "https://api.cloudflare.com/client/v4";
+// Which of the chats Claude Code has saved on this computer the site may list and open: "all", "workspace" (only the working folder) or "off".
+const HISTORY = ["all", "workspace", "off"].includes(cfg.history) ? cfg.history : "all";
 
 function saveConfig() {
   try {
@@ -325,11 +328,11 @@ function quoteWin(a) {
   return '"' + a.replace(/"/g, '""') + '"';
 }
 
-function spawnClaude(args) {
+function spawnClaude(args, cwd = WORKSPACE) {
   if (IS_WIN && /\.(cmd|bat)$/i.test(CLAUDE)) {
-    return spawn(`"${CLAUDE}" ${args.map(quoteWin).join(" ")}`, { cwd: WORKSPACE, env: childEnv(), windowsHide: true, shell: true });
+    return spawn(`"${CLAUDE}" ${args.map(quoteWin).join(" ")}`, { cwd, env: childEnv(), windowsHide: true, shell: true });
   }
-  return spawn(CLAUDE, args, { cwd: WORKSPACE, env: childEnv(), windowsHide: true });
+  return spawn(CLAUDE, args, { cwd, env: childEnv(), windowsHide: true });
 }
 
 function capture(args, input, timeoutMs = 120000) {
@@ -522,54 +525,7 @@ function send(obj) {
         continue;
       } catch {}
     }
-    if (obj.type !== "delta" && obj.type !== "beat" && obj.type !== "status") outbox.push(c);
-  }
-}
-
-function toolLabel(name, input) {
-  input = input || {};
-  const clean = v => String(v || "").replace(/\s+/g, " ").trim();
-  const cut = (v, n = 70) => {
-    v = clean(v);
-    return v.length > n ? v.slice(0, n - 1) + "…" : v;
-  };
-  const file = p => (p ? basename(String(p)) : "a file");
-  switch (name) {
-    case "Bash":
-    case "PowerShell":
-      return input.description ? "Ran: " + cut(input.description) : "Ran " + cut(input.command, 60);
-    case "Read":
-      return "Read " + file(input.file_path);
-    case "Write":
-      return "Wrote " + file(input.file_path);
-    case "Edit":
-    case "MultiEdit":
-      return "Edited " + file(input.file_path);
-    case "NotebookEdit":
-      return "Edited " + file(input.notebook_path);
-    case "Glob":
-      return "Looked for " + cut(input.pattern, 50);
-    case "Grep":
-      return "Searched files for " + cut(input.pattern, 50);
-    case "WebSearch":
-      return "Searched the web for “" + cut(input.query, 60) + "”";
-    case "WebFetch":
-      try {
-        return "Read " + new URL(input.url).hostname;
-      } catch {
-        return "Read a web page";
-      }
-    case "Agent":
-    case "Task":
-      return "Handed off: " + cut(input.description, 60);
-    case "TodoWrite":
-    case "TaskCreate":
-    case "TaskUpdate":
-      return "Updated its plan";
-    case "Skill":
-      return "Used the " + cut(input.skill || input.name || "", 40) + " skill";
-    default:
-      return name && name.startsWith("mcp__") ? "Used " + name.split("__").slice(1).join(" › ") : "Used " + name;
+    if (obj.type !== "delta" && obj.type !== "beat" && obj.type !== "status" && obj.type !== "sessions" && obj.type !== "transcript") outbox.push(c);
   }
 }
 
@@ -578,7 +534,7 @@ function safeName(n) {
   return b || "file";
 }
 
-function saveFiles(files, chatId) {
+function saveFiles(files, chatId, base = WORKSPACE) {
   if (!files || !files.length) return [];
   const dir = join(WORKSPACE, "uploads", String(chatId).slice(0, 8));
   mkdirSync(dir, { recursive: true });
@@ -593,7 +549,7 @@ function saveFiles(files, chatId) {
     const buf = Buffer.from(String(f.data || ""), "base64");
     writeFileSync(p, buf);
     const textLike = TEXT_EXT.test(name) || /^text\//.test(f.type || "") || /json|xml/.test(f.type || "");
-    return { name, rel: relative(WORKSPACE, p).split("\\").join("/"), size: buf.length, text: textLike && buf.length <= 200000 ? buf.toString("utf8") : null };
+    return { name, rel: inside(p, base) ? relative(base, p).split("\\").join("/") : p, size: buf.length, text: textLike && buf.length <= 200000 ? buf.toString("utf8") : null };
   });
 }
 
@@ -612,7 +568,7 @@ function composePrompt(prompt, saved, chat) {
   return out;
 }
 
-function runClaude(m, prompt, sessionArgs, pre) {
+function runClaude(m, prompt, sessionArgs, pre, where = WORKSPACE) {
   return new Promise(resolve => {
     const st = pre || { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "", seen: new Set(), streamed: new Set(), buffer: "", tbuffer: "", timer: null };
     const blocks = new Map();
@@ -660,7 +616,7 @@ function runClaude(m, prompt, sessionArgs, pre) {
     args.push(...sessionArgs);
     let child;
     try {
-      child = spawnClaude(args);
+      child = spawnClaude(args, where);
     } catch (e) {
       return resolve({ st, final: null, stderr: String(e.message || e), code: -1 });
     }
@@ -828,21 +784,38 @@ async function handleRun(m) {
   const label = { "claude-fable-5-1": "Fable 5.1", "claude-opus-5-5": "Opus 5.5", "claude-sonnet-5-5": "Sonnet 5.5", "claude-haiku-5-5": "Haiku 5.5" }[m.model] || m.model;
   log(`Message received, running ${label}${m.effort ? " at " + m.effort + " effort" : ""}`);
   let result;
+  // A chat that began in a project carries on in that project's folder. (This Claude Code finds a session from any folder, but
+  // then carries on in the folder it was started from, so the wrong one would quietly mean working on the wrong project; older
+  // versions only find it from its own folder.) The site never names a folder: it names a session, and the folder is read
+  // from that session's own file here.
+  let where = WORKSPACE;
+  let refused = "";
+  if (m.resume) {
+    const file = findSession(m.sessionId);
+    const dir = file ? sessionCwd(file) : "";
+    if (dir) {
+      if (!isDirectory(dir)) refused = `This chat was started in ${dir}, which isn't on this computer anymore, so it can't be continued from here.`;
+      else if (HISTORY !== "all" && !within(dir, WORKSPACE)) refused = `This chat was started outside ${WORKSPACE}, and ${COMMAND} is set to only open chats from there.`;
+      else where = dir;
+    }
+  }
   try {
     if (!CLAUDE) await checkClaude();
-    if (!CLAUDE) {
+    if (refused) {
+      result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: refused };
+    } else if (!CLAUDE) {
       result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: `${NAME} is missing a piece it needs to answer. Run the setup again to fix it, then restart ${COMMAND}.` };
     } else {
-      const saved = saveFiles(m.files, m.chatId);
+      const saved = saveFiles(m.files, m.chatId, where);
       const prompt = composePrompt(m.prompt, saved, m.mode === "claude");
       const primary = m.resume ? ["--resume", m.sessionId] : ["--session-id", m.sessionId];
       const alternate = m.resume ? ["--session-id", m.sessionId] : ["--resume", m.sessionId];
-      result = await runClaude(m, prompt, primary);
+      result = await runClaude(m, prompt, primary, undefined, where);
       const msg = String((result.final && result.final.result) || "") + " " + result.stderr;
       const retry = !procs.get(m.runId).stopped && !result.st.text && ((m.resume && /no conversation found|not found/i.test(msg)) || (!m.resume && /already in use|already exists/i.test(msg)));
       if (retry) {
         result.st.started = false;
-        result = await runClaude(m, prompt, alternate, result.st);
+        result = await runClaude(m, prompt, alternate, result.st, where);
       }
     }
   } catch (e) {
@@ -859,9 +832,31 @@ async function handleRun(m) {
     error = (f && (f.result || (Array.isArray(f.errors) && f.errors.join("; ")) || f.subtype)) || tail || `It stopped unexpectedly (exit code ${result.code}).`;
   }
   const text = result.st.text || (!error && f && typeof f.result === "string" ? f.result : "");
-  const artifacts = collectArtifacts(result.st.writes || []);
-  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, context: contextOf(f, result.st, m.model), cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
+  const artifacts = collectArtifacts(result.st.writes || [], where);
+  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, sync: syncState(m.sessionId), context: contextOf(f, result.st, m.model), cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
+  setTimeout(() => reportSessions(false), 300); // a new or longer chat shows up in the site's list straight away
   log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s${artifacts.length ? `, with ${artifacts.length} file${artifacts.length === 1 ? "" : "s"}` : ""}`);
+}
+
+function isDirectory(p) {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// Where Claude Code's own record of a session stands: how many questions it holds and when its file last changed. The site
+// keeps this next to the chat so it knows what it already has.
+function syncState(sessionId) {
+  try {
+    const file = findSession(sessionId);
+    if (!file) return null;
+    const r = readSession(file, { from: Infinity });
+    return { turns: r.turns, mtime: r.mtime };
+  } catch {
+    return null;
+  }
 }
 
 function inside(child, parent) {
@@ -869,14 +864,14 @@ function inside(child, parent) {
   return !!r && !r.startsWith("..") && !isAbsolute(r);
 }
 
-function collectArtifacts(writes) {
+function collectArtifacts(writes, base = WORKSPACE) {
   const uploads = join(WORKSPACE, "uploads");
   const seen = new Map();
   for (const w of writes) {
     if (!w.ok) continue;
-    const p = isAbsolute(w.path) ? w.path : resolvePath(WORKSPACE, w.path);
+    const p = isAbsolute(w.path) ? w.path : resolvePath(base, w.path);
     if (inside(p, uploads)) continue;
-    if (w.tool !== "Write" && !inside(p, WORKSPACE)) continue;
+    if (w.tool !== "Write" && !inside(p, WORKSPACE) && !inside(p, base)) continue;
     seen.delete(p);
     seen.set(p, w);
   }
@@ -966,6 +961,37 @@ async function startAdmin(m) {
   await runJob(m, join(HERE, "installer.mjs"), ["--remote-op", m.op, "--update-id", String(m.id), "--job-file", file], `${what}.`);
 }
 
+// The chats Claude Code has saved on this computer, so the site can list them next to its own.
+let lastSessions = "";
+function reportSessions(force) {
+  if (HISTORY === "off" || !ws || ws.readyState !== 1) return;
+  let list;
+  try {
+    list = listSessions({ workspace: WORKSPACE, scope: HISTORY });
+  } catch {
+    return;
+  }
+  const sig = JSON.stringify(list.map(x => [x.id, x.updated, x.title]));
+  if (!force && sig === lastSessions) return;
+  lastSessions = sig;
+  send({ type: "sessions", sessions: list });
+}
+setInterval(() => reportSessions(false), 15000).unref();
+
+function handleTranscript(m) {
+  const reply = o => send({ type: "transcript", req: m.req, sessionId: m.sessionId, ...o });
+  if (HISTORY === "off" || !UUID.test(String(m.sessionId))) return reply({ ok: false, error: "unavailable" });
+  try {
+    const file = findSession(m.sessionId);
+    if (!file) return reply({ ok: false, error: "missing" });
+    if (HISTORY === "workspace" && !within(sessionCwd(file), WORKSPACE)) return reply({ ok: false, error: "unavailable" });
+    const r = readSession(file, { from: Number(m.from) || 0, maxTurns: 300 });
+    reply({ ok: true, turns: r.turns, trimmed: r.trimmed, messages: r.messages, mtime: r.mtime });
+  } catch {
+    reply({ ok: false, error: "unreadable" });
+  }
+}
+
 const parts = new Map();
 
 function onMessage(raw) {
@@ -998,6 +1024,7 @@ function onMessage(raw) {
   else if (m.type === "update") startUpdate(m).catch(e => log("Update failed to start:", e.message || e));
   else if (m.type === "admin") startAdmin(m).catch(e => log("Couldn't start that:", e.message || e));
   else if (m.type === "limits_refresh") probeLimits().catch(() => {});
+  else if (m.type === "transcript") handleTranscript(m);
 }
 
 let pingTimer = null;
@@ -1071,11 +1098,13 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes"], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"])], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);
     if (LIMITS) send({ type: "limits", limits: LIMITS });
+    lastSessions = "";
+    setTimeout(() => reportSessions(true), 400);
     setTimeout(() => {
       if (finished) return;
       if (!announced) {
