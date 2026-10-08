@@ -23,7 +23,8 @@ test("every element the script looks up is in the page", () => {
 });
 
 test("the page loads nothing from anywhere the site's content security policy doesn't allow", () => {
-  const external = [...html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)].map(m => new URL(m[1]).host);
+  // what the page loads (scripts, styles, images, frames); links someone clicks to go to claude.ai don't count
+  const external = [...html.matchAll(/<(?:script|link|img|iframe|source)\b[^>]*?(?:src|href)="(https?:\/\/[^"]+)"/g)].map(m => new URL(m[1]).host);
   // the only outside file is the code highlighter, from cdnjs; there are no web fonts and no other hosts
   assert.deepEqual([...new Set(external)], ["cdnjs.cloudflare.com"]);
   assert.doesNotMatch(html, /fonts\.(googleapis|gstatic)/);
@@ -101,7 +102,7 @@ test("a finished update has nothing to confirm: the page moves to the new versio
 
 // The functions are lifted out of the page and run against stand-ins for the parts of the page they touch.
 function lift(name) {
-  const m = new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n`).exec(script);
+  const m = new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n`).exec(script);
   assert.ok(m, name + " is in the page");
   return m[0];
 }
@@ -230,4 +231,117 @@ test("user-controlled text reaches the page escaped", () => {
   // names, messages, notes and error text go through esc(); tooltips and titles use textContent
   assert.match(script, /function esc\(s\)/);
   for (const needle of ["esc(CFG.name)", "esc(u.source)", "esc(run.message", "esc(n)"]) assert.ok(script.includes(needle), needle);
+});
+
+test("after an update or a settings change, the notice goes once the page has reloaded into it, until the next one", () => {
+  const ctx = { UP: { seen: "" }, stale: false };
+  ctx.pageIsStale = () => ctx.stale;
+  vm.runInNewContext(lift("finishedHere") + "this.finishedHere = finishedHere;", ctx);
+  for (const kind of ["update", "settings"]) {
+    assert.equal(ctx.finishedHere({ id: "r1", kind, state: "done" }), true, `a finished ${kind} this page loaded after is cleared`);
+  }
+  ctx.UP.seen = "r1";
+  assert.equal(ctx.finishedHere({ id: "r1", kind: "settings", state: "done" }), false, "the page that watched it says Reload until it reloads");
+  ctx.UP.seen = "";
+  ctx.stale = true;
+  assert.equal(ctx.finishedHere({ id: "r1", kind: "update", state: "done" }), false, "a page still on the old version says Updated · Reload");
+  ctx.stale = false;
+  for (const state of ["running", "error"]) assert.equal(ctx.finishedHere({ id: "r1", kind: "update", state }), false, state + " stays");
+  assert.equal(ctx.finishedHere(null), false);
+  // and it is cleared on the site too, whether or not Settings is open, so no other device shows it either
+  const apply = lift("applyUpdate");
+  assert.match(apply, /if \(finishedHere\(run\)\) \{\n    UP\.data = \{ \.\.\.u, run: null \};/);
+  assert.match(apply, /api\("\/api\/update\/dismiss"/);
+  assert.doesNotMatch(apply, /run\.kind !== "settings"/);
+});
+
+test("Plan usage reads the latest as soon as it opens, and has no Refresh button", () => {
+  assert.match(lift("openUsage"), /renderUsage\(\);\n  refreshUsage\(\);/);
+  assert.doesNotMatch(script, /data-usage="refresh"|data-usage=refresh|I\.retry \+ "Refresh"/);
+  // "You've hit a limit" only from the site's own reckoning, which knows about usage credits and resets
+  assert.match(script, /if \(l\.limited\) html \+= `<div class="note err">You've hit a limit/);
+  assert.doesNotMatch(script, /status === "rejected"/);
+});
+
+// a .zip with the given files, deflated or stored, as Node's zlib makes them
+async function zip(files, { store = false } = {}) {
+  const { deflateRawSync, crc32 } = await import("node:zlib");
+  const parts = [];
+  const central = [];
+  let at = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const raw = Buffer.from(text);
+    const data = store ? raw : deflateRawSync(raw);
+    const n = Buffer.from(name);
+    const head = Buffer.alloc(30);
+    head.writeUInt32LE(0x04034b50, 0);
+    head.writeUInt16LE(20, 4);
+    head.writeUInt16LE(store ? 0 : 8, 8);
+    head.writeUInt32LE(crc32(raw), 14);
+    head.writeUInt32LE(data.length, 18);
+    head.writeUInt32LE(raw.length, 22);
+    head.writeUInt16LE(n.length, 26);
+    const c = Buffer.alloc(46);
+    c.writeUInt32LE(0x02014b50, 0);
+    c.writeUInt16LE(20, 4);
+    c.writeUInt16LE(20, 6);
+    c.writeUInt16LE(store ? 0 : 8, 10);
+    c.writeUInt32LE(crc32(raw), 16);
+    c.writeUInt32LE(data.length, 20);
+    c.writeUInt32LE(raw.length, 24);
+    c.writeUInt16LE(n.length, 28);
+    c.writeUInt32LE(at, 42);
+    central.push(Buffer.concat([c, n]));
+    parts.push(head, n, data);
+    at += 30 + n.length + data.length;
+  }
+  const cd = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(central.length, 8);
+  end.writeUInt16LE(central.length, 10);
+  end.writeUInt32LE(cd.length, 12);
+  end.writeUInt32LE(at, 16);
+  return new Uint8Array(Buffer.concat([...parts, cd, end]));
+}
+
+test("claude.ai's export is read in the browser: conversations.json out of the .zip, whether deflated or stored", async () => {
+  const ctx = { TextDecoder, Response, Blob, DecompressionStream, window: { DecompressionStream }, Error, Number };
+  vm.runInNewContext(lift("unzipEntry") + "this.unzipEntry = unzipEntry;", ctx);
+  const want = n => /(^|\/)conversations\.json$/i.test(n);
+  const json = JSON.stringify([{ uuid: "x", name: "é ✓" }]);
+  for (const store of [false, true]) {
+    const z = await zip({ "users.json": "[]", "data-2026/conversations.json": json, "projects.json": "[]" }, { store });
+    assert.equal(await ctx.unzipEntry(z, want), json, store ? "stored" : "deflated");
+  }
+  assert.equal(await ctx.unzipEntry(await zip({ "users.json": "[]" }), want), null, "no conversations.json");
+  await assert.rejects(ctx.unzipEntry(new Uint8Array([0x50, 0x4b, 1, 2, 3]), want), /couldn't be read/);
+});
+
+test("a claude.ai conversation keeps its text, thinking, attached file names and the code it wrote, and nothing else", () => {
+  const ctx = {};
+  vm.runInNewContext(lift("fromExport") + "this.fromExport = fromExport;", ctx);
+  const c = ctx.fromExport({
+    uuid: "1f6c2a3b-4d5e-4f70-8192-a3b4c5d6e7f1",
+    name: " Lisbon ",
+    created_at: "2025-03-01T09:00:00Z",
+    updated_at: "2025-03-01T10:00:00Z",
+    chat_messages: [
+      { uuid: "m1", sender: "human", text: "old text field", content: [{ type: "text", text: "Plan a trip" }], attachments: [{ file_name: "a.pdf", file_size: 10 }], files: [{ file_name: "a.pdf" }, { file_name: "b.png" }], created_at: "2025-03-01T09:00:00Z" },
+      { uuid: "m2", sender: "assistant", content: [{ type: "thinking", thinking: "hmm" }, { type: "text", text: "Here:" }, { type: "tool_use", name: "artifacts", input: { title: "Plan", language: "markdown", content: "# Day 1" } }, { type: "tool_result", content: [] }], created_at: "2025-03-01T09:01:00Z" },
+      { uuid: "m3", sender: "human", text: "only text", created_at: "bad" },
+      { uuid: "m4", sender: "system", text: "no" },
+      { uuid: "m5", sender: "assistant", content: [] }
+    ]
+  });
+  assert.equal(c.title, "Lisbon");
+  assert.equal(c.updated, Date.parse("2025-03-01T10:00:00Z"));
+  assert.deepEqual(JSON.parse(JSON.stringify(c.messages.map(m => [m.role, m.content, m.files.map(f => f.name), m.thinking]))), [
+    ["user", "Plan a trip", ["a.pdf", "b.png"], ""],
+    ["assistant", "Here:\n\n**Plan**\n\n```markdown\n# Day 1\n```", [], "hmm"],
+    ["user", "only text", [], ""]
+  ]);
+  assert.equal(c.messages[2].created, 0);
+  assert.equal(ctx.fromExport({ uuid: "x", chat_messages: [] }), null, "an empty conversation isn't brought over");
+  assert.equal(ctx.fromExport({ name: "no id" }), null);
 });
