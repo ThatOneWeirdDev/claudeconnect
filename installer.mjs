@@ -858,7 +858,8 @@ async function editSettings() {
   if (await yes(`${old.fable ? "Hide" : "Show"} Fable 5.1 in the model picker? It's ${old.fable ? "shown" : "hidden"} now.`)) job.fable = !old.fable;
   const auto = autostartOn();
   if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
-  if (await yes(`${old.credits ? "Stop showing" : "Show"} your usage credit balance on the site? It's ${old.credits ? "shown" : "not shown"} now. This reads your Claude Code sign-in on this computer to ask Claude for it; the sign-in itself never leaves this computer.`)) local.credits = !old.credits;
+  const credits = old.credits !== false;
+  if (await yes(`${credits ? "Stop showing" : "Show"} your usage credit balance on the site? It's ${credits ? "shown" : "not shown"} now. This reads your Claude Code sign-in on this computer to ask Claude for it; the sign-in itself never leaves this computer.`)) local.credits = !credits;
   const changes = [
     job.displayName && `name: ${job.displayName}`,
     "logo" in job && `logo: ${job.logo ? "new" : "built-in"}`,
@@ -916,12 +917,30 @@ if (REMOTE) await remoteUpdate(payload);
 
 // Updating from a terminal asks nothing: it's the same in-place update the site's Update button does. Changing the name or the
 // look is `<command> edit`.
+function newerThan(a, b) {
+  const x = /^(\d+)\.(\d+)\.(\d+)/.exec(String(a || ""));
+  const y = /^(\d+)\.(\d+)\.(\d+)/.exec(String(b || ""));
+  if (!x || !y) return false;
+  for (let i = 1; i <= 3; i++) if (+x[i] !== +y[i]) return +x[i] > +y[i];
+  return false;
+}
 function installedConfig() {
   const c = readJson(CONFIG);
   return c && c.accountId && c.kvId && c.name && c.site ? c : null;
 }
 async function quickUpdate() {
-  console.log(bold(`\nUpdating ${installedConfig().displayName || "ClaudeConnect"} to ${payload.version}`) + dim("  your chats and settings are kept"));
+  const cfg = installedConfig();
+  console.log(bold(`\nUpdating ${cfg.displayName || "ClaudeConnect"} to ${payload.version}`) + dim("  your chats and settings are kept"));
+  // what this version asks that the installed one didn't: a y/n each, before anything changes
+  const asks = (Array.isArray(payload.questions) ? payload.questions : []).filter(q => q && ["autostart", "credits"].includes(q.key) && typeof q.label === "string" && newerThan(q.since, cfg.version || "0.0.0") && !newerThan(q.since, payload.version));
+  for (const q of asks) {
+    if (q.help) note(q.help);
+    const a = /^y/i.test(await ask(`  ${q.label} ${q.default ? "[Y/n]" : "[y/N]"} `, q.default ? "y" : "n"));
+    if (q.key === "credits") {
+      cfg.credits = a;
+      writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    } else if (q.key === "autostart") spawnSync(process.execPath, [join(DIR, "agent.mjs"), "autostart", a ? "on" : "off"], { stdio: "ignore" });
+  }
   JOB = true;
   await remoteUpdate(payload);
 }
