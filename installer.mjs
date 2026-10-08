@@ -1,12 +1,15 @@
 #!/usr/bin/env node
+// ClaudeConnect setup. ClaudeConnect.mjs downloads a release from GitHub, checks it, and runs this from the download folder.
+// Run it with --remote-update (no questions) to update an existing install in place, which is what the site's Update button does.
 import { spawnSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, accessSync, chmodSync, rmSync, statSync, readdirSync, openSync, readSync, closeSync, constants } from "node:fs";
 import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import crypto from "node:crypto";
 import { createInterface } from "node:readline/promises";
 
-const FILES = {};
+const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = process.platform === "win32";
 const FOLD_CASE = IS_WIN || process.platform === "darwin";
 const HOME = os.homedir();
@@ -14,6 +17,7 @@ const DIR = join(HOME, ".claudeconnect");
 const LEGACY_DIR = join(HOME, ".chatgql");
 const SITE = join(DIR, "site");
 const CONFIG = join(DIR, "config.json");
+const DEFAULT_REPO = "ThatOneWeirdDev/claudeconnect";
 const WR = "npx --yes wrangler@4";
 const API = process.env.CLAUDECONNECT_CF_API || "https://api.cloudflare.com/client/v4";
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -26,7 +30,11 @@ const opt = n => {
   const i = argv.indexOf(n);
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : null;
 };
-const tty = process.stdin.isTTY && process.stdout.isTTY;
+const REMOTE = flag("--remote-update");
+const UPDATE_ID = opt("--update-id");
+const REPO = process.env.CLAUDECONNECT_REPO || DEFAULT_REPO;
+const REF = process.env.CLAUDECONNECT_REF || "main";
+const tty = !REMOTE && process.stdin.isTTY && process.stdout.isTTY;
 const bold = s => (process.stdout.isTTY ? `\x1b[1m${s}\x1b[0m` : s);
 const teal = s => (process.stdout.isTTY ? `\x1b[36m${s}\x1b[0m` : s);
 const dim = s => (process.stdout.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
@@ -41,7 +49,10 @@ function note(s) {
   console.log(dim("  " + s));
 }
 
+class Stop extends Error {}
+
 function fail(s) {
+  if (REMOTE) throw new Stop(s);
   console.error("\n" + bold("Setup stopped: ") + s);
   process.exit(1);
 }
@@ -341,10 +352,193 @@ async function reset(found) {
   }
 }
 
-const major = Number(process.versions.node.split(".")[0]);
-if (major < 20) fail(`This needs Node.js 20 or newer, and you have ${process.version}. Install the current LTS from nodejs.org, then run this again.`);
+function sha256(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
 
-console.log(bold("\nClaudeConnect setup"));
+// The release in HERE has to be exactly what its manifest says, or nothing gets installed.
+function loadPayload() {
+  const manifest = readJson(join(HERE, "manifest.json"));
+  if (!manifest || !manifest.version || !manifest.files) fail("The download has no release manifest. Run ClaudeConnect.mjs again.");
+  for (const [rel, want] of Object.entries(manifest.files)) {
+    const p = join(HERE, rel);
+    if (!existsSync(p)) fail(`The download is missing ${rel}. Run ClaudeConnect.mjs again.`);
+    if (sha256(readFileSync(p)) !== want) fail(`${rel} doesn't match the release manifest.${existsSync(join(HERE, ".git")) ? " Run: node scripts/release.mjs" : " Run ClaudeConnect.mjs again."}`);
+  }
+  return manifest;
+}
+
+function copyOut(rel, dest) {
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, readFileSync(join(HERE, rel)));
+}
+
+function installSite(manifest) {
+  mkdirSync(SITE, { recursive: true });
+  for (const rel of Object.keys(manifest.files)) if (rel.startsWith("site/")) copyOut(rel, join(SITE, rel.slice(5)));
+}
+
+// manifest.json goes last: the agent reads its version from it, so it only changes once everything else is in place.
+function installComputer(manifest) {
+  mkdirSync(DIR, { recursive: true });
+  for (const rel of Object.keys(manifest.files)) if (!rel.startsWith("site/")) copyOut(rel, join(DIR, rel.replace(/^agent\//, "")));
+  copyOut("manifest.json", join(DIR, "manifest.json"));
+  writeFileSync(join(DIR, "package.json"), JSON.stringify({ name: "claudeconnect", private: true, type: "module" }, null, 2));
+}
+
+function wranglerConfig(o) {
+  return {
+    name: o.slug,
+    main: "worker.js",
+    account_id: o.accountId,
+    compatibility_date: "2025-09-01",
+    workers_dev: true,
+    preview_urls: false,
+    rules: [{ type: "Text", globs: ["**/*.html"], fallthrough: true }],
+    durable_objects: { bindings: [{ name: "HUB", class_name: "ChatgqlHub" }] },
+    migrations: [{ tag: "v1", new_sqlite_classes: ["ChatgqlHub"] }],
+    kv_namespaces: [{ binding: "TOKENS", id: o.kvId }],
+    vars: { SITE_NAME: o.displayName, AI_NAME: o.aiName, COMMAND: o.command, SHOW_FABLE: o.fable ? "1" : "0", APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref },
+    observability: { enabled: true }
+  };
+}
+
+// Tells the site how a remote update is going. The site keeps this for you, so it survives the site and this computer restarting.
+async function report(step, status, message) {
+  if (!REMOTE || !UPDATE_ID) return;
+  const c = readJson(CONFIG);
+  if (!c || !c.site) return;
+  try {
+    await fetch(c.site.replace(/\/$/, "") + "/agent/progress", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-access-token": c.token || "", "x-chatgql-key": c.secret || "", "x-agent-id": c.id || "" },
+      body: JSON.stringify({ id: UPDATE_ID, step, status, message }),
+      signal: AbortSignal.timeout(8000)
+    });
+  } catch {}
+}
+
+function agentPid() {
+  try {
+    const pid = Number(readFileSync(join(DIR, "agent.pid"), "utf8").trim());
+    process.kill(pid, 0);
+    return pid;
+  } catch {
+    return 0;
+  }
+}
+
+// The updater was started by the running agent, so it must not use `agent stop` (on Windows that ends the whole process tree).
+async function stopAgentQuietly() {
+  const pid = agentPid();
+  if (!pid) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {}
+  for (let i = 0; i < 50 && agentPid(); i++) await new Promise(r => setTimeout(r, 200));
+  if (agentPid()) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+
+function waitForConnected(logPath, from, ms) {
+  return (async () => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      try {
+        const size = statSync(logPath).size;
+        const start = size < from ? 0 : from;
+        if (size > start) {
+          const fd = openSync(logPath, "r");
+          const buf = Buffer.alloc(size - start);
+          readSync(fd, buf, 0, buf.length, start);
+          closeSync(fd);
+          if (/Connected\.|Reconnected\./.test(buf.toString("utf8"))) return true;
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return false;
+  })();
+}
+
+async function remoteUpdate(manifest) {
+  const old = readJson(CONFIG);
+  if (!old || !old.accountId || !old.kvId || !old.name || !old.site) fail("This computer isn't set up yet, so there's nothing to update. Run ClaudeConnect.mjs and choose to set it up.");
+  accountId = old.accountId;
+  let at = "verify";
+  let stopped = false;
+  const agentPath = join(DIR, "agent.mjs");
+  try {
+    await report("verify", "done");
+    at = "site";
+    await report("site", "active");
+    token = cloudflareToken();
+    if (!token) fail(`Cloudflare didn't accept the saved sign-in. Run ${old.command || "ClaudeConnect"} update on your computer to sign in again.`);
+    installSite(manifest);
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", aiName: old.aiName || old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
+    const dep = sh(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE, capture: true });
+    process.stdout.write(String(dep.stdout || ""));
+    process.stderr.write(String(dep.stderr || ""));
+    if (dep.status !== 0) {
+      const why = (String(dep.stderr || "") + String(dep.stdout || "")).split(/\r?\n/).map(l => l.trim()).filter(l => /error|fail|unauthori|login|auth/i.test(l)).slice(-2).join(" ");
+      fail(`Cloudflare didn't accept the new version.${why ? " " + why.slice(0, 200) : ""} Run ${old.command || "ClaudeConnect"} update on your computer to see the details.`);
+    }
+    await report("site", "done");
+    at = "computer";
+    await report("computer", "active");
+    await stopAgentQuietly();
+    stopped = true;
+    installComputer(manifest);
+    const cfg = readJson(CONFIG) || old;
+    cfg.version = manifest.version;
+    cfg.repo = REPO;
+    cfg.ref = REF;
+    writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    await report("computer", "done");
+    at = "restart";
+    await report("restart", "active");
+    const logPath = join(DIR, "agent.log");
+    let from = 0;
+    try {
+      from = statSync(logPath).size;
+    } catch {}
+    spawnSync(process.execPath, [agentPath, "background"], { stdio: "ignore" });
+    stopped = false;
+    await report("restart", "done");
+    at = "online";
+    await report("online", "active");
+    if (!(await waitForConnected(logPath, from, 120000))) fail(`The new version started but hasn't connected to the site yet. Run ${cfg.command || "ClaudeConnect"} logs on your computer to see why.`);
+    await report("online", "done");
+    console.log(`Updated to ${manifest.version}.`);
+  } catch (e) {
+    const msg = e instanceof Stop ? e.message : `Something unexpected went wrong: ${String((e && e.message) || e).slice(0, 200)}`;
+    console.error(msg);
+    // If the old program was stopped and the update broke before the new one started, bring one back.
+    if (stopped) spawnSync(process.execPath, [agentPath, "background"], { stdio: "ignore" });
+    await report(at, "error", msg);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+const major = Number(process.versions.node.split(".")[0]);
+let payload;
+try {
+  if (major < 20) fail(`This needs Node.js 20 or newer, and you have ${process.version}. Install the current LTS from nodejs.org, then run this again.`);
+  payload = loadPayload();
+} catch (e) {
+  if (!(e instanceof Stop)) throw e;
+  console.error(e.message);
+  await report("verify", "error", e.message);
+  process.exit(1);
+}
+if (REMOTE) await remoteUpdate(payload);
+
+console.log(bold(`\nClaudeConnect setup`) + dim(`  ${payload.version}`));
 
 let prior = readJson(CONFIG) || {};
 let legacy = false;
@@ -496,24 +690,9 @@ else {
 }
 stopLocal();
 removeShims([prior.command, "chatgql"], [prior.shim]);
-mkdirSync(SITE, { recursive: true });
-for (const [file, body] of Object.entries(FILES)) writeFileSync(file === "agent.mjs" ? join(DIR, file) : join(SITE, file), body);
+installSite(payload);
 writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify({ logo, favicon }) + ";\n");
-writeFileSync(join(DIR, "package.json"), JSON.stringify({ name: "claudeconnect", private: true, type: "module" }, null, 2));
-writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify({
-  name: slug,
-  main: "worker.js",
-  account_id: accountId,
-  compatibility_date: "2025-09-01",
-  workers_dev: true,
-  preview_urls: false,
-  rules: [{ type: "Text", globs: ["**/*.html"], fallthrough: true }],
-  durable_objects: { bindings: [{ name: "HUB", class_name: "ChatgqlHub" }] },
-  migrations: [{ tag: "v1", new_sqlite_classes: ["ChatgqlHub"] }],
-  kv_namespaces: [{ binding: "TOKENS", id: kvId }],
-  vars: { SITE_NAME: displayName, AI_NAME: aiName, COMMAND: command, SHOW_FABLE: fable ? "1" : "0" },
-  observability: { enabled: true }
-}, null, 2));
+writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, aiName, command, fable, version: payload.version, repo: REPO, ref: REF }), null, 2));
 if (sh(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE }).status !== 0) fail("Cloudflare didn't accept the site. The messages above say why.");
 const secret = same && prior.secret ? prior.secret : crypto.randomBytes(32).toString("base64url");
 const claim = crypto.randomBytes(18).toString("base64url");
@@ -531,12 +710,13 @@ if (!/^https?:\/\//.test(site)) fail("Couldn't work out your workers.dev address
 note(site);
 
 step("Setting up this computer");
+installComputer(payload);
 const workspace = prior.workspace && existsSync(prior.workspace) ? prior.workspace : pickWorkspace(displayName);
 mkdirSync(workspace, { recursive: true });
 mkdirSync(binDir, { recursive: true });
 const agentPath = join(DIR, "agent.mjs");
 const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
-const cfg = { name: slug, displayName, command, aiName, fable, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim };
+const cfg = { name: slug, displayName, command, aiName, fable, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
 if (same && prior.id) cfg.id = prior.id;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;
@@ -586,10 +766,11 @@ if (mode === "fresh") {
 function connected() {
   try {
     const size = statSync(logPath).size;
-    if (size <= logFrom) return false;
+    const start = size < logFrom ? 0 : logFrom;
+    if (size <= start) return false;
     const fd = openSync(logPath, "r");
-    const buf = Buffer.alloc(size - logFrom);
-    readSync(fd, buf, 0, buf.length, logFrom);
+    const buf = Buffer.alloc(size - start);
+    readSync(fd, buf, 0, buf.length, start);
     closeSync(fd);
     return /Connected\./.test(buf.toString("utf8"));
   } catch {
@@ -609,4 +790,4 @@ if (tty) {
 } else {
   console.log(`\n  ${mode === "fresh" ? "Once Access is on and you've opened the claim link, open" : "Open"} ${site} on any device.`);
 }
-console.log(dim(`\n  ${command} help lists the commands, and running this setup again lets you update or reset it.\n`));
+console.log(dim(`\n  ${command} help lists the commands. ${command} update brings it up to date, and ${site} will say when a new version is out.\n`));

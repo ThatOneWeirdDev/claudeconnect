@@ -1,12 +1,18 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, statSync, unlinkSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, statSync, unlinkSync, renameSync, openSync, closeSync } from "node:fs";
 import { join, basename, dirname, extname, relative, resolve as resolvePath, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 
-const VERSION = "1.1.0";
 const HERE = dirname(fileURLToPath(import.meta.url));
+const VERSION = (() => {
+  try {
+    return String(JSON.parse(readFileSync(join(HERE, "manifest.json"), "utf8")).version) || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 const IS_WIN = process.platform === "win32";
 const CONFIG_PATH = join(HERE, "config.json");
 const LOG_PATH = join(HERE, "agent.log");
@@ -164,7 +170,9 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     ["autostart on", "start in the background every time you log in (off to undo)"],
     ["open", `open ${NAME} in your browser`],
     ["logs", "show recent activity"],
-    ["status", "show whether it's running"]
+    ["status", "show whether it's running"],
+    ["update", "check for a new version and update"],
+    ["version", "show the installed version"]
   ];
   const w = Math.max(...rows.map(r => (COMMAND + " " + r[0]).trim().length)) + 2;
   console.log(rows.map(r => (COMMAND + " " + r[0]).trim().padEnd(w) + r[1]).join("\n"));
@@ -182,9 +190,23 @@ if (cmd === "stop") {
   stopOther();
   process.exit(0);
 }
+if (cmd === "version" || cmd === "--version" || cmd === "-v") {
+  console.log(`${NAME} ${VERSION}`);
+  process.exit(0);
+}
+if (cmd === "update") {
+  const loader = join(HERE, "ClaudeConnect.mjs");
+  if (!existsSync(loader)) {
+    console.log("The updater isn't on this computer. Download ClaudeConnect.mjs again and run it with node.");
+    process.exit(1);
+  }
+  const r = spawnSync(process.execPath, [loader, "--update", ...process.argv.slice(3)], { stdio: "inherit" });
+  process.exit(r.status === null ? 1 : r.status);
+}
 if (cmd === "status") {
   const pid = runningPid();
   console.log(pid ? `Running (process ${pid}).` : "Not running.");
+  console.log(`Version: ${VERSION}`);
   console.log(`Site: ${cfg.site}`);
   console.log(`Workspace: ${WORKSPACE}`);
   console.log(`Starts at login: ${existsSync(startupPaths().file) ? "yes" : "no"}`);
@@ -678,6 +700,22 @@ function runClaude(m, prompt, sessionArgs, pre) {
   });
 }
 
+function usageOf(f, model) {
+  if (!f) return [];
+  const n = v => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+  const out = [];
+  if (f.modelUsage && typeof f.modelUsage === "object") {
+    for (const [id, u] of Object.entries(f.modelUsage)) {
+      if (!u || typeof u !== "object") continue;
+      out.push({ model: id.replace(/\[.*\]$/, ""), input: n(u.inputTokens), output: n(u.outputTokens), cacheRead: n(u.cacheReadInputTokens), cacheWrite: n(u.cacheCreationInputTokens), cost: n(u.costUSD) });
+    }
+  }
+  if (!out.length && f.usage && typeof f.usage === "object") {
+    out.push({ model, input: n(f.usage.input_tokens), output: n(f.usage.output_tokens), cacheRead: n(f.usage.cache_read_input_tokens), cacheWrite: n(f.usage.cache_creation_input_tokens), cost: n(f.total_cost_usd) });
+  }
+  return out.filter(u => u.input || u.output || u.cacheRead || u.cacheWrite || u.cost);
+}
+
 async function handleRun(m) {
   const t0 = Date.now();
   procs.set(m.runId, { stopped: false, child: null });
@@ -717,7 +755,7 @@ async function handleRun(m) {
   }
   const text = result.st.text || (!error && f && typeof f.result === "string" ? f.result : "");
   const artifacts = collectArtifacts(result.st.writes || []);
-  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
+  send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, usage: usageOf(f, result.st.model || m.model), denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
   log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s${artifacts.length ? `, with ${artifacts.length} file${artifacts.length === 1 ? "" : "s"}` : ""}`);
 }
 
@@ -765,6 +803,46 @@ function stopRun(m) {
   killTree(rec.child);
 }
 
+let updating = false;
+
+// The update runs in its own detached process: it replaces this program's files and restarts it, so it can't live inside it.
+async function startUpdate(m) {
+  const refuse = error => send({ type: "update_ack", id: m.id, ok: false, error });
+  const loader = join(HERE, "ClaudeConnect.mjs");
+  // A failed updater tells the site before it exits, so a quick retry can arrive while it is still winding down.
+  for (let i = 0; i < 30 && updating; i++) await new Promise(r => setTimeout(r, 100));
+  if (updating) return refuse("An update is already running on your computer.");
+  if (procs.size) return refuse("A reply is still being written on your computer. Wait for it to finish, then update.");
+  if (!existsSync(loader)) return refuse(`The updater isn't on your computer. Run ClaudeConnect.mjs there once with node, then updating from here will work.`);
+  let out = "ignore";
+  try {
+    out = openSync(join(HERE, "update.log"), "a");
+  } catch {}
+  try {
+    const args = [loader, "--remote-update", "--update-id", String(m.id), "--expect", String(m.to || "")];
+    const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", out, out], windowsHide: true, cwd: HERE });
+    child.on("error", e => {
+      updating = false;
+      log("Update couldn't start:", e.message || e);
+      refuse(`The update couldn't start (${String((e && e.message) || e).slice(0, 120)}).`);
+    });
+    // A clean exit means it either finished or reported its own failure; anything else died before it could say so.
+    child.on("exit", code => {
+      updating = false;
+      if (code) refuse(`The updater stopped unexpectedly (exit code ${code}). ${COMMAND} update on your computer shows why.`);
+    });
+    child.unref();
+  } catch (e) {
+    return refuse(`The update couldn't start (${String((e && e.message) || e).slice(0, 120)}).`);
+  } finally {
+    if (typeof out === "number") closeSync(out);
+  }
+  updating = true;
+  setTimeout(() => (updating = false), 15 * 60000).unref();
+  log(`Updating to ${m.to || "the newest version"}. This will restart ${NAME}.`);
+  send({ type: "update_ack", id: m.id, ok: true });
+}
+
 const parts = new Map();
 
 function onMessage(raw) {
@@ -794,6 +872,7 @@ function onMessage(raw) {
     handleRun(m).catch(e => log("Run failed:", e.message || e));
   } else if (m.type === "stop") stopRun(m);
   else if (m.type === "token") saveSignIn(m.token, m.exp);
+  else if (m.type === "update") startUpdate(m).catch(e => log("Update failed to start:", e.message || e));
 }
 
 let pingTimer = null;
@@ -867,7 +946,7 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "usage"], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);

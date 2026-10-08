@@ -1,6 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import APP_HTML from "./app.html";
 import BRAND from "./brand.js";
+import { buildUsage, validZone } from "./usage.js";
+import { compareVersions, isNewer, cleanManifest, validRepo, validRef } from "./version.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -14,6 +16,12 @@ const MODELS = {
   "claude-haiku-5-5": { name: "Haiku 5.5", efforts: [] }
 };
 const DEFAULT_MODEL = "claude-opus-5-5";
+const DEFAULT_REPO = "ThatOneWeirdDev/claudeconnect";
+const UPDATE_STEPS = ["download", "verify", "site", "computer", "restart", "online"];
+const CHECK_EVERY = 30 * 60000;
+const CHECK_RETRY = 5 * 60000;
+const ACK_WITHIN = 30000;
+const QUIET_LIMIT = 10 * 60000;
 const MAX_ARTIFACT = 1900000;
 const MIME = { html: "text/html", htm: "text/html", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", ico: "image/x-icon", pdf: "application/pdf", md: "text/markdown", markdown: "text/markdown", txt: "text/plain", csv: "text/csv", json: "application/json", js: "text/javascript", mjs: "text/javascript", ts: "text/plain", tsx: "text/plain", jsx: "text/plain", css: "text/css", py: "text/plain", java: "text/plain", c: "text/plain", cpp: "text/plain", h: "text/plain", cs: "text/plain", go: "text/plain", rs: "text/plain", rb: "text/plain", php: "text/plain", sh: "text/plain", ps1: "text/plain", bat: "text/plain", sql: "text/plain", yml: "text/plain", yaml: "text/plain", toml: "text/plain", xml: "text/xml", ini: "text/plain", log: "text/plain", tex: "text/plain", kt: "text/plain", swift: "text/plain", lua: "text/plain", r: "text/plain", vue: "text/plain", svelte: "text/plain" };
 const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0E8C86"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
@@ -31,6 +39,10 @@ function siteName(env) {
 
 function commandName(env) {
   return String(env.COMMAND || "ClaudeConnect").slice(0, 60);
+}
+
+function appVersion(env) {
+  return String(env.APP_VERSION || "0.0.0").slice(0, 32);
 }
 
 function aiName(env) {
@@ -215,7 +227,7 @@ function appPage(env) {
   const name = siteName(env);
   const logo = brandAsset("logo");
   const mark = logo ? `<img src="/logo" alt="">` : DEFAULT_MARK;
-  const cfg = JSON.stringify({ name, ai: aiName(env), command: commandName(env), fable: env.SHOW_FABLE === "1" }).replace(/</g, "\\u003c");
+  const cfg = JSON.stringify({ name, ai: aiName(env), command: commandName(env), fable: env.SHOW_FABLE === "1", version: appVersion(env) }).replace(/</g, "\\u003c");
   const html = APP_HTML.split("__SITE_NAME__").join(escHtml(name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg);
   return new Response(html, { headers: PAGE_HEADERS });
 }
@@ -236,7 +248,7 @@ export default {
     if (url.pathname === "/logo") return brandResponse("logo");
     const hub = env.HUB.get(env.HUB.idFromName("main"));
     const a = await authenticate(req, env, hub, url);
-    const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check";
+    const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress";
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
       const lg = brandAsset("logo");
@@ -253,6 +265,12 @@ export default {
       const h = new Headers(req.headers);
       h.set("x-agent-key", env.AGENT_SECRET);
       h.delete("x-chatgql-key");
+      if (url.pathname === "/agent/progress") {
+        if (req.method !== "POST") return json({ error: "Expected POST" }, 405);
+        const body = await req.text();
+        if (body.length > 20000) return json({ error: "Too large" }, 413);
+        return hub.fetch(new Request("https://hub.internal/agent/progress", { method: "POST", headers: h, body }));
+      }
       return hub.fetch(new Request("https://hub.internal/agent", { headers: h }));
     }
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/a/")) {
@@ -284,6 +302,10 @@ export class ChatgqlHub extends DurableObject {
     this.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_id TEXT, role TEXT, content TEXT, meta TEXT, created INTEGER)");
     this.sql.exec("CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, created)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, chat_id TEXT, name TEXT, mime TEXT, size INTEGER, data BLOB, created INTEGER)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS usage (run_id TEXT, model TEXT, ts INTEGER, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER, cost REAL, PRIMARY KEY (run_id, model))");
+    this.sql.exec("CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts)");
+    this.latest = null;
+    this.checking = null;
     this.runs = new Map();
     this.parts = new Map();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
@@ -390,6 +412,7 @@ export class ChatgqlHub extends DurableObject {
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/agent") return this.acceptAgent(req);
+    if (url.pathname === "/agent/progress") return this.agentProgress(req);
     const am = url.pathname.match(/^\/a\/([A-Za-z0-9-]{8,64})$/);
     if (am) return this.serveArtifact(am[1], url.searchParams.has("download"));
     try {
@@ -453,6 +476,7 @@ export class ChatgqlHub extends DurableObject {
     }
     if (m.type === "hello") return this.onHello(ws, m);
     if (m.type === "done") return this.completeRun(m);
+    if (m.type === "update_ack") return this.updateAck(m);
     const r = this.runs.get(m.runId);
     if (!r) return;
     r.heard = true;
@@ -485,8 +509,12 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async onHello(ws, m) {
-    ws.serializeAttachment({ id: this.agentInfo(ws).id || "", since: Date.now(), version: String(m.agent || ""), warning: m.warning ? String(m.warning).slice(0, 40) : "" });
+    const caps = (Array.isArray(m.caps) ? m.caps : []).filter(c => typeof c === "string").slice(0, 10).map(c => c.slice(0, 20));
+    ws.serializeAttachment({ id: this.agentInfo(ws).id || "", since: Date.now(), version: String(m.agent || "").slice(0, 32), caps, warning: m.warning ? String(m.warning).slice(0, 40) : "" });
     await this.ctx.storage.delete("lastSeen");
+    const run = await this.ctx.storage.get("update");
+    // An update that looked stuck or failed is still a success if the new version turns up within the hour.
+    if (run && (run.state === "running" || (run.state === "error" && Date.now() - (run.finishedAt || 0) < 3600000)) && compareVersions(m.agent, run.to) >= 0) await this.finishUpdate(run);
     const tok = await this.ctx.storage.get("token");
     if (tok && tok.exp > (Number(m.tokenExp) || 0)) {
       try {
@@ -527,6 +555,15 @@ export class ChatgqlHub extends DurableObject {
     const p = url.pathname;
     const method = req.method;
     if (p === "/api/state" && method === "GET") return json(await this.state(req));
+    if (p === "/api/usage" && method === "GET") return json(this.usage(url));
+    if (p === "/api/update" && method === "GET") return json(await this.updateInfo());
+    if (p === "/api/update/check" && method === "POST") return json(await this.updateInfo(true));
+    if (p === "/api/update/start" && method === "POST") return this.startUpdate(req);
+    if (p === "/api/update/dismiss" && method === "POST") {
+      const run = await this.ctx.storage.get("update");
+      if (run && run.state !== "running") await this.ctx.storage.delete("update");
+      return json(await this.updateInfo());
+    }
     if (p === "/api/chats" && method === "GET") return json({ chats: this.rows("SELECT id, title, updated, running FROM chats ORDER BY updated DESC LIMIT 400") });
     const cm = p.match(/^\/api\/chats\/([A-Za-z0-9-]{8,64})$/);
     if (cm && method === "GET") return this.getChat(cm[1]);
@@ -560,8 +597,177 @@ export class ChatgqlHub extends DurableObject {
     const info = ws ? this.agentInfo(ws) : null;
     return {
       email: req.headers.get("x-chatgql-user") || "",
-      agent: info ? { online: true, since: info.since || null, warning: info.warning || "" } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null }
+      version: appVersion(this.env),
+      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "" } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+      update: await this.updateInfo()
     };
+  }
+
+  usage(url) {
+    const now = Date.now();
+    const since = now - 95 * 86400000;
+    const rows = this.rows("SELECT ts, model, input, output, cache_read, cache_write, cost FROM usage WHERE ts >= ?", since);
+    const replyTimes = this.rows("SELECT created FROM messages WHERE role = 'assistant' AND created >= ?", since).map(r => r.created);
+    const out = buildUsage({ rows, replyTimes, now, timeZone: validZone(url.searchParams.get("tz")) });
+    const first = this.one("SELECT MIN(ts) AS t FROM usage");
+    out.trackedSince = first && first.t ? first.t : null;
+    return out;
+  }
+
+  recordUsage(runId, ts, usage, fallbackModel) {
+    if (!Array.isArray(usage)) return;
+    const n = v => (Number.isFinite(v) && v > 0 ? Math.min(Math.round(v), 1e12) : 0);
+    for (const u of usage.slice(0, 8)) {
+      if (!u || typeof u !== "object") continue;
+      const cost = Number.isFinite(u.cost) && u.cost > 0 ? Math.min(u.cost, 1e6) : 0;
+      this.sql.exec("INSERT OR IGNORE INTO usage (run_id, model, ts, input, output, cache_read, cache_write, cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", runId, String(u.model || fallbackModel || "").slice(0, 80), ts, n(u.input), n(u.output), n(u.cacheRead), n(u.cacheWrite), cost);
+    }
+  }
+
+  updateSource() {
+    const repo = validRepo(this.env.UPDATE_REPO) ? this.env.UPDATE_REPO : DEFAULT_REPO;
+    const ref = validRef(this.env.UPDATE_REF) ? this.env.UPDATE_REF : "main";
+    const raw = String(this.env.UPDATE_RAW || "https://raw.githubusercontent.com").replace(/\/+$/, "");
+    return { repo, ref, raw, label: `${repo}@${ref}` };
+  }
+
+  async checkLatest() {
+    if (this.checking) return this.checking;
+    this.checking = (async () => {
+      const src = this.updateSource();
+      const prev = this.latest || (await this.ctx.storage.get("latest")) || null;
+      const entry = { at: Date.now(), source: src.label, release: prev && prev.source === src.label ? prev.release : null, error: "" };
+      try {
+        const r = await fetch(`${src.raw}/${src.repo}/${src.ref}/manifest.json`, { headers: { "user-agent": "ClaudeConnect-site", accept: "application/json" }, signal: AbortSignal.timeout(6000) });
+        if (!r.ok) throw new Error(r.status === 404 ? "No release has been published at that address yet." : `GitHub answered ${r.status}.`);
+        const text = await r.text();
+        if (text.length > 100000) throw new Error("The release information was too large.");
+        const release = cleanManifest(JSON.parse(text));
+        if (!release) throw new Error("The release information couldn't be read.");
+        entry.release = release;
+      } catch (e) {
+        entry.error = String((e && e.message) || e).slice(0, 160);
+      }
+      this.latest = entry;
+      await this.ctx.storage.put("latest", entry);
+      return entry;
+    })().finally(() => {
+      this.checking = null;
+    });
+    return this.checking;
+  }
+
+  async updateRun() {
+    let run = await this.ctx.storage.get("update");
+    if (run && run.state === "running") {
+      const now = Date.now();
+      const unanswered = !run.acked && now - run.startedAt > (Number(this.env.UPDATE_ACK_MS) || ACK_WITHIN);
+      if (unanswered || now - run.updatedAt > (Number(this.env.UPDATE_QUIET_MS) || QUIET_LIMIT)) {
+        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${siteName(this.env)} on your computer didn't pick up the update. Make sure ${commandName(this.env)} is running, then try again.` : `The update stopped reporting progress. Check your computer, or run ${commandName(this.env)} update there.` };
+        await this.ctx.storage.put("update", run);
+      }
+    }
+    return run || null;
+  }
+
+  updateBlock(run) {
+    const ws = this.agent();
+    if (run && run.state === "running") return { code: "running", message: "An update is already running." };
+    if (!ws) return { code: "offline", message: `${siteName(this.env)} is offline. Start ${commandName(this.env)} on your computer, then update.` };
+    if (!(this.agentInfo(ws).caps || []).includes("update")) return { code: "agent_old", message: `The ${commandName(this.env)} program on your computer is too old to update from here. Run ${commandName(this.env)} update there once, and later updates can be done from this page.` };
+    if (this.one("SELECT 1 AS x FROM chats WHERE running IS NOT NULL")) return { code: "busy", message: "A reply is still being written. Wait for it to finish, or stop it, then update." };
+    return null;
+  }
+
+  async updateInfo(force) {
+    const src = this.updateSource();
+    let c = this.latest || (await this.ctx.storage.get("latest")) || null;
+    if (c && c.source !== src.label) c = null;
+    const stale = !c || Date.now() - c.at > (c.error ? CHECK_RETRY : CHECK_EVERY);
+    if (force || !c) c = await this.checkLatest();
+    else if (stale) this.checkLatest().catch(() => {});
+    this.latest = c;
+    const current = appVersion(this.env);
+    const latest = c && c.release ? c.release : null;
+    const run = await this.updateRun();
+    return {
+      current,
+      latest: latest ? latest.version : null,
+      available: !!latest && isNewer(latest.version, current),
+      notes: latest ? latest.notes : [],
+      released: latest ? latest.released : "",
+      source: src.label,
+      checkedAt: c ? c.at : null,
+      error: c && c.error ? c.error : "",
+      run,
+      blocked: this.updateBlock(run)
+    };
+  }
+
+  async startUpdate(req) {
+    const b = await req.json().catch(() => ({}));
+    const info = await this.updateInfo();
+    if (!info.available) return json({ error: "You're already up to date.", code: "current" }, 409);
+    if (String(b.to || "") !== info.latest) return json({ error: "A different version came out. Look at what's new, then update.", code: "changed" }, 409);
+    if (info.blocked) return json({ error: info.blocked.message, code: info.blocked.code }, 409);
+    const ws = this.agent();
+    const now = Date.now();
+    const run = { id: crypto.randomUUID(), from: info.current, to: info.latest, state: "running", acked: false, step: "download", steps: {}, message: "", startedAt: now, updatedAt: now, finishedAt: null, by: req.headers.get("x-chatgql-user") || "" };
+    await this.ctx.storage.put("update", run);
+    try {
+      this.sendAgent(ws, { type: "update", id: run.id, to: run.to });
+    } catch {
+      await this.ctx.storage.delete("update");
+      return json({ error: `${siteName(this.env)} on your computer couldn't be reached. Try again in a moment.`, code: "offline" }, 503);
+    }
+    return json(await this.updateInfo());
+  }
+
+  async finishUpdate(run) {
+    const steps = {};
+    for (const s of UPDATE_STEPS) steps[s] = "done";
+    const now = Date.now();
+    await this.ctx.storage.put("update", { ...run, state: "done", acked: true, steps, step: "online", message: "", updatedAt: now, finishedAt: now });
+  }
+
+  async updateAck(m) {
+    const run = await this.ctx.storage.get("update");
+    if (!run || run.state !== "running" || run.id !== m.id) return;
+    const now = Date.now();
+    if (m.ok === false) await this.ctx.storage.put("update", { ...run, state: "error", message: String(m.error || "Your computer couldn't start the update.").slice(0, 300), updatedAt: now, finishedAt: now });
+    else await this.ctx.storage.put("update", { ...run, acked: true, updatedAt: now });
+  }
+
+  async agentProgress(req) {
+    if (req.method !== "POST") return json({ error: "Expected POST" }, 405);
+    if (!this.env.AGENT_SECRET || !safeEqual(req.headers.get("x-agent-key") || "", this.env.AGENT_SECRET)) return json({ error: "Forbidden" }, 403);
+    let b;
+    try {
+      b = JSON.parse(await req.text());
+    } catch {
+      return json({ error: "Bad request" }, 400);
+    }
+    const run = await this.ctx.storage.get("update");
+    if (!run || run.id !== b.id) return json({ error: "No such update" }, 404);
+    if (run.state !== "running") return json({ ok: true });
+    const now = Date.now();
+    const next = { ...run, acked: true, updatedAt: now, steps: { ...run.steps } };
+    const at = UPDATE_STEPS.indexOf(b.step);
+    if (at >= 0) {
+      for (let i = 0; i < at; i++) next.steps[UPDATE_STEPS[i]] = "done";
+      next.step = b.step;
+      next.steps[b.step] = b.status === "done" ? "done" : b.status === "error" ? "error" : "active";
+    }
+    if (b.status === "error") {
+      next.state = "error";
+      next.finishedAt = now;
+      next.message = String(b.message || "The update didn't finish.").slice(0, 400);
+    } else if (b.step === "online" && b.status === "done") {
+      await this.finishUpdate(next);
+      return json({ ok: true });
+    }
+    await this.ctx.storage.put("update", next);
+    return json({ ok: true });
   }
 
   getChat(id) {
@@ -703,6 +909,7 @@ export class ChatgqlHub extends DurableObject {
     const artifacts = this.saveArtifacts(chat.id, m.runId, Array.isArray(m.artifacts) ? m.artifacts : [], text);
     const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);
+    this.recordUsage(m.runId, now, m.usage, meta.model);
     if (m.started) this.sql.exec("UPDATE chats SET started = 1 WHERE id = ?", chat.id);
     if (chat.running === m.runId) this.sql.exec("UPDATE chats SET running = NULL, updated = ? WHERE id = ?", now, chat.id);
     this.push(m.runId, { type: "done", message: { id: "a-" + m.runId, role: "assistant", content: text, meta, created: now } });

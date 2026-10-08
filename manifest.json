@@ -1,0 +1,19 @@
+{
+  "name": "claudeconnect",
+  "version": "1.2.0",
+  "released": "2026-10-08",
+  "notes": [
+    "A usage chart: tokens, replies and estimated cost, by day and by week.",
+    "The site now tells you when a new version is out, and you can update from it.",
+    "The setup script loads ClaudeConnect from GitHub instead of carrying a copy inside itself."
+  ],
+  "files": {
+    "ClaudeConnect.mjs": "1d5831c8438975cbe9d8295059c097210b4d203774061e54293ee9f518a800e3",
+    "installer.mjs": "b45dc8bcc50b6d7dd48c483d972fc6f1710b4bb18c76baf3a45a3ffc33216185",
+    "agent/agent.mjs": "c51904a5cb92e1e90e827086c975ea39a1c3f0508c096c8e28e31fb84abb9d3d",
+    "site/worker.js": "70169e3699badbc681d8eb5bad49c5eff4e8fd7c810bc5e5e82d997189b67a4e",
+    "site/app.html": "8680345adba8a07b295695d8a0f3e9dde99753194392d2725a73fe639901b811",
+    "site/usage.js": "5e9517e4353cc1437dad4b58923e11382ade8cab480ee81ee65849e2bbcbef8e",
+    "site/version.js": "13cbf80951c6c37d24ef63839932e07960647b39b3975864a58a0554853b9339"
+  }
+}

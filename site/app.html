@@ -309,6 +309,87 @@ svg{display:block}
   .bubble{max-width:88%}
   .picker{position:fixed;top:60px;left:10px;right:10px;width:auto;max-width:none}
 }
+.pill{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;color:var(--accent);background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.pill:hover{border-color:var(--accent)}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.pill.busy i{animation:pulse 1.2s ease-in-out infinite}
+.pill.bad{color:var(--danger);background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.dlg{width:min(720px,calc(100vw - 24px));max-height:min(90vh,880px);padding:0;border:1px solid var(--line);border-radius:22px;background:var(--raise);color:var(--ink);box-shadow:var(--shadow);overflow:hidden}
+.dlg[open]{display:flex;flex-direction:column}
+.dlg.narrow{width:min(520px,calc(100vw - 24px))}
+.dlg::backdrop{background:rgba(10,15,24,.45)}
+.dlg-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 14px 12px 22px}
+.dlg-head h2{margin:0;font-size:19px;font-weight:650;letter-spacing:-.015em;line-height:1.3}
+.dlg-head p{margin:2px 0 0;color:var(--ink-3);font-size:13px}
+.dlg-body{flex:1;min-height:0;overflow-y:auto;padding:4px 22px 22px;overscroll-behavior:contain}
+.dlg-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.fine{margin:12px 0 0;color:var(--ink-3);font-size:12.5px;line-height:1.5}
+.filters{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:2px 0 16px}
+.filters .tabs{margin-right:0}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.tile{padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--paper);min-width:0}
+.tile small{display:block;color:var(--ink-3);font-size:12.5px}
+.tile b{display:block;margin-top:1px;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile span{display:block;color:var(--ink-3);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.viz{margin:0;position:relative;transition:opacity .15s}
+.viz.loading{opacity:.55}
+.viz-cap{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.viz-cap b{font-weight:600}
+.viz-cap small{color:var(--ink-3);font-size:12.5px}
+.viz-plot{position:relative;border-radius:8px;outline-offset:4px;touch-action:pan-y}
+.viz-plot svg{display:block;overflow:visible}
+.viz-bar{fill:color-mix(in srgb,var(--accent) 62%,var(--raise))}
+.viz-bar.now{fill:var(--accent)}
+.viz-bar.hot{fill:var(--accent);filter:brightness(1.1)}
+.viz-grid{stroke:var(--line-2);stroke-width:1}
+.viz-base{stroke:var(--line);stroke-width:1}
+.viz-tick{fill:var(--ink-3);font-size:11px;font-family:inherit}
+.viz-hit{fill:transparent}
+.viz-tip{position:absolute;z-index:5;pointer-events:none;width:210px;padding:10px 12px;border-radius:12px;background:var(--raise);border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;line-height:1.45}
+.viz-tip .h{color:var(--ink-2)}
+.viz-tip .v{margin:1px 0 6px;font-size:17px;font-weight:650;letter-spacing:-.01em}
+.viz-tip .r{display:flex;justify-content:space-between;gap:12px;color:var(--ink-2)}
+.viz-tip .r b{font-weight:600;color:var(--ink)}
+.viz-empty{display:grid;place-items:center;min-height:180px;padding:20px;text-align:center;color:var(--ink-3);border:1px dashed var(--line);border-radius:14px}
+.linkish{margin:10px 0 0;padding:4px 2px;color:var(--ink-2);font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.linkish:hover{color:var(--ink)}
+.tbl{margin-top:12px;max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:12px}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px}
+.tbl th,.tbl td{padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl th{position:sticky;top:0;background:var(--rail);font-weight:600}
+.tbl td{font-variant-numeric:tabular-nums}
+.tbl tr:last-child td{border-bottom:0}
+.sect{margin:22px 0 0}
+.sect h3{margin:0 0 8px;font-size:13.5px;font-weight:600;color:var(--ink-2)}
+.steps{list-style:none;margin:6px 0 4px;padding:0}
+.steps li{display:flex;align-items:center;gap:12px;padding:8px 2px;color:var(--ink-3)}
+.steps .ic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:1.5px solid var(--line);flex:none}
+.steps .ic svg{width:13px;height:13px}
+.steps li.active{color:var(--ink);font-weight:600}
+.steps li.active .ic{border-color:var(--accent)}
+.steps li.done{color:var(--ink-2)}
+.steps li.done .ic{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.steps li.error{color:var(--danger);font-weight:600}
+.steps li.error .ic{border-color:var(--danger);color:var(--danger)}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 28%,transparent);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.notes{margin:0 0 4px;padding-left:1.2em;color:var(--ink-2)}
+.notes li{margin:.25em 0}
+.what{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--rail);color:var(--ink-2);font-size:13.5px}
+.what div{display:flex;gap:9px}
+.what svg{width:15px;height:15px;flex:none;margin-top:3px;color:var(--accent)}
+.vrow{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-size:15px}
+.vrow b{font-weight:650}
+.vrow svg{width:16px;height:16px;color:var(--ink-3)}
+.linkbox{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--paper);font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:var(--ink-2)}
+.linkbox span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:860px){
+  .dlg-head{padding:16px 10px 10px 16px}
+  .dlg-body{padding:2px 16px 18px}
+  .tile{padding:10px 11px}
+  .tile b{font-size:19px}
+}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -336,6 +417,8 @@ svg{display:block}
         <div class="picker" id="picker" hidden role="dialog" aria-label="Model and effort"></div>
       </div>
       <div class="grow"></div>
+      <button class="pill" id="updatePill" type="button" hidden><i></i><span class="only-wide" id="pillText"></span><span class="only-narrow" id="pillShort"></span></button>
+      <button class="icon-btn" id="usageBtn" type="button" title="Usage" aria-label="Usage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
       <button class="icon-btn only-narrow" id="newChatTop" aria-label="New chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></svg></button>
     </header>
     <section class="thread" id="thread"><div class="thread-inner" id="threadInner"></div></section>
@@ -367,13 +450,42 @@ svg{display:block}
     <div class="p-body" id="pBody"></div>
   </aside>
 </div>
+<dialog class="dlg" id="usageDlg" aria-labelledby="usageTitle">
+  <div class="dlg-head">
+    <div><h2 id="usageTitle">Usage</h2><p id="usageSub"></p></div>
+    <button class="icon-btn" id="usageClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="dlg-body">
+    <div class="filters">
+      <div class="tabs" id="usageRange" role="group" aria-label="Period"><button type="button" data-range="daily">Daily</button><button type="button" data-range="weekly">Weekly</button></div>
+      <div class="tabs" id="usageMetric" role="group" aria-label="Measure"><button type="button" data-metric="tokens">Tokens</button><button type="button" data-metric="replies">Replies</button><button type="button" data-metric="cost">Est. cost</button></div>
+    </div>
+    <div class="tiles" id="usageTiles"></div>
+    <figure class="viz" id="usageViz">
+      <figcaption class="viz-cap"><b id="usageCap"></b><small id="usageCapSub"></small></figcaption>
+      <div class="viz-plot" id="usagePlot" tabindex="0" role="group"></div>
+      <div class="viz-tip" id="usageTip" role="status" hidden></div>
+    </figure>
+    <button class="linkish" id="usageTableBtn" type="button"></button>
+    <div class="tbl" id="usageTable" hidden></div>
+    <div class="sect" id="usageModels" hidden></div>
+    <p class="fine" id="usageNote"></p>
+  </div>
+</dialog>
+<dialog class="dlg narrow" id="updateDlg" aria-labelledby="updateTitle">
+  <div class="dlg-head">
+    <div><h2 id="updateTitle">Updates</h2><p id="updateSub"></p></div>
+    <button class="icon-btn" id="updateClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="dlg-body" id="updateBody"></div>
+</dialog>
 <div id="toast" class="toast" hidden role="status"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
 <script>
 (() => {
 const EFF = ["low", "medium", "high", "xhigh", "max"];
 const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
-const CFG = Object.assign({ name: "ClaudeConnect", ai: "ClaudeConnect", command: "ClaudeConnect", fable: false }, __CFG__);
+const CFG = Object.assign({ name: "ClaudeConnect", ai: "ClaudeConnect", command: "ClaudeConnect", fable: false, version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
 const ALL_MODELS = [
   { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable. Built for long, hard tasks.", efforts: EFF, def: "high", tag: "Uses usage credits" },
@@ -403,6 +515,7 @@ const S = {
   stick: true,
   query: ""
 };
+const UP = { data: null, timer: null, failing: 0, starting: false, checking: false, error: "", seen: "", dismissing: false };
 if (!MODELS.find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
 const I = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>',
@@ -694,10 +807,12 @@ document.addEventListener("keydown", e => {
 });
 
 
+function updating() { return !!(UP.data && UP.data.run && UP.data.run.state === "running"); }
 function renderChrome() {
   const st = S.state;
   const h = $("heroSub");
-  if (st && !st.agent.online) h.innerHTML = `${esc(CFG.name)} is offline right now. Run <code>${esc(CFG.command)}</code> to bring it back online.`;
+  if (updating()) h.textContent = `Updating to v${UP.data.run.to}. Messages are paused until it's done.`;
+  else if (st && !st.agent.online) h.innerHTML = `${esc(CFG.name)} is offline right now. Run <code>${esc(CFG.command)}</code> to bring it back online.`;
   else if (st && st.agent.warning) h.innerHTML = `${esc(CFG.name)} needs attention. Run <code>${esc(CFG.command)} logs</code> to see why.`;
   else h.innerHTML = "";
   updateSend();
@@ -708,6 +823,7 @@ async function loadState() {
   } catch {
     return;
   }
+  if (S.state.update) applyUpdate(S.state.update);
   renderChrome();
 }
 
@@ -1029,6 +1145,12 @@ window.addEventListener("popstate", () => {
 
 function updateSend() {
   const btn = $("sendBtn");
+  if (updating() && !S.busy) {
+    btn.innerHTML = I.send;
+    btn.dataset.stop = "";
+    btn.disabled = true;
+    return;
+  }
   if (S.busy || (S.live && S.chat && S.chat.running)) {
     btn.innerHTML = I.stop;
     btn.disabled = !S.busy && !(S.chat && S.chat.running);
@@ -1121,6 +1243,7 @@ comp.addEventListener("drop", e => { if (!e.dataTransfer.files.length) return; e
 async function send() {
   const text = input.value.trim();
   if ((!text && !S.files.length) || S.busy) return;
+  if (updating()) return toast("An update is running. Messages work again when it's done.");
   stopPolling();
   const files = S.files.slice();
   const model = S.model;
@@ -1380,6 +1503,420 @@ document.title = CFG.name;
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadState(); loadChats(); } });
 setInterval(() => { if (!document.hidden) loadState(); }, 20000);
+
+/* ---------- usage ---------- */
+const U = { data: null, range: store.get("usageRange", "daily"), metric: store.get("usageMetric", "tokens"), table: false, active: -1, geo: null, loading: false };
+if (!["daily", "weekly"].includes(U.range)) U.range = "daily";
+if (!["tokens", "replies", "cost"].includes(U.metric)) U.metric = "tokens";
+const METRIC_NAME = { tokens: "Tokens", replies: "Replies", cost: "Estimated cost" };
+
+function trim1(x) { return x >= 100 ? String(Math.round(x)) : String(Math.round(x * 10) / 10); }
+function compact(n) {
+  const a = Math.abs(n);
+  if (a >= 1e9) return trim1(n / 1e9) + "B";
+  if (a >= 1e6) return trim1(n / 1e6) + "M";
+  if (a >= 1e3) return trim1(n / 1e3) + "K";
+  return String(Math.round(n));
+}
+function fmtCost(v) {
+  if (!v) return "$0";
+  if (v < 0.01) return "<$0.01";
+  if (v < 100) return "$" + v.toFixed(2);
+  return "$" + compact(v);
+}
+function fmtMetric(metric, v) { return metric === "cost" ? fmtCost(v) : metric === "tokens" ? compact(v) : Math.round(v).toLocaleString(); }
+function fmtFull(metric, v) { return metric === "cost" ? fmtCost(v) : Math.round(v).toLocaleString(); }
+function keyDate(key) { return new Date(key + "T12:00:00"); }
+function shortDate(key) { return keyDate(key).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+function longDate(key) { return keyDate(key).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); }
+function weekRange(b) {
+  const end = new Date(keyDate(b.key).getTime() + 6 * 86400000);
+  return shortDate(b.key) + " – " + end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+function bucketTitle(b, range) {
+  if (range === "daily") return b.key === U.data.today ? "Today · " + longDate(b.key) : longDate(b.key);
+  return b.key === U.data.thisWeek ? "This week · " + weekRange(b) : "Week of " + weekRange(b);
+}
+function niceScale(max, integer) {
+  if (!(max > 0)) return { top: 4, step: 1 };
+  let rough = max / 4;
+  if (integer) rough = Math.max(1, rough);
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const r = rough / mag;
+  const step = (r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10) * mag;
+  return { top: Math.ceil(max / step - 1e-9) * step, step };
+}
+function barPath(x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, h, w / 2));
+  if (!r) return `M${x} ${y + h}V${y}H${x + w}V${y + h}Z`;
+  return `M${x} ${y + h}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h}Z`;
+}
+function series() { return U.data ? (U.range === "daily" ? U.data.daily : U.data.weekly) : []; }
+
+function renderUsage() {
+  const d = U.data;
+  document.querySelectorAll("#usageRange button").forEach(b => b.classList.toggle("on", b.dataset.range === U.range));
+  document.querySelectorAll("#usageMetric button").forEach(b => b.classList.toggle("on", b.dataset.metric === U.metric));
+  $("usageViz").classList.toggle("loading", U.loading);
+  if (!d) {
+    $("usageTiles").innerHTML = "";
+    $("usagePlot").innerHTML = `<div class="viz-empty">${U.loading ? "Loading…" : "Usage couldn't be loaded."}</div>`;
+    $("usageSub").textContent = "";
+    return;
+  }
+  const m = U.metric;
+  const t = d.totals;
+  $("usageSub").textContent = "Times are in your time zone (" + d.timeZone.replace(/_/g, " ") + ").";
+  const tile = (label, b, sub) => `<div class="tile"><small>${label}</small><b>${esc(fmtMetric(m, b[m]))}</b><span>${esc(sub)}</span></div>`;
+  const rep = n => n.toLocaleString() + (n === 1 ? " reply" : " replies");
+  const tokSub = b => compact(b.tokens) + " tokens";
+  $("usageTiles").innerHTML = tile("Today", t.today, m === "replies" ? tokSub(t.today) : rep(t.today.replies)) + tile("This week", t.week, m === "replies" ? tokSub(t.week) : rep(t.week.replies)) + tile("Last 30 days", t.month, m === "replies" ? tokSub(t.month) : rep(t.month.replies));
+  const list = series();
+  const unit = U.range === "daily" ? "day" : "week";
+  $("usageCap").textContent = `${METRIC_NAME[m]} per ${unit}`;
+  $("usageCapSub").textContent = U.range === "daily" ? "Last 30 days" : "Last 12 weeks";
+  const none = m !== "replies" && !d.trackedSince;
+  U.active = -1;
+  hideTip();
+  if (none) {
+    U.geo = null;
+    $("usagePlot").innerHTML = `<div class="viz-empty">${m === "tokens" ? "Token counts" : "Cost estimates"} start with your next reply. Replies from before this update are on the Replies view.</div>`;
+    $("usagePlot").setAttribute("aria-label", "No data yet");
+  } else drawChart(list);
+  $("usageTableBtn").textContent = U.table ? "Show chart" : "Show as table";
+  $("usagePlot").hidden = U.table && !none;
+  $("usageTable").hidden = !U.table;
+  if (U.table) renderTable(list);
+  renderModels();
+  const fromTxt = d.trackedSince ? new Date(d.trackedSince).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+  const cached = t.month.cached;
+  const notes = [];
+  if (m === "tokens") notes.push(`Tokens are what ${CFG.ai} read in and wrote out. Chat history it re-read from its cache (${compact(cached)} in the last 30 days) isn't counted.`);
+  if (m === "cost") notes.push("Estimated at API prices. It isn't what your Claude plan charges.");
+  if (m !== "replies" && fromTxt) notes.push(`Counted since ${fromTxt}.`);
+  $("usageNote").textContent = notes.join(" ");
+}
+
+function drawChart(list) {
+  const plot = $("usagePlot");
+  const m = U.metric;
+  const W = Math.max(260, Math.floor(plot.clientWidth || plot.parentElement.clientWidth || 600));
+  const H = 216;
+  const L = 46, R = 6, T = 8, B = 26;
+  const pw = W - L - R, ph = H - T - B;
+  const n = list.length;
+  const slot = pw / n;
+  const bw = Math.max(2, Math.min(24, slot - 2));
+  const max = Math.max(...list.map(b => b[m]), 0);
+  const sc = niceScale(max, m === "replies");
+  const y = v => T + ph - (v / sc.top) * ph;
+  const ticks = [];
+  for (let v = 0; v <= sc.top + 1e-9; v += sc.step) ticks.push(v);
+  const every = Math.max(1, Math.ceil(64 / slot));
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">`;
+  for (const v of ticks) {
+    svg += `<line class="${v === 0 ? "viz-base" : "viz-grid"}" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/>`;
+    svg += `<text class="viz-tick" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${esc(m === "cost" ? (v === 0 ? "$0" : fmtCost(v)) : compact(v))}</text>`;
+  }
+  const geo = { L, R, T, B, W, H, slot, pw, ph, bars: [] };
+  list.forEach((b, i) => {
+    const cx = L + slot * i + slot / 2;
+    const h = (b[m] / sc.top) * ph;
+    const top = y(b[m]);
+    geo.bars.push({ cx, top: b[m] > 0 ? top : T + ph });
+    if (b[m] > 0) svg += `<path class="viz-bar${i === n - 1 ? " now" : ""}" data-i="${i}" d="${barPath(cx - bw / 2, top, bw, Math.max(h, 1.5), 4)}"/>`;
+    if ((n - 1 - i) % every === 0) svg += `<text class="viz-tick" x="${cx}" y="${H - 7}" text-anchor="${i === n - 1 && n > 8 ? "end" : "middle"}">${esc(i === n - 1 ? (U.range === "daily" ? "Today" : "This week") : shortDate(b.key))}</text>`;
+  });
+  svg += "</svg>";
+  plot.innerHTML = svg;
+  U.geo = geo;
+  plot.setAttribute("aria-label", `${METRIC_NAME[m]} per ${U.range === "daily" ? "day" : "week"}, ${U.range === "daily" ? "last 30 days" : "last 12 weeks"}. Use the left and right arrow keys to read each ${U.range === "daily" ? "day" : "week"}, or show the table.`);
+}
+
+function hideTip() {
+  $("usageTip").hidden = true;
+  document.querySelectorAll("#usagePlot .hot").forEach(e => e.classList.remove("hot"));
+}
+function setActive(i) {
+  const list = series();
+  if (!U.geo || i < 0 || i >= list.length) return hideTip();
+  U.active = i;
+  const b = list[i];
+  document.querySelectorAll("#usagePlot .hot").forEach(e => e.classList.remove("hot"));
+  const bar = document.querySelector(`#usagePlot [data-i="${i}"]`);
+  if (bar) bar.classList.add("hot");
+  const tip = $("usageTip");
+  const m = U.metric;
+  tip.textContent = "";
+  const mk = (cls, text) => { const e = document.createElement("div"); e.className = cls; e.textContent = text; return e; };
+  const row = (k, v) => { const e = document.createElement("div"); e.className = "r"; const a = document.createElement("span"); a.textContent = k; const c = document.createElement("b"); c.textContent = v; e.append(a, c); return e; };
+  tip.append(mk("h", bucketTitle(b, U.range)), mk("v", m === "tokens" ? `${fmtFull(m, b.tokens)} tokens` : m === "replies" ? `${fmtFull(m, b.replies)} ${b.replies === 1 ? "reply" : "replies"}` : fmtCost(b.cost)));
+  tip.append(row("Replies", b.replies.toLocaleString()));
+  if (U.data.trackedSince) {
+    tip.append(row("Input", compact(b.input)), row("Output", compact(b.output)), row("Re-read from cache", compact(b.cached)), row("Est. cost", fmtCost(b.cost)));
+  }
+  tip.hidden = false;
+  const g = U.geo.bars[i];
+  const plotRect = $("usagePlot").getBoundingClientRect();
+  const vizRect = $("usageViz").getBoundingClientRect();
+  const offX = plotRect.left - vizRect.left;
+  const offY = plotRect.top - vizRect.top;
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  const right = g.cx > U.geo.W / 2;
+  let x = right ? g.cx - tw - 12 : g.cx + 12;
+  x = Math.max(0, Math.min(x, U.geo.W - tw));
+  let yy = Math.max(0, Math.min(g.top - th / 2, U.geo.H - th));
+  tip.style.left = offX + x + "px";
+  tip.style.top = offY + yy + "px";
+}
+function indexAt(ev) {
+  if (!U.geo) return -1;
+  const r = $("usagePlot").getBoundingClientRect();
+  const x = ev.clientX - r.left - U.geo.L;
+  if (x < 0 || x > U.geo.pw) return -1;
+  return Math.min(series().length - 1, Math.floor(x / U.geo.slot));
+}
+$("usagePlot").addEventListener("pointermove", ev => { const i = indexAt(ev); if (i < 0) hideTip(); else if (i !== U.active || $("usageTip").hidden) setActive(i); });
+$("usagePlot").addEventListener("pointerleave", () => { if (document.activeElement !== $("usagePlot")) { U.active = -1; hideTip(); } });
+$("usagePlot").addEventListener("focus", () => { if (U.geo && !$("usagePlot").matches(":hover")) setActive(series().length - 1); });
+$("usagePlot").addEventListener("blur", () => { U.active = -1; hideTip(); });
+$("usagePlot").addEventListener("keydown", ev => {
+  if (!U.geo) return;
+  const n = series().length;
+  let i = U.active < 0 ? n - 1 : U.active;
+  if (ev.key === "ArrowLeft") i = Math.max(0, i - 1);
+  else if (ev.key === "ArrowRight") i = Math.min(n - 1, i + 1);
+  else if (ev.key === "Home") i = 0;
+  else if (ev.key === "End") i = n - 1;
+  else return;
+  ev.preventDefault();
+  setActive(i);
+});
+
+function renderTable(list) {
+  const rows = list.slice().reverse().map(b => `<tr><td>${esc(U.range === "daily" ? longDate(b.key) : weekRange(b))}</td><td>${b.replies.toLocaleString()}</td><td>${Math.round(b.input).toLocaleString()}</td><td>${Math.round(b.output).toLocaleString()}</td><td>${Math.round(b.cached).toLocaleString()}</td><td>${esc(fmtCost(b.cost))}</td></tr>`).join("");
+  $("usageTable").innerHTML = `<table><thead><tr><th scope="col">${U.range === "daily" ? "Day" : "Week"}</th><th scope="col">Replies</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Re-read</th><th scope="col">Est. cost</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function modelName(id) {
+  const hit = ALL_MODELS.find(x => id === x.id || id.startsWith(x.id));
+  return hit ? hit.name : id || "Unknown";
+}
+function renderModels() {
+  const box = $("usageModels");
+  const ms = (U.data && U.data.models) || [];
+  box.hidden = !ms.length;
+  if (!ms.length) return;
+  box.innerHTML = `<h3>By model, last 30 days</h3><div class="tbl"><table><thead><tr><th scope="col">Model</th><th scope="col">Tokens</th><th scope="col">Est. cost</th></tr></thead><tbody>${ms.map(x => `<tr><td>${esc(modelName(x.model))}</td><td>${compact(x.tokens)}</td><td>${esc(fmtCost(x.cost))}</td></tr>`).join("")}</tbody></table></div>`;
+}
+async function loadUsage() {
+  U.loading = true;
+  renderUsage();
+  try {
+    const tz = (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || "UTC";
+    U.data = await apiJson("/api/usage?tz=" + encodeURIComponent(tz));
+  } catch (e) {
+    if (!U.data) toast(e.message);
+  }
+  U.loading = false;
+  renderUsage();
+}
+function openUsage() {
+  const dlg = $("usageDlg");
+  if (!dlg.open) dlg.showModal();
+  loadUsage();
+}
+$("usageBtn").onclick = openUsage;
+$("usageClose").onclick = () => $("usageDlg").close();
+$("usageDlg").addEventListener("click", e => { if (e.target === $("usageDlg")) $("usageDlg").close(); });
+$("usageDlg").addEventListener("close", hideTip);
+$("usageRange").onclick = e => { const b = e.target.closest("[data-range]"); if (!b) return; U.range = b.dataset.range; store.set("usageRange", U.range); renderUsage(); };
+$("usageMetric").onclick = e => { const b = e.target.closest("[data-metric]"); if (!b) return; U.metric = b.dataset.metric; store.set("usageMetric", U.metric); renderUsage(); };
+$("usageTableBtn").onclick = () => { U.table = !U.table; renderUsage(); };
+if (window.ResizeObserver) {
+  let lastW = 0;
+  new ResizeObserver(() => {
+    const w = $("usagePlot").clientWidth;
+    if (U.data && $("usageDlg").open && w && w !== lastW && !U.table) { lastW = w; renderUsage(); }
+  }).observe($("usageViz"));
+}
+
+/* ---------- updates ---------- */
+const UP_STEPS = [["download", "Download the new version"], ["verify", "Check that it's intact"], ["site", "Update the site"], ["computer", "Update your computer"], ["restart", "Restart"], ["online", "Come back online"]];
+const UP_ICON = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>'
+};
+
+function upRun() { return UP.data && UP.data.run ? UP.data.run : null; }
+function pageIsStale() { return !!(UP.data && UP.data.current && UP.data.current !== CFG.version); }
+function upKind() {
+  const u = UP.data;
+  const run = upRun();
+  if (run && run.state === "running") return "running";
+  if (run && run.state === "error") return "error";
+  if (run && run.state === "done" && pageIsStale()) return "done";
+  if (pageIsStale()) return "stale";
+  if (u && u.available) return "offer";
+  return "current";
+}
+function stepState(run, key) {
+  let st = run.steps[key] || (key === run.step ? "active" : "pending");
+  if (run.state === "error" && key === run.step && st !== "done") st = "error";
+  if (run.state === "done") st = "done";
+  return st;
+}
+function stepsHtml(run) {
+  return `<ol class="steps">${UP_STEPS.map(([k, label]) => {
+    const st = stepState(run, k);
+    const ic = st === "done" ? UP_ICON.check : st === "error" ? UP_ICON.x : st === "active" ? '<span class="spin"></span>' : "";
+    return `<li class="${st}"${st === "active" ? ' aria-current="step"' : ""}><span class="ic">${ic}</span><span>${esc(label)}</span></li>`;
+  }).join("")}</ol>`;
+}
+
+function renderPill() {
+  const b = $("updatePill");
+  const run = upRun();
+  const kind = upKind();
+  let text = "", short = "", cls = "pill";
+  if (kind === "running") {
+    const done = UP_STEPS.filter(([k]) => stepState(run, k) === "done").length;
+    text = `Updating ${done}/${UP_STEPS.length}`; short = `${done}/${UP_STEPS.length}`; cls += " busy";
+  } else if (kind === "error") { text = "Update failed"; short = "Failed"; cls += " bad"; }
+  else if (kind === "done" || kind === "stale") { text = "Updated · Reload"; short = "Reload"; }
+  else if (kind === "offer") { text = "Update available"; short = "Update"; }
+  b.hidden = !text;
+  b.className = cls;
+  $("pillText").textContent = text;
+  $("pillShort").textContent = short;
+  b.title = kind === "offer" ? `Version ${UP.data.latest} is ready` : "";
+}
+
+function renderUpdateDlg() {
+  const u = UP.data;
+  const body = $("updateBody");
+  const title = $("updateTitle");
+  const sub = $("updateSub");
+  if (!u) { title.textContent = "Updates"; sub.textContent = ""; body.innerHTML = '<p class="fine">Loading…</p>'; return; }
+  const run = upRun();
+  const kind = upKind();
+  const v = x => "v" + x;
+  const cmd = `<code>${esc(CFG.command)} update</code>`;
+  const siteNow = u.current;
+  let html = "";
+  if (kind === "running") {
+    title.textContent = `Updating to ${v(run.to)}`;
+    sub.textContent = `From ${v(run.from)}`;
+    html = stepsHtml(run) + `<p class="fine">${UP.failing > 1 ? "Reconnecting to the site… " : ""}${esc(CFG.name)} stays online while this happens, and you can leave this page open or come back to it from any device. The update keeps going on its own. Your chats aren't touched.</p>`;
+  } else if (kind === "done" || kind === "stale") {
+    const to = run && run.state === "done" ? run.to : siteNow;
+    title.textContent = `Updated to ${v(to)}`;
+    sub.textContent = "Your chats are all still here.";
+    const link = `${location.origin}/?updated=${encodeURIComponent(to)}`;
+    html = (run && run.state === "done" ? stepsHtml(run) : "") + `<p class="fine" style="margin-top:0">This page is still running ${v(CFG.version)}. Open the updated site to switch to ${v(to)}. The same link works on your other devices.</p><div class="linkbox"><span>${esc(link)}</span><button class="btn ghost" type="button" data-copy-link="${esc(link)}">${I.copy}<span>Copy</span></button></div><div class="dlg-actions"><a class="btn primary" href="${esc(link)}">Open the updated site</a></div>`;
+  } else if (kind === "error") {
+    title.textContent = "The update didn't finish";
+    sub.textContent = `${v(run.from)} to ${v(run.to)}`;
+    html = stepsHtml(run) + `<div class="note err">${esc(run.message || "Something went wrong.")}</div><p class="fine">Your chats are safe. You can also run ${cmd} on your computer to see what happened.</p><div class="dlg-actions">${u.available ? `<button class="btn primary" type="button" data-up="retry"${u.blocked ? " disabled" : ""}>Try again</button>` : ""}<button class="btn ghost" type="button" data-up="dismiss">Dismiss</button></div>${u.blocked && u.available ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}`;
+  } else if (kind === "offer") {
+    title.textContent = "Update available";
+    sub.textContent = u.released ? `Released ${u.released}` : "";
+    html = `<div class="vrow"><b>${v(u.current)}</b>${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'}<b>${v(u.latest)}</b></div>`;
+    if (u.notes.length) html += `<div class="sect" style="margin-top:0"><h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>`;
+    html += `<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and this page shows each step as it happens.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>`;
+    if (u.blocked) html += `<div class="note soft">${esc(u.blocked.message)}</div>`;
+    if (UP.error) html += `<div class="note err">${esc(UP.error)}</div>`;
+    html += `<div class="dlg-actions"><button class="btn primary" type="button" data-up="start"${u.blocked || UP.starting ? " disabled" : ""}>${UP.starting ? "Starting…" : "Update now"}</button><button class="btn ghost" type="button" data-up="later">Not now</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p>`;
+  } else {
+    title.textContent = "You're up to date";
+    sub.textContent = `${v(u.current)}${u.latest && u.latest !== u.current ? "" : " is the newest version"}`;
+    html = (u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : "") + `<div class="dlg-actions"><button class="btn ghost" type="button" data-up="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} checks for new versions by itself every half hour.</p>`;
+  }
+  body.innerHTML = html;
+}
+
+function schedulePoll() {
+  clearTimeout(UP.timer);
+  const run = upRun();
+  if (run && run.state === "running") UP.timer = setTimeout(pollUpdate, 1500);
+}
+async function pollUpdate() {
+  clearTimeout(UP.timer);
+  try {
+    const u = await apiJson("/api/update");
+    UP.failing = 0;
+    applyUpdate(u);
+  } catch {
+    UP.failing++;
+    if ($("updateDlg").open) renderUpdateDlg();
+    schedulePoll();
+  }
+}
+function applyUpdate(u) {
+  if (!u) return;
+  const prev = upRun();
+  UP.data = u;
+  const run = upRun();
+  if (run && run.state === "running" && UP.seen !== run.id) {
+    UP.seen = run.id;
+    if (!$("updateDlg").open) openUpdate();
+  }
+  if (prev && prev.state === "running" && run && run.state === "done" && !$("updateDlg").open) toast(`Updated to v${run.to}. Reload to use it.`, 8000);
+  // A page that loaded after the update has nothing to show for a finished run.
+  if (run && run.state === "done" && !pageIsStale() && !$("updateDlg").open && !UP.dismissing) {
+    UP.dismissing = true;
+    api("/api/update/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {}).finally(() => { UP.dismissing = false; });
+  }
+  renderPill();
+  if ($("updateDlg").open) renderUpdateDlg();
+  renderChrome();
+  schedulePoll();
+}
+function openUpdate() {
+  UP.error = "";
+  const dlg = $("updateDlg");
+  if (!dlg.open) dlg.showModal();
+  renderUpdateDlg();
+  if (!UP.data || upKind() === "current") pollUpdate();
+}
+async function upCall(path, body) {
+  return apiJson(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+}
+async function startUpdate() {
+  UP.error = "";
+  UP.starting = true;
+  renderUpdateDlg();
+  try {
+    applyUpdate(await upCall("/api/update/start", { to: UP.data.latest }));
+  } catch (e) {
+    UP.error = e.message === "Signed out" ? "" : e.message;
+    if (e.data && (e.data.code === "changed" || e.data.code === "current")) await pollUpdate();
+  }
+  UP.starting = false;
+  renderUpdateDlg();
+}
+$("updateBody").addEventListener("click", async e => {
+  const copy = e.target.closest("[data-copy-link]");
+  if (copy) { copyText(copy.dataset.copyLink, copy); return; }
+  const b = e.target.closest("[data-up]");
+  if (!b) return;
+  const act = b.dataset.up;
+  if (act === "later") $("updateDlg").close();
+  else if (act === "start") startUpdate();
+  else if (act === "check") {
+    UP.checking = true; renderUpdateDlg();
+    try { applyUpdate(await upCall("/api/update/check")); } catch (err) { toast(err.message); }
+    UP.checking = false; renderUpdateDlg();
+  } else if (act === "dismiss") {
+    try { applyUpdate(await upCall("/api/update/dismiss")); } catch (err) { toast(err.message); }
+    if (upKind() === "current" || upKind() === "offer") renderUpdateDlg();
+  } else if (act === "retry") {
+    try { applyUpdate(await upCall("/api/update/dismiss")); } catch {}
+    startUpdate();
+  }
+});
+$("updatePill").onclick = openUpdate;
+$("updateClose").onclick = () => $("updateDlg").close();
+$("updateDlg").addEventListener("click", e => { if (e.target === $("updateDlg")) $("updateDlg").close(); });
 
 renderPickerBtn();
 renderChrome();
