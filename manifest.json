@@ -1,20 +1,22 @@
 {
   "name": "claudeconnect",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "released": "2026-10-08",
   "notes": [
-    "Updates reach you faster: the site looks for a new version every minute instead of every half hour, and no longer waits on GitHub's five-minute cache.",
-    "No more \"Confirm update\". When an update finishes, the page switches to the new version by itself, as soon as nothing you were typing or waiting for could be lost.",
-    "The Updates panel shows the patch notes for every update: while it installs, when it's done, and for earlier updates. The first time you open a new version it opens on what changed.",
-    "The chat list is no longer cut off at 400: it shows up to 3,000 of the chats on your computer."
+    "Bring your claude.ai chats over: Settings → Chats reads claude.ai's data export, and they show up in the sidebar. Carry on in any of them; the first reply reads the conversation so far.",
+    "Plan usage reads the latest numbers as soon as you open it, so there's no Refresh button anymore.",
+    "Plan usage no longer says you've hit a limit when you haven't: past a plan limit with usage credits on, replies carry on, and it says so.",
+    "Usage credits are on the Plan usage page: whether they're on, in use or used up, and a switch to stop this site from using them.",
+    "After an update or a settings change, \"Updated\" and \"Reload\" go away once the page has reloaded, and stay away until the next one.",
+    "Looks more like ChatGPT: one chat list, a sidebar that folds into a strip of icons, and copy buttons that show under a message when you point at it."
   ],
   "files": {
     "ClaudeConnect.mjs": "2ad4647b8c16dceb459dbc7ce243a30223035c5cf5c0ac96ff4639d739c35fd7",
     "installer.mjs": "f302b63efbc2ee000497073367e3e79e837856aa78bddfe3457dfbcfb37593e0",
-    "agent/agent.mjs": "6fb7baa8a85fb7b199a11417c574f74a321bc9d1582b71561ce05be708d32b14",
+    "agent/agent.mjs": "6a95acac72fc275aa2f39270ba74f77cdb340baf86c556fefefa9e8145ef289b",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
-    "site/worker.js": "7e5164cd6aa75f12d4bf3b063e4bad7fad42eb0fabc4c77a8ceff69f1f459d5d",
-    "site/app.html": "7fc129f53924bfe4fb2e40243ea45bd4b2b4ea22337cce87a2571e15d476706d",
+    "site/worker.js": "1d70f87e366b327496645f6ada527b37d94d7a41d368d3aad81964482b757a5b",
+    "site/app.html": "cca05f6ca18f482469bd00348ae817746632f2c8579bd59d13c54ee6c956d8d1",
     "site/version.js": "13cbf80951c6c37d24ef63839932e07960647b39b3975864a58a0554853b9339",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"

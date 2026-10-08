@@ -31,6 +31,7 @@ const PLANS = {
   delete: [["site", "Delete the site and its chats"], ["computer", "Clean up your computer"]]
 };
 const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
+const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
 // A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
 // an open page within about a minute and a half; a page opened after a long gap waits for the answer instead of showing the old one.
 const CHECK_EVERY = 60000;
@@ -39,6 +40,11 @@ const CHECK_WAIT = 5 * 60000;
 const UPDATE_LOG_KEEP = 8;
 // The most chats listed in the sidebar (and the most the computer is asked to report). Matches MAX_SESSIONS in agent/sessions.mjs.
 const CHAT_LIST_MAX = 3000;
+// Chats imported from claude.ai: the most one batch from the page may hold, the most messages kept per chat, and how much of
+// the conversation the first reply in one is given to read.
+const IMPORT_MAX_BYTES = 8000000;
+const IMPORT_MAX_MESSAGES = 2000;
+const IMPORT_CONTEXT_CHARS = 150000;
 const ACK_WITHIN = 30000;
 const QUIET_LIMIT = 10 * 60000;
 const MAX_ARTIFACT = 1900000;
@@ -364,7 +370,8 @@ export class ChatgqlHub extends DurableObject {
     this.sql.exec("CREATE TABLE IF NOT EXISTS computer_sessions (id TEXT PRIMARY KEY, title TEXT, folder TEXT, updated INTEGER)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS hidden_sessions (id TEXT PRIMARY KEY)");
     // How many questions of the chat's Claude Code session are already here, and the session file's time when that was true.
-    for (const col of ["synced_turns INTEGER", "synced_at INTEGER", "folder TEXT"]) {
+    // origin: "claude.ai" for a chat imported from a claude.ai data export, else empty
+    for (const col of ["synced_turns INTEGER", "synced_at INTEGER", "folder TEXT", "origin TEXT"]) {
       try {
         this.sql.exec(`ALTER TABLE chats ADD COLUMN ${col}`);
       } catch {}
@@ -630,6 +637,8 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/state" && method === "GET") return json(await this.state(req));
     if (p === "/api/limits" && method === "GET") return json(await this.limitsView());
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
+    if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
+    if (p === "/api/import" && method === "POST") return this.importChats(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
     if (p === "/api/admin/delete" && method === "POST") return this.startDelete(req);
@@ -681,6 +690,7 @@ export class ChatgqlHub extends DurableObject {
       version: appVersion(this.env),
       agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
+      prefs: await this.prefs(),
       update: await this.updateInfo()
     };
   }
@@ -696,8 +706,21 @@ export class ChatgqlHub extends DurableObject {
       windows[key] = { pct: Math.max(0, Math.min(999, Math.round(w.pct))), resetsAt: Math.round(w.resetsAt) };
     }
     if (!Object.keys(windows).length) return;
-    const status = ["allowed", "allowed_warning", "rejected"].includes(raw.status) ? raw.status : "allowed";
-    await this.ctx.storage.put("limits", { at: Date.now(), windows, status });
+    const status = LIMIT_STATUS.includes(raw.status) ? raw.status : "allowed";
+    const rec = { at: Date.now(), windows, status };
+    // the window that is limiting right now, and when it resets
+    if (Number.isFinite(raw.resetsAt)) rec.resetsAt = Math.round(raw.resetsAt);
+    if (typeof raw.rateLimitType === "string" && /^[a-z0-9_]{1,40}$/.test(raw.rateLimitType)) rec.limitType = raw.rateLimitType;
+    // Usage credits ("extra usage" on claude.ai), as far as Claude Code reports them. An older program reports none of this.
+    const credits = {};
+    if (LIMIT_STATUS.includes(raw.overageStatus)) credits.status = raw.overageStatus;
+    if (typeof raw.overageDisabledReason === "string" && /^[a-z0-9_]{1,40}$/.test(raw.overageDisabledReason)) credits.reason = raw.overageDisabledReason;
+    if (Number.isFinite(raw.overageResetsAt)) credits.resetsAt = Math.round(raw.overageResetsAt);
+    if (raw.isUsingOverage === true || raw.overageInUse === true) credits.using = true;
+    else if (raw.isUsingOverage === false || raw.overageInUse === false) credits.using = false;
+    if (typeof raw.overageEnabled === "boolean") credits.enabled = raw.overageEnabled;
+    if (Object.keys(credits).length) rec.credits = credits;
+    await this.ctx.storage.put("limits", rec);
   }
 
   async limitsView() {
@@ -707,7 +730,50 @@ export class ChatgqlHub extends DurableObject {
     const windows = {};
     // A window that has reset since the reading no longer says how much is used: the page shows it as reset until the next reply.
     for (const [k, w] of Object.entries(l.windows)) windows[k] = { ...w, reset: w.resetsAt <= now };
-    return { at: l.at, status: l.status, windows };
+    const c = l.credits || null;
+    // Over a plan limit: Claude said "rejected", and the window that did it hasn't reset since. Without the limiting window's
+    // reset time (an older program), one of the windows shown has to be full and not reset.
+    const over = l.status === "rejected" && (Number.isFinite(l.resetsAt) ? l.resetsAt > now : Object.values(windows).some(w => !w.reset && w.pct >= 100));
+    // Over a limit with usage credits on isn't a stop: replies go on, paid from the credits.
+    const onCredits = !!c && (c.using === true || c.status === "allowed" || c.status === "allowed_warning");
+    return { at: l.at, status: l.status, windows, over, limited: over && !onCredits, resetsAt: l.resetsAt || null, credits: this.creditsView(c, over, now) };
+  }
+
+  // What the page says about usage credits. Null when Claude Code hasn't said anything about them.
+  creditsView(c, over, now) {
+    if (!c) return null;
+    const resetsAt = c.resetsAt && c.resetsAt > now ? c.resetsAt : null;
+    let state;
+    if (c.reason === "out_of_credits") state = "out";
+    else if (c.status === "rejected") state = "off";
+    else if (c.using || (over && c.status)) state = c.status === "allowed_warning" ? "near" : "using";
+    else if (c.status || c.enabled) state = "on";
+    else if (c.enabled === false) state = "off";
+    else return null;
+    return { state, reason: c.reason || "", resetsAt };
+  }
+
+  async prefs() {
+    return { useCredits: true, ...((await this.ctx.storage.get("prefs")) || {}) };
+  }
+
+  async setPrefs(req) {
+    const b = await req.json().catch(() => null);
+    if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
+    const p = await this.prefs();
+    if (typeof b.useCredits === "boolean") p.useCredits = b.useCredits;
+    await this.ctx.storage.put("prefs", p);
+    return json(p);
+  }
+
+  // With usage credits turned off here, nothing new is sent that would be paid from them: not while a plan limit is reached,
+  // and not to a model that only runs on them. A reply already running can still go past a limit; that's Claude's call.
+  async creditsBlock(model) {
+    if ((await this.prefs()).useCredits) return null;
+    if (model === "claude-fable-5-1") return { code: "credits_off", message: "Fable 5.1 runs on usage credits, and they're turned off for this site. Pick another model, or turn usage credits on in Plan usage." };
+    const l = await this.limitsView();
+    if (l && l.over) return { code: "credits_off", resetsAt: l.resetsAt, message: "You've reached your plan's limit, and usage credits are turned off for this site, so nothing more is sent until it resets. To keep going, turn usage credits on in Plan usage." };
+    return null;
   }
 
   async askLimits() {
@@ -965,7 +1031,7 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async getChat(id) {
-    const cols = "id, title, model, effort, running, created, updated, folder, session_id, synced_turns, synced_at";
+    const cols = "id, title, model, effort, running, created, updated, folder, origin, started, session_id, synced_turns, synced_at";
     let chat = this.one(`SELECT ${cols} FROM chats WHERE id = ?`, id);
     if (!chat) {
       const known = SESSION_ID.test(id) ? this.one("SELECT id, title, folder, updated FROM computer_sessions WHERE id = ? AND id NOT IN (SELECT id FROM hidden_sessions)", id.toLowerCase()) : null;
@@ -978,6 +1044,7 @@ export class ChatgqlHub extends DurableObject {
       chat = this.one(`SELECT ${cols} FROM chats WHERE id = ?`, id);
     }
     delete chat.session_id;
+    delete chat.started;
     delete chat.synced_turns;
     delete chat.synced_at;
     const messages = this.rows("SELECT id, role, content, meta, created FROM messages WHERE chat_id = ? ORDER BY created ASC, rowid ASC", id).map(m => ({ ...m, meta: m.meta ? JSON.parse(m.meta) : {} }));
@@ -995,7 +1062,7 @@ export class ChatgqlHub extends DurableObject {
   // ---- Claude Code's own chats on the computer, shown next to the ones started here
 
   chatList() {
-    const own = this.rows("SELECT id, title, updated, running, folder FROM chats ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX);
+    const own = this.rows("SELECT id, title, updated, running, folder, origin FROM chats ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX);
     const theirs = this.rows("SELECT id, title, updated, folder FROM computer_sessions WHERE id NOT IN (SELECT session_id FROM chats WHERE session_id IS NOT NULL) AND id NOT IN (SELECT id FROM chats) AND id NOT IN (SELECT id FROM hidden_sessions) ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX).map(r => ({ ...r, running: null, computer: 1 }));
     return [...own, ...theirs].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, CHAT_LIST_MAX);
   }
@@ -1084,6 +1151,94 @@ export class ChatgqlHub extends DurableObject {
     for (const m of messages) this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, ?, ?)", m.id, chatId, m.role, m.content, JSON.stringify(m.meta), m.created);
   }
 
+  // ---- chats from claude.ai. claude.ai keeps them on its own servers and has no way for another site to read them, so they
+  // come from the data export (Settings → Privacy → Export data on claude.ai): the page reads the export and sends it here in
+  // batches. A chat's id is the claude.ai conversation's, so importing the same export again adds only what's new.
+  async importChats(req) {
+    const raw = await req.text();
+    if (raw.length > IMPORT_MAX_BYTES) return json({ error: "That batch is too large." }, 413);
+    let b;
+    try {
+      b = JSON.parse(raw);
+    } catch {
+      return json({ error: "That couldn't be read." }, 400);
+    }
+    const list = b && Array.isArray(b.conversations) ? b.conversations.slice(0, 200) : null;
+    if (!list) return json({ error: "That couldn't be read." }, 400);
+    const str = (v, n) => (typeof v === "string" ? v : "").slice(0, n);
+    const time = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.round(Number(v)) : d);
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+    for (const c of list) {
+      const id = c && typeof c.id === "string" && SESSION_ID.test(c.id) ? c.id.toLowerCase() : null;
+      if (!id || this.one("SELECT id FROM hidden_sessions WHERE id = ?", id)) {
+        skipped++;
+        continue;
+      }
+      const have = this.one("SELECT origin, updated FROM chats WHERE id = ?", id);
+      // the same id as a chat that didn't come from claude.ai: leave that one alone
+      if (have && have.origin !== "claude.ai") {
+        skipped++;
+        continue;
+      }
+      const msgs = [];
+      let k = 0;
+      for (const m of Array.isArray(c.messages) ? c.messages.slice(-IMPORT_MAX_MESSAGES) : []) {
+        k++;
+        if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
+        const files = (Array.isArray(m.files) ? m.files.slice(0, 20) : []).map(f => ({ name: str(f && f.name, 120) || "file", size: Math.max(0, Math.round(Number(f && f.size)) || 0), type: "" }));
+        const content = str(m.content, 120000);
+        if (!content && !files.length) continue;
+        const mid = typeof m.id === "string" && SESSION_ID.test(m.id) ? `w-${m.id.toLowerCase()}` : `w-${id}-${k}`;
+        const meta = m.role === "user" ? { files, model: null, effort: null, mode: "claude", perm: "auto", origin: "claude.ai" } : { model: null, effort: null, mode: "claude", perm: "auto", context: null, tools: [], error: null, denials: 0, ms: null, thinking: str(m.thinking, 20000), thinkingMs: null, artifacts: [], origin: "claude.ai" };
+        msgs.push({ id: mid, role: m.role, content, meta, created: time(m.created, 0) });
+      }
+      if (!msgs.length) {
+        skipped++;
+        continue;
+      }
+      const first = msgs[0].created || Date.now();
+      const last = Math.max(time(c.updated, 0), ...msgs.map(m => m.created));
+      for (const m of msgs) if (!m.created) m.created = first;
+      const title = str(c.title, 200).replace(/\s+/g, " ").trim().slice(0, 120) || titleFrom(msgs.find(m => m.role === "user")?.content || "", []);
+      if (have) {
+        const before = this.one("SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?", id).n;
+        this.addImported(id, msgs);
+        if (this.one("SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?", id).n > before) {
+          this.sql.exec("UPDATE chats SET updated = MAX(updated, ?) WHERE id = ?", last, id);
+          updated++;
+        } else skipped++;
+        continue;
+      }
+      this.sql.exec("INSERT INTO chats (id, title, model, effort, session_id, started, created, updated, folder, origin) VALUES (?, ?, NULL, NULL, ?, 0, ?, ?, '', 'claude.ai')", id, title, crypto.randomUUID(), time(c.created, first), last);
+      this.addImported(id, msgs);
+      added++;
+    }
+    return json({ ok: true, added, updated, skipped });
+  }
+
+  // The conversation so far of a chat imported from claude.ai, for the first reply in it to read. The newest part, if it's long.
+  importedContext(chatId) {
+    const rows = this.rows("SELECT role, content, meta FROM messages WHERE chat_id = ? ORDER BY created ASC, rowid ASC", chatId);
+    const parts = [];
+    let size = 0;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      let files = [];
+      try {
+        files = (JSON.parse(r.meta || "{}").files || []).map(f => f.name);
+      } catch {}
+      const body = (r.content || "") + (files.length ? `\n(attached: ${files.join(", ")})` : "");
+      const part = r.role === "user" ? `<user>\n${body}\n</user>` : `<assistant>\n${body}\n</assistant>`;
+      if (size + part.length > IMPORT_CONTEXT_CHARS && parts.length) break;
+      parts.unshift(part.slice(-IMPORT_CONTEXT_CHARS));
+      size += part.length;
+    }
+    if (!parts.length) return "";
+    return `This conversation started on claude.ai and was carried over here. Here it is so far${parts.length < rows.length ? " (the latest part)" : ""}, so you can carry on from it:\n\n<conversation>\n${parts.join("\n")}\n</conversation>\n\nNow the next message:\n\n`;
+  }
+
   // A conversation that so far exists only on the computer becomes a chat here the first time it is opened. Its id is the
   // session's id, so it is the same chat from then on, and sending in it carries on the same session.
   async importSession(s) {
@@ -1103,7 +1258,7 @@ export class ChatgqlHub extends DurableObject {
   // Bring a chat up to date with Claude Code's record of it: anything added on the computer since (in the terminal, say)
   // is added here. Best effort, and not more than every few seconds per chat.
   async syncChat(chat, ms = 8000) {
-    if (!chat.session_id || chat.running || !this.historyOn()) return;
+    if (!chat.session_id || chat.running || !this.historyOn() || (chat.origin === "claude.ai" && !chat.started)) return;
     if (Date.now() - (this.lastSync.get(chat.id) || 0) < envNum(this.env.SYNC_MIN_MS, 5000)) return;
     this.lastSync.set(chat.id, Date.now());
     // A chat from before this was possible has no record of where it stands; what is here is taken to be all of it so far.
@@ -1156,7 +1311,11 @@ export class ChatgqlHub extends DurableObject {
     const perm = mode === "code" && PERMS.includes(b.perm) ? b.perm : "auto";
     const ws = this.agent();
     if (!ws) return json({ error: `${siteName(this.env)} is offline right now. Run ${commandName(this.env)} to bring it back online, then send again.`, code: "offline" }, 503);
+    const held = await this.creditsBlock(model);
+    if (held) return json({ error: held.message, code: held.code, resetsAt: held.resetsAt || null }, 409);
     if (chat) await this.syncChat(chat, 6000);
+    // A chat imported from claude.ai has no Claude Code session yet: the first reply gets the conversation so far to read.
+    const earlier = chat && chat.origin === "claude.ai" && !chat.started ? this.importedContext(chat.id) : "";
     const now = Date.now();
     if (!chat) {
       chat = { id: crypto.randomUUID(), title: titleFrom(text, files), model, effort, session_id: crypto.randomUUID(), started: 0, running: null, created: now, updated: now };
@@ -1170,7 +1329,7 @@ export class ChatgqlHub extends DurableObject {
     const ts = new TransformStream();
     this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
-    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
+    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: earlier + text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
     this.armRun(runId, 30000, `${siteName(this.env)} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
     return new Response(ts.readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
   }

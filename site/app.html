@@ -67,15 +67,26 @@ svg{display:block}
 
 /* ---- layout */
 .app{--side-w:260px;--panel-w:0px;display:grid;grid-template-columns:var(--side-w) minmax(0,1fr) var(--panel-w);height:100vh;height:100dvh}
-.app.side-collapsed{--side-w:0px}
-.app.side-collapsed .side{display:none}
+/* collapsed, the sidebar is a rail of icons, like ChatGPT's: the logo (which opens it again), new chat, search, and you */
+@media (min-width:861px){
+  .app.side-collapsed{--side-w:52px}
+  .app.side-collapsed .side-top{height:auto;padding:10px 8px 6px;justify-content:center}
+  .app.side-collapsed #hideSide,.app.side-collapsed .history-label,.app.side-collapsed .history,.app.side-collapsed .nav-item span,.app.side-collapsed .nav-item input,.app.side-collapsed .who{display:none}
+  .app.side-collapsed .brand{padding:5px;cursor:e-resize}
+  .app.side-collapsed .side-nav{padding:0 8px;align-items:center}
+  .app.side-collapsed .nav-item{width:36px;justify-content:center;padding:0}
+  .app.side-collapsed .side-foot{margin-top:auto;border-top:0;padding:8px 6px}
+  .app.side-collapsed .profile{padding:4px;justify-content:center}
+  .app.side-collapsed .pmenu{right:auto;width:280px}
+}
 .app.panel-open{--panel-w:min(50vw,860px)}
 .side{grid-column:1;background:var(--surface-2);border-right:1px solid var(--border);display:flex;flex-direction:column;min-width:0;min-height:0}
 .side-top{display:flex;align-items:center;justify-content:space-between;padding:10px 8px 6px 12px;height:56px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;text-decoration:none;color:var(--text);font-weight:600;font-size:15px;padding:4px 6px;border-radius:10px}
 .brand:hover{background:var(--hover)}
 .brand svg,.brand img{width:26px;height:26px;flex:none;border-radius:7px;object-fit:contain}
-.brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand span{display:none}
+.top-title{font-size:18px;font-weight:500;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;color:var(--text)}
 .icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;color:var(--text-2);flex:none}
 .icon-btn:hover{background:var(--hover);color:var(--text)}
 .icon-btn svg{width:20px;height:20px}
@@ -88,7 +99,6 @@ svg{display:block}
 .nav-item input:focus::placeholder{color:var(--text-3)}
 .history-label{padding:18px 18px 6px;font-size:12px;font-weight:600;color:var(--text-3)}
 .history{flex:1;overflow-y:auto;padding:0 8px 10px;min-height:0}
-.group{font-size:12px;color:var(--text-3);padding:14px 10px 4px;font-weight:600}
 .item{position:relative;display:flex;align-items:center;border-radius:10px}
 .item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:38px;padding:0 10px;color:var(--text);text-decoration:none;border-radius:10px;font-size:14px}
 .item a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -105,6 +115,8 @@ svg{display:block}
 .item .live{width:7px;height:7px;border-radius:50%;background:var(--text);flex:none;animation:pulse 1.4s ease-in-out infinite}
 .item input{flex:1;margin:3px 4px;padding:5px 8px;border:1px solid var(--border-2);border-radius:8px;background:var(--surface);outline:none}
 .empty-list{padding:14px 12px;color:var(--text-3);font-size:13px}
+.linkish{display:inline;color:var(--link);font-size:inherit;text-align:left}
+.linkish:hover{text-decoration:underline}
 .side-foot{padding:8px;border-top:1px solid var(--border);position:relative}
 .profile{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;text-align:left}
 .profile:hover,.profile[aria-expanded="true"]{background:var(--hover)}
@@ -119,8 +131,7 @@ svg{display:block}
 .main{grid-column:2;display:flex;flex-direction:column;min-width:0;min-height:0;height:100vh;height:100dvh;position:relative}
 .top{flex:none;height:56px;display:flex;align-items:center;gap:8px;padding:0 12px}
 .top .grow{flex:1}
-.only-collapsed,.only-narrow{display:none}
-.app.side-collapsed .only-collapsed{display:grid}
+.only-narrow{display:none}
 
 /* ---- menus, and the bar under the message box */
 .menu,.pmenu,.pop{background:var(--elevated);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}
@@ -193,7 +204,12 @@ svg{display:block}
 .thread-inner{max-width:768px;margin:0 auto;padding:10px 24px 36px}
 .msg{margin:24px 0}
 .msg.user{display:flex;flex-direction:column;align-items:flex-end}
-.bubble{max-width:min(80%,640px);background:var(--user);padding:10px 18px;border-radius:24px;white-space:pre-wrap;word-wrap:break-word;font-size:16px;line-height:1.6}
+.bubble{max-width:min(70%,640px);background:var(--user);padding:10px 16px;border-radius:18px;white-space:pre-wrap;word-wrap:break-word;font-size:16px;line-height:1.6}
+.ufoot{display:flex;justify-content:flex-end;gap:2px;margin-top:4px;min-height:30px;opacity:0;transition:opacity .15s}
+.ufoot button{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--text-3)}
+.ufoot button:hover{background:var(--hover);color:var(--text)}
+.ufoot svg{width:16px;height:16px}
+.msg.user:hover .ufoot,.msg.user:focus-within .ufoot{opacity:1}
 .attach-row{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-bottom:6px;max-width:85%}
 .chip{display:inline-flex;align-items:center;gap:7px;padding:5px 8px 5px 10px;border:1px solid var(--border-2);border-radius:12px;background:var(--surface);font-size:13px;max-width:240px}
 .chip svg{width:14px;height:14px;color:var(--text-3);flex:none}
@@ -299,8 +315,9 @@ svg{display:block}
 .note.err{background:var(--danger-soft);color:var(--danger)}
 .note.soft{background:var(--surface-3);color:var(--text-2)}
 .note.warn{background:var(--warn-soft);color:var(--warn)}
-.foot{display:flex;align-items:center;gap:2px;margin-top:6px;color:var(--text-3);font-size:12.5px;min-height:30px}
-.foot .lbl{margin-right:6px}
+.foot{display:flex;align-items:center;gap:2px;margin-top:6px;color:var(--text-3);font-size:12.5px;min-height:30px;opacity:0;transition:opacity .15s}
+.msg.bot:hover .foot,.msg.bot:focus-within .foot,.msg.bot:last-child .foot{opacity:1}
+.foot .lbl{margin-left:6px}
 .foot button{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--text-3)}
 .foot button:hover{background:var(--hover);color:var(--text)}
 .foot svg{width:16px;height:16px}
@@ -466,6 +483,12 @@ svg{display:block}
 .mt-bar.hot i{background:var(--warn)}
 .mt-bar.full i{background:var(--danger)}
 .mt-sub{margin-top:6px;color:var(--text-3);font-size:13px}
+.credits{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
+.credits p{margin:0 0 14px;color:var(--text-2);font-size:13.5px}
+.state{font-size:12.5px;font-weight:500;padding:2px 10px;border-radius:999px;background:var(--surface-3);color:var(--text-2)}
+.state.using,.state.on{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.state.near{background:var(--warn-soft);color:var(--warn)}
+.state.out{background:var(--danger-soft);color:var(--danger)}
 @media (max-width:1280px) and (min-width:861px){
   .app.panel-open{--side-w:0px}
   .app.panel-open .side{display:none}
@@ -479,7 +502,6 @@ svg{display:block}
   .app.side-open .side{transform:none;box-shadow:var(--shadow)}
   .app.side-open .scrim{display:block;position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.4)}
   .only-narrow{display:grid}
-  .only-collapsed,.app.side-collapsed .only-collapsed{display:none}
   .only-wide{display:none}
   .top{padding:0 6px;gap:4px}
   .modes button{padding:0 10px}
@@ -506,6 +528,7 @@ svg{display:block}
   .c-modes{order:3;flex:1 1 100%;margin:0;padding:6px 2px 0;border-top:1px solid var(--border)}
   .c-right{order:2}
 }
+@media (hover:none){.foot,.ufoot{opacity:1}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -513,7 +536,7 @@ svg{display:block}
 <div class="app" id="app">
   <aside class="side" id="side" aria-label="Chats">
     <div class="side-top">
-      <a class="brand" href="/" id="brand">__BRAND_MARK__<span>__SITE_NAME__</span></a>
+      <a class="brand" href="/" id="brand" aria-label="__SITE_NAME__">__BRAND_MARK__<span>__SITE_NAME__</span></a>
       <button class="icon-btn" id="hideSide" title="Close sidebar" aria-label="Close sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M9 4v16"/></svg></button>
     </div>
     <div class="side-nav">
@@ -534,7 +557,7 @@ svg{display:block}
   <main class="main is-empty" id="main">
     <header class="top">
       <button class="icon-btn only-narrow" id="openSide" aria-label="Open chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h16"/></svg></button>
-      <button class="icon-btn only-collapsed" id="showSide" title="Open sidebar" aria-label="Open sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M9 4v16"/></svg></button>
+      <span class="top-title" id="topTitle">__SITE_NAME__</span>
       <div class="grow"></div>
       <button class="pill" id="updatePill" type="button" hidden><i></i><span class="only-wide" id="pillText"></span><span class="only-narrow" id="pillShort"></span></button>
     </header>
@@ -608,7 +631,7 @@ const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra hi
 const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", fable: false, version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
 const ALL_MODELS = [
-  { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable. Built for long, hard tasks.", efforts: EFF, def: "high", tag: "Uses usage credits" },
+  { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable. Built for long, hard tasks.", efforts: EFF, def: "high", tag: "Uses usage credits", credits: true },
   { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Deep reasoning for complex work.", efforts: EFF, def: "medium" },
   { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work.", efforts: EFF, def: "medium" },
   { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks.", efforts: [], def: null }
@@ -663,6 +686,7 @@ const I = {
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1-4.2A8 8 0 1 1 20 12z"/></svg>',
   gauge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 18a8.5 8.5 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13.5" r="1"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
@@ -931,7 +955,7 @@ function renderCtx() {
 
 function noteHtml() { return switchNote() ? `<div class="pick-note">${I.info}<span>${esc(switchNote())}</span></div>` : ""; }
 function popModel() {
-  return MODELS.map(x => `<button class="pm${x.id === S.model ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
+  return MODELS.map(x => `<button class="pm${x.id === S.model ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}${x.credits && !useCredits() ? ", which are off here" : ""}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
 }
 function popEffort() {
   const m = modelOf(S.model);
@@ -1068,31 +1092,20 @@ async function loadState() {
   renderChrome();
 }
 
-function groupOf(t) {
-  const d = new Date(t);
-  const now = new Date();
-  const day = 86400000;
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  if (t >= start) return "Today";
-  if (t >= start - day) return "Yesterday";
-  if (t >= start - 7 * day) return "Previous 7 days";
-  if (d.getFullYear() === now.getFullYear()) return d.toLocaleString(undefined, { month: "long" });
-  return String(d.getFullYear());
-}
+// one list, newest first, like ChatGPT's. Under the title: the project folder of a chat from Claude Code, or claude.ai.
 function renderHistory() {
   const h = $("history");
   const q = S.query.trim().toLowerCase();
   const list = S.chats.filter(c => !q || (c.title || "").toLowerCase().includes(q) || (c.folder || "").toLowerCase().includes(q));
   if (!list.length) {
-    h.innerHTML = `<div class="empty-list">${q ? "No chats match that search." : "Your chats will show up here."}</div>`;
+    h.innerHTML = `<div class="empty-list">${q ? "No chats match that search." : 'Your chats will show up here. <button type="button" class="linkish" data-import>Bring over your claude.ai chats</button>'}</div>`;
     return;
   }
   let html = "";
-  let last = "";
   for (const c of list) {
-    const g = groupOf(c.updated);
-    if (g !== last) { html += `<div class="group">${esc(g)}</div>`; last = g; }
-    html += `<div class="item${c.id === S.chatId ? " on" : ""}" data-id="${c.id}"><a href="/c/${c.id}" data-open="${c.id}"${c.folder ? ` class="sub" title="Started in ${esc(c.folder)}"` : ""}>${c.folder ? `<span class="tt"><span>${esc(c.title || "New chat")}</span><small>${esc(c.folder)}</small></span>` : `<span>${esc(c.title || "New chat")}</span>`}${c.running ? '<i class="live" title="Answering"></i>' : ""}</a><button class="more" type="button" data-more="${c.id}" aria-label="Chat options" aria-expanded="false">${I.dots}</button></div>`;
+    const sub = c.origin === "claude.ai" ? "claude.ai" : c.folder || "";
+    const tip = c.origin === "claude.ai" ? "From claude.ai" : `Started in ${c.folder}`;
+    html += `<div class="item${c.id === S.chatId ? " on" : ""}" data-id="${c.id}"><a href="/c/${c.id}" data-open="${c.id}"${sub ? ` class="sub" title="${esc(tip)}"` : ""}>${sub ? `<span class="tt"><span>${esc(c.title || "New chat")}</span><small>${esc(sub)}</small></span>` : `<span>${esc(c.title || "New chat")}</span>`}${c.running ? '<i class="live" title="Answering"></i>' : ""}</a><button class="more" type="button" data-more="${c.id}" aria-label="Chat options" aria-expanded="false">${I.dots}</button></div>`;
   }
   h.innerHTML = html;
 }
@@ -1108,6 +1121,7 @@ function closeMenus() {
   document.querySelectorAll(".more[aria-expanded=true]").forEach(b => b.setAttribute("aria-expanded", "false"));
 }
 $("history").addEventListener("click", e => {
+  if (e.target.closest("[data-import]")) { $("app").classList.remove("side-open"); return openSettings("chats"); }
   const more = e.target.closest("[data-more]");
   const open = e.target.closest("[data-open]");
   if (more) {
@@ -1190,7 +1204,8 @@ function filesHtml(files) {
 function userEl(m) {
   const el = document.createElement("div");
   el.className = "msg user";
-  el.innerHTML = filesHtml(m.meta && m.meta.files) + (m.content ? `<div class="bubble">${esc(m.content)}</div>` : "");
+  el.innerHTML = filesHtml(m.meta && m.meta.files) + (m.content ? `<div class="bubble">${esc(m.content)}</div><div class="ufoot"><button type="button" data-copy-msg title="Copy" aria-label="Copy message">${I.copy}</button></div>` : "");
+  el._raw = m.content || "";
   return el;
 }
 function fmtDur(ms) {
@@ -1233,7 +1248,8 @@ function botEl(m) {
   if (rest.length) html += `<div class="arts">${rest.map(artCard).join("")}</div>`;
   if (meta.error) html += `<div class="note ${meta.error === "Stopped." ? "soft" : "err"}">${meta.error === "Stopped." ? "You stopped this reply." : esc(meta.error)}</div>`;
   if (meta.denials) html += `<div class="note soft">Safety checks blocked ${meta.denials === 1 ? "an action" : meta.denials + " actions"} during this reply.</div>`;
-  html += `<div class="foot"><span class="lbl">${esc(runLabel(meta.model || S.model, meta.effort))}</span>${m.content ? `<button type="button" data-copy-msg title="Copy" aria-label="Copy reply">${I.copy}</button>` : ""}</div>`;
+  const lbl = meta.origin === "claude.ai" ? "From claude.ai" : runLabel(meta.model || S.model, meta.effort);
+  html += `<div class="foot">${m.content ? `<button type="button" data-copy-msg title="Copy" aria-label="Copy reply">${I.copy}</button>` : ""}<span class="lbl">${esc(lbl)}</span></div>`;
   el.innerHTML = html;
   el._raw = m.content || "";
   highlight(el);
@@ -1392,7 +1408,8 @@ function newChat(push) {
   $("input").focus();
 }
 $("newChat").onclick = () => { newChat(true); $("app").classList.remove("side-open"); };
-$("brand").onclick = e => { e.preventDefault(); newChat(true); };
+// the logo starts a new chat; in the rail it opens the sidebar
+$("brand").onclick = e => { e.preventDefault(); if (railed()) showSide(); else newChat(true); };
 window.addEventListener("popstate", () => {
   const m = location.pathname.match(/^\/c\/([\w-]+)/);
   if (m) openChat(m[1], false);
@@ -1538,8 +1555,8 @@ async function send() {
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
     S.busy = false;
-    restore(j.error || `Something went wrong (${res.status}).`);
-    if (j.code === "offline") loadState();
+    restore((j.error || `Something went wrong (${res.status}).`) + (j.resetsAt ? ` It resets ${relTime(j.resetsAt)}.` : ""));
+    if (j.code === "offline" || j.code === "credits_off") loadState();
     updateSend();
     return;
   }
@@ -1734,7 +1751,10 @@ $("hideSide").onclick = () => {
   if (matchMedia("(max-width: 860px)").matches) $("app").classList.remove("side-open");
   else { $("app").classList.add("side-collapsed"); store.set("collapsed", true); }
 };
-$("showSide").onclick = () => { $("app").classList.remove("side-collapsed"); store.set("collapsed", false); };
+function railed() { return $("app").classList.contains("side-collapsed") && !matchMedia("(max-width: 860px)").matches; }
+function showSide() { $("app").classList.remove("side-collapsed"); store.set("collapsed", false); }
+// in the rail, search opens the sidebar to type in
+$("search").closest(".nav-item").addEventListener("click", () => { if (railed()) { showSide(); $("search").focus(); } });
 if (store.get("collapsed", false)) $("app").classList.add("side-collapsed");
 
 document.title = CFG.name;
@@ -1786,6 +1806,7 @@ function profileMenu() {
   const chip = wk && !wk.reset ? `<span class="chip-r">${Math.round(wk.pct)}%</span>` : "";
   return `<div class="hdr">${esc(st.email || CFG.name)}</div>` +
     `<button type="button" role="menuitem" data-pm="usage">${I.gauge}<span>Plan usage</span>${chip}</button>` +
+    `<button type="button" role="menuitem" data-pm="chats">${I.chat}<span>Import claude.ai chats</span></button>` +
     `<button type="button" role="menuitem" data-pm="settings">${I.gear}<span>Settings</span></button>` +
     (u && u.available ? `<button type="button" role="menuitem" data-pm="updates">${I.up}<span>Update available</span><span class="chip-r up">v${esc(u.latest)}</span></button>` : "") +
     `<hr><div class="row" style="padding:0 4px 0 10px;height:38px;gap:10px;flex-wrap:nowrap"><span style="color:var(--text-2);display:flex">${I.sun.replace("<svg", '<svg style="width:18px;height:18px"')}</span><span>Theme</span><span class="themes">${THEMES.map(([k, label, ic]) => `<button type="button" data-theme-set="${k}" title="${label}" aria-label="${label}">${ic}</button>`).join("")}</span></div>`;
@@ -1809,77 +1830,133 @@ $("pmenu").addEventListener("click", e => {
   closeProfile();
   $("app").classList.remove("side-open");
   if (b.dataset.pm === "usage") openUsage();
-  else openSettings(b.dataset.pm === "updates" ? "updates" : "general");
+  else openSettings(b.dataset.pm === "updates" || b.dataset.pm === "chats" ? b.dataset.pm : "general");
 });
 
-/* ---------- plan usage: the real percentages Claude Code reads from the signed-in plan ---------- */
+/* ---------- plan usage: the real percentages Claude Code reads from the signed-in plan, and usage credits ---------- */
 const METERS = [["five_hour", "Current session", "Resets every 5 hours"], ["seven_day", "Weekly limit", "Resets every 7 days"]];
+const CREDIT_STATE = {
+  using: ["In use", "You're past a plan limit, so replies are being paid from your usage credits."],
+  near: ["Almost at your limit", "Replies are being paid from your usage credits, and you're close to the spending limit you set for them."],
+  on: ["On", "If you reach a plan limit, replies carry on and are paid from your usage credits."],
+  off: ["Off", "Reaching a plan limit stops replies until it resets."],
+  out: ["Used up", "There are no usage credits left, so reaching a plan limit stops replies until it resets."]
+};
+const CREDIT_WHY = {
+  overage_not_provisioned: "They aren't set up on your Claude account.",
+  org_level_disabled: "Your organization has turned them off.",
+  org_service_level_disabled: "Your organization has turned them off.",
+  org_level_disabled_until: "Your organization's spending cap is reached until it resets.",
+  member_level_disabled: "They're turned off for your seat.",
+  seat_tier_level_disabled: "They're turned off for your seat.",
+  seat_tier_zero_credit_limit: "The spending limit for your seat is zero.",
+  group_zero_credit_limit: "The spending limit for your group is zero.",
+  member_zero_credit_limit: "Your spending limit is zero."
+};
+const U = { refreshing: false, saving: false };
+function useCredits() { return !(S.state && S.state.prefs && S.state.prefs.useCredits === false); }
+function creditsHtml(l) {
+  const c = l && l.credits;
+  const [label, text] = c ? CREDIT_STATE[c.state] || CREDIT_STATE.off : ["Not reported yet", "Claude Code says whether usage credits are on with the replies to your messages."];
+  const why = c && c.state === "off" && CREDIT_WHY[c.reason] ? " " + CREDIT_WHY[c.reason] : "";
+  const resets = c && c.resetsAt && c.state !== "on" ? ` Their period resets ${relTime(c.resetsAt)}.` : "";
+  const on = useCredits();
+  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div><p class="fine" style="margin:0">Your balance, promotional credits and spending limit are on claude.ai, which doesn't share them with other sites. <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">See them on claude.ai</a></p></div>`;
+}
 function renderUsage() {
   const l = S.state && S.state.limits;
   const body = $("usageBody");
-  const refreshing = !!U.refreshing;
-  const btn = `<button class="btn ghost" type="button" data-usage="refresh"${refreshing || (S.state && !S.state.agent.online) ? " disabled" : ""}>${refreshing ? '<span class="spin"></span>Reading…' : I.retry + "Refresh"}</button>`;
+  const offline = !!(S.state && !S.state.agent.online);
+  $("usageSub").textContent = U.refreshing ? "Updating…" : l ? `From your Claude plan · updated ${new Date(l.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
   const shown = l ? METERS.filter(([k]) => l.windows[k]) : [];
+  let html = "";
   if (!shown.length) {
-    $("usageSub").textContent = "";
-    body.innerHTML = `<p style="margin:0 0 6px;color:var(--text-2)">No reading yet.</p><p class="fine" style="margin-top:0">${esc(CFG.name)} shows how much of your Claude plan you've used once Claude Code reports it, which happens with every reply. Send a message, or read it now.</p>${S.state && !S.state.agent.online ? `<div class="note soft">${esc(CFG.name)} is offline, so there's nothing to read it from. Run <code>${esc(CFG.command)}</code> on your computer.</div>` : ""}<div class="dlg-actions">${btn}</div>`;
-    return;
+    html = U.refreshing ? '<div class="wait" style="margin:0"><span class="spin"></span><span>Reading your plan usage…</span></div>' : `<p style="margin:0 0 6px;color:var(--text-2)">No reading yet.</p><p class="fine" style="margin-top:0">${esc(CFG.name)} shows how much of your Claude plan you've used once Claude Code reports it, which happens with every reply.</p>`;
+  } else {
+    html = `<div class="meters">${shown.map(([k, label, sub]) => {
+      const w = l.windows[k];
+      const pct = Math.round(w.pct);
+      const cls = w.reset ? "" : pct >= 100 ? " full" : pct >= 80 ? " hot" : "";
+      return `<div><div class="mt-top"><b>${label}</b><span>${w.reset ? "Reset" : pct + "% used"}</span></div><div class="mt-bar${cls}"><i style="width:${w.reset ? 0 : Math.min(100, pct)}%"></i></div><div class="mt-sub">${w.reset ? "It has reset. This updates with your next reply." : `Resets ${esc(relTime(w.resetsAt))}`} · ${sub}</div></div>`;
+    }).join("")}</div>`;
+    if (l.limited) html += `<div class="note err">You've hit a limit. Replies resume when it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}.</div>`;
+    else if (l.over && !useCredits()) html += `<div class="note warn">You've reached a plan limit. Usage credits are turned off for this site, so new messages wait until it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}.</div>`;
   }
-  $("usageSub").textContent = `From your Claude plan · updated ${new Date(l.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-  body.innerHTML = `<div class="meters">${shown.map(([k, label, sub]) => {
-    const w = l.windows[k];
-    const pct = Math.round(w.pct);
-    const cls = w.reset ? "" : pct >= 100 ? " full" : pct >= 80 ? " hot" : "";
-    return `<div><div class="mt-top"><b>${label}</b><span>${w.reset ? "Reset" : pct + "% used"}</span></div><div class="mt-bar${cls}"><i style="width:${w.reset ? 0 : Math.min(100, pct)}%"></i></div><div class="mt-sub">${w.reset ? "It has reset. This updates with your next reply." : `Resets ${esc(relTime(w.resetsAt))}`} · ${sub}</div></div>`;
-  }).join("")}</div>${l.status === "rejected" ? '<div class="note err">You\'ve hit a limit. Replies resume when it resets.</div>' : ""}<p class="fine">Read by Claude Code on your computer after each reply, so it's only as fresh as your last message. Refresh sends one tiny message to read the latest numbers.</p><div class="dlg-actions">${btn}</div>`;
+  html += creditsHtml(l);
+  if (offline) html += `<div class="note soft">${esc(CFG.name)} is offline, so this is the last reading. Run <code>${esc(CFG.command)}</code> on your computer for a fresh one.</div>`;
+  else html += '<p class="fine">Read by Claude Code on your computer each time you open this, and after every reply.</p>';
+  body.innerHTML = html;
 }
-const U = { refreshing: false };
 function openUsage() {
   if (!$("usageDlg").open) $("usageDlg").showModal();
   renderUsage();
+  refreshUsage();
 }
+// Every time Plan usage opens, the computer reads the latest numbers (one tiny message to the cheapest model).
 async function refreshUsage() {
-  if (U.refreshing) return;
+  if (U.refreshing || !S.state || !S.state.agent.online) return;
   U.refreshing = true;
   renderUsage();
-  const before = S.state && S.state.limits ? S.state.limits.at : 0;
+  const before = S.state.limits ? S.state.limits.at : 0;
   try {
-    await apiJson("/api/limits/refresh", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 1500));
-      const l = await apiJson("/api/limits");
-      if (l && l.at > before) { S.state.limits = l; break; }
+    const r = await apiJson("/api/limits/refresh", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    // read moments ago: what's there is the latest
+    if (r.wait) S.state.limits = (await apiJson("/api/limits")) || S.state.limits;
+    else {
+      for (let i = 0; i < 20 && $("usageDlg").open; i++) {
+        await new Promise(res => setTimeout(res, 1500));
+        const l = await apiJson("/api/limits");
+        if (l && l.at > before) { S.state.limits = l; break; }
+      }
     }
   } catch (e) {
-    toast(e.message === "Signed out" ? "" : e.message);
+    if (e.message !== "Signed out" && $("usageDlg").open) toast(e.message);
   }
   U.refreshing = false;
   renderUsage();
   renderLimitNote();
 }
-$("usageBody").addEventListener("click", e => { if (e.target.closest("[data-usage=refresh]")) refreshUsage(); });
+async function setUseCredits(on) {
+  U.saving = true;
+  renderUsage();
+  try {
+    const p = await apiJson("/api/prefs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ useCredits: on }) });
+    if (S.state) S.state.prefs = p;
+  } catch (e) {
+    if (e.message !== "Signed out") toast(e.message);
+  }
+  U.saving = false;
+  renderUsage();
+  renderLimitNote();
+}
+$("usageBody").addEventListener("click", e => { const t = e.target.closest("[data-usage=credits]"); if (t && !U.saving) setUseCredits(!useCredits()); });
 $("usageClose").onclick = () => $("usageDlg").close();
 $("usageDlg").addEventListener("click", e => { if (e.target === $("usageDlg")) $("usageDlg").close(); });
 function renderLimitNote() {
   const note = $("cNote");
   if (switchNote()) return;
-  for (const [key, label] of [["five_hour", "5-hour"], ["seven_day", "weekly"]]) {
-    const w = windowOf(key);
-    if (w && !w.reset && w.pct >= 90) {
-      note.textContent = `${Math.round(w.pct)}% of your ${label} limit used · resets ${relTime(w.resetsAt)}`;
-      note.className = "c-note warn grow";
-      return;
+  const l = S.state && S.state.limits;
+  const c = l && l.credits;
+  const at = l && l.resetsAt ? " · resets " + relTime(l.resetsAt) : "";
+  let text = "";
+  if (l && l.limited) text = "You've hit a limit" + at;
+  else if (l && l.over && !useCredits()) text = "At a plan limit, and usage credits are off here" + at;
+  else if (l && l.over && c && (c.state === "using" || c.state === "near")) text = "Using usage credits" + at;
+  else {
+    for (const [key, label] of [["five_hour", "5-hour"], ["seven_day", "weekly"]]) {
+      const w = windowOf(key);
+      if (w && !w.reset && w.pct >= 90) { text = `${Math.round(w.pct)}% of your ${label} limit used · resets ${relTime(w.resetsAt)}`; break; }
     }
   }
-  note.className = "c-note grow";
-  note.textContent = "";
+  note.textContent = text;
+  note.className = text ? "c-note warn grow" : "c-note grow";
 }
 
 /* ---------- settings: name, look, address, updates, delete; and the checklist for whatever is running ---------- */
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SET = { tab: "general", draft: null, address: "", confirm: "", err: "", busy: false, justUpdated: false };
-const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
+const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["chats", "Chats", I.chat], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
 
 function freshDraft() {
   SET.draft = { displayName: CFG.name, fable: !!CFG.fable, logo: undefined, favicon: undefined };
@@ -1937,7 +2014,7 @@ function paneHtml() {
   const d = SET.draft;
   const u = UP.data;
   if (SET.tab === "general") {
-    return `${blockedNote()}<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(d.displayName)}" autocomplete="off"><small>Shown at the top of the sidebar and in the browser tab. The command <code>${esc(CFG.command)}</code> stays the same.</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${d.fable}" aria-label="Fable 5.1"></button></div></div>`;
+    return `${blockedNote()}<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(d.displayName)}" autocomplete="off"><small>Shown at the top of the page and in the browser tab. The command <code>${esc(CFG.command)}</code> stays the same.</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${d.fable}" aria-label="Fable 5.1"></button></div></div>`;
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
@@ -1949,6 +2026,7 @@ function paneHtml() {
     return `${blockedNote()}<div class="sec"><h3>Current address</h3><div class="kv"><span>${esc(location.origin)}</span><button type="button" class="btn ghost" data-copy-link="${esc(location.origin)}">${I.copy}<span>Copy</span></button></div></div><div class="sec"><h3>Change the address</h3><p>This is the name in the web address. You'll get a new link; the old one stops working.</p><div class="field"><div class="input-row"><input id="fAddr" value="${esc(SET.address)}" placeholder="${esc(h.name)}" maxlength="63" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="New address"><span>${esc(h.suffix)}</span></div>${bad ? '<div class="err-text">Use lowercase letters, numbers and dashes, starting and ending with a letter or number.</div>' : ""}${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><ul class="warn-list"><li>The new site is set up first. This one keeps working while you turn on Cloudflare Access for the new address.</li><li>Once the new site is working, this one is deleted.</li><li>Chats stay with the old site, so they're deleted with it. Your files are kept.</li></ul><button class="btn primary" type="button" data-act="move"${!SET.address || bad || (UP.data && UP.data.blockedAdmin) ? " disabled" : ""}>Set up the new address</button></div>`;
   }
   if (SET.tab === "updates") return updatesHtml();
+  if (SET.tab === "chats") return importHtml();
   const ok = SET.confirm === CFG.name;
   return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the folder Claude works in are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
 }
@@ -2016,6 +2094,7 @@ $("setBody").addEventListener("input", e => {
 });
 $("setBody").addEventListener("change", e => {
   if (e.target.id === "fImg" && SET.pickKey) { readImage(e.target.files[0], SET.pickKey); e.target.value = ""; }
+  if (e.target.id === "fImport" && e.target.files[0]) importExport(e.target.files[0]);
 });
 $("setBody").addEventListener("click", async e => {
   const tab = e.target.closest("[data-tab-set]");
@@ -2085,10 +2164,140 @@ async function doAct(act) {
     return renderSettings();
   }
   if (act === "reload") return location.reload();
+  if (act === "import") return IMP.busy || $("fImport").click();
   if (act === "hide") return closeSettings();
 }
 $("setClose").onclick = closeSettings;
 $("setDlg").addEventListener("click", e => { if (e.target === $("setDlg")) closeSettings(); });
+
+/* ---------- chats from claude.ai, from its data export ---------- */
+// claude.ai keeps its chats on its own servers and has no way for another site to read them, so they come from the export
+// claude.ai emails (a .zip with conversations.json in it). It's read here in the browser, and the conversations are sent to
+// the site in batches; nothing goes anywhere else. Importing the same export again only adds what's new.
+const IMP = { busy: false, phase: "", done: 0, total: 0, added: 0, updated: 0, skipped: 0, err: "", finished: false };
+const IMPORT_BATCH = 3000000;
+function importHtml() {
+  let state = "";
+  if (IMP.busy) state = `<div class="wait"><span class="spin"></span><span>${IMP.phase === "read" ? "Reading the export…" : `Bringing over ${IMP.done} of ${IMP.total} chats…`}</span></div>`;
+  else if (IMP.err) state = `<div class="note err">${esc(IMP.err)}</div>`;
+  else if (IMP.finished) state = `<div class="note soft">${IMP.added || IMP.updated ? `Done: ${IMP.added} chat${IMP.added === 1 ? "" : "s"} added${IMP.updated ? `, ${IMP.updated} brought up to date` : ""}. They're in the sidebar.` : "Nothing new in that export."}${IMP.skipped ? ` ${IMP.skipped} left out: empty, or deleted here before.` : ""}</div>`;
+  return `<div class="sec"><h3>Your chats from claude.ai</h3><p>claude.ai keeps its chats on its own servers and doesn't let other sites read them, even with your sign-in, so they come over in claude.ai's data export. They're listed in the sidebar with your other chats, and you can carry on in any of them: the first reply reads the conversation so far.</p><ol class="howto"><li>On <a href="https://claude.ai/settings/data-privacy-controls" target="_blank" rel="noopener noreferrer">claude.ai</a>, open <b>Settings</b> &rarr; <b>Privacy</b> and choose <b>Export data</b>.</li><li>claude.ai emails you a link. Download the <b>.zip</b> file it gives you.</li><li>Choose that file here. A newer export later adds only what's new.</li></ol>${state}<div class="dlg-actions"><button class="btn primary" type="button" data-act="import"${IMP.busy ? " disabled" : ""}>${IMP.busy ? "Importing…" : "Choose the export…"}</button></div><input type="file" id="fImport" accept=".zip,.json,application/zip,application/json" hidden><p class="fine" style="margin-top:14px">The file is opened in this browser. Only the conversations in it are sent, to ${esc(CFG.name)} and nowhere else. Projects and files you uploaded to claude.ai aren't in the export; their names are kept with the messages.</p></div>`;
+}
+function renderImport() { if ($("setDlg").open && SET.tab === "chats" && !upRun()) renderSettings(); }
+
+// One file out of a .zip. Enough of the format for an export: stored or deflated entries, and the zip64 fields a big one needs.
+async function unzipEntry(buf, want) {
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const bad = new Error("That .zip file couldn't be read.");
+  let end = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  if (end < 0) throw bad;
+  let count = dv.getUint16(end + 10, true);
+  let p = dv.getUint32(end + 16, true);
+  if ((count === 0xffff || p === 0xffffffff) && end >= 20 && dv.getUint32(end - 20, true) === 0x07064b50) {
+    const z = Number(dv.getBigUint64(end - 12, true));
+    if (z + 56 <= buf.length && dv.getUint32(z, true) === 0x06064b50) { count = Number(dv.getBigUint64(z + 32, true)); p = Number(dv.getBigUint64(z + 48, true)); }
+  }
+  const td = new TextDecoder();
+  for (let n = 0; n < count && p + 46 <= buf.length && dv.getUint32(p, true) === 0x02014b50; n++) {
+    const method = dv.getUint16(p + 10, true);
+    let size = dv.getUint32(p + 20, true);
+    const plain = dv.getUint32(p + 24, true);
+    const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+    let at = dv.getUint32(p + 42, true);
+    const name = td.decode(buf.subarray(p + 46, p + 46 + nl));
+    if (want(name)) {
+      for (let e = p + 46 + nl; e + 4 <= p + 46 + nl + xl; e += 4 + dv.getUint16(e + 2, true)) {
+        if (dv.getUint16(e, true) !== 1) continue;
+        let q = e + 4;
+        if (plain === 0xffffffff) q += 8;
+        if (size === 0xffffffff) { size = Number(dv.getBigUint64(q, true)); q += 8; }
+        if (at === 0xffffffff) at = Number(dv.getBigUint64(q, true));
+        break;
+      }
+      if (at + 30 > buf.length || dv.getUint32(at, true) !== 0x04034b50) throw bad;
+      const start = at + 30 + dv.getUint16(at + 26, true) + dv.getUint16(at + 28, true);
+      const data = buf.subarray(start, start + size);
+      if (method === 0) return td.decode(data);
+      if (method !== 8) throw new Error("That .zip file is packed in a way this page can't open. Unzip it and choose conversations.json instead.");
+      if (!window.DecompressionStream) throw new Error("This browser can't open .zip files. Unzip it and choose conversations.json instead.");
+      return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+    }
+    p += 46 + nl + xl + cl;
+  }
+  return null;
+}
+async function readExport(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const text = buf[0] === 0x50 && buf[1] === 0x4b ? await unzipEntry(buf, n => /(^|\/)conversations\.json$/i.test(n)) : new TextDecoder().decode(buf);
+  if (text === null) throw new Error("There's no conversations.json in that file. Choose the .zip from claude.ai's export email.");
+  let data;
+  try { data = JSON.parse(text); } catch { data = null; }
+  if (!Array.isArray(data)) throw new Error("That doesn't look like a claude.ai export. Choose the .zip from claude.ai's export email, or the conversations.json in it.");
+  return data;
+}
+// A claude.ai conversation as the site keeps it: its text, thinking, the names of attached files, and code it wrote.
+function fromExport(c) {
+  if (!c || typeof c !== "object" || typeof c.uuid !== "string") return null;
+  const str = v => (typeof v === "string" ? v : "");
+  const messages = [];
+  for (const m of Array.isArray(c.chat_messages) ? c.chat_messages : []) {
+    if (!m || (m.sender !== "human" && m.sender !== "assistant")) continue;
+    const blocks = Array.isArray(m.content) ? m.content.filter(b => b && typeof b === "object") : [];
+    let text = blocks.filter(b => b.type === "text").map(b => str(b.text)).filter(Boolean).join("\n\n");
+    for (const b of blocks) {
+      const art = b.type === "tool_use" && b.input && typeof b.input === "object" ? b.input : null;
+      if (art && typeof art.content === "string" && art.content) text += `${text ? "\n\n" : ""}**${str(art.title) || "Artifact"}**\n\n\`\`\`${str(art.language).replace(/[^\w+#.-]/g, "")}\n${art.content}\n\`\`\``;
+    }
+    if (!text) text = str(m.text);
+    const names = new Set();
+    const files = [...(Array.isArray(m.attachments) ? m.attachments : []), ...(Array.isArray(m.files) ? m.files : [])].filter(f => f && str(f.file_name) && !names.has(f.file_name) && names.add(f.file_name)).map(f => ({ name: f.file_name, size: Number(f.file_size) || 0 }));
+    const thinking = blocks.filter(b => b.type === "thinking").map(b => str(b.thinking)).filter(Boolean).join("\n\n");
+    if (!text && !files.length) continue;
+    messages.push({ id: str(m.uuid), role: m.sender === "human" ? "user" : "assistant", content: text.slice(0, 120000), thinking: thinking.slice(0, 20000), files, created: Date.parse(m.created_at) || 0 });
+  }
+  if (!messages.length) return null;
+  return { id: c.uuid, title: str(c.name).trim(), created: Date.parse(c.created_at) || 0, updated: Date.parse(c.updated_at) || 0, messages: messages.slice(-2000) };
+}
+async function importExport(file) {
+  if (IMP.busy) return;
+  Object.assign(IMP, { busy: true, phase: "read", done: 0, total: 0, added: 0, updated: 0, skipped: 0, err: "", finished: false });
+  renderImport();
+  try {
+    const raw = await readExport(file);
+    const convs = raw.map(fromExport).filter(Boolean);
+    Object.assign(IMP, { phase: "send", total: convs.length, skipped: raw.length - convs.length });
+    renderImport();
+    let batch = [];
+    let size = 0;
+    const flush = async () => {
+      if (!batch.length) return;
+      const r = await apiJson("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conversations: batch }) });
+      IMP.added += r.added || 0;
+      IMP.updated += r.updated || 0;
+      IMP.skipped += r.skipped || 0;
+      IMP.done += batch.length;
+      batch = [];
+      size = 0;
+      renderImport();
+    };
+    for (const c of convs) {
+      let n = JSON.stringify(c).length;
+      // a very long conversation keeps its newest part
+      while (n > IMPORT_BATCH && c.messages.length > 1) { c.messages = c.messages.slice(Math.ceil(c.messages.length / 4)); n = JSON.stringify(c).length; }
+      if (batch.length && (size + n > IMPORT_BATCH || batch.length >= 100)) await flush();
+      batch.push(c);
+      size += n;
+    }
+    await flush();
+    IMP.finished = true;
+  } catch (e) {
+    IMP.err = e.message === "Signed out" ? "" : e.message || "That couldn't be imported.";
+  }
+  IMP.busy = false;
+  renderImport();
+  loadChats();
+}
 
 /* ---------- whatever is running: the checklist ---------- */
 function upRun() { return UP.data && UP.data.run ? UP.data.run : null; }
@@ -2254,6 +2463,7 @@ async function pollUpdate() {
   if ($("setDlg").open && upRun()) renderSettings();
   schedulePoll();
 }
+function finishedHere(run) { return !!run && run.state === "done" && !pageIsStale() && UP.seen !== run.id; }
 function applyUpdate(u) {
   if (!u) return;
   const prev = upRun();
@@ -2265,10 +2475,15 @@ function applyUpdate(u) {
     if (!$("setDlg").open) openSettings();
   }
   if (prev && prev.state === "running" && run && run.state === "done" && !$("setDlg").open) toast(run.kind === "settings" ? "Your changes are live. Reload to see them." : `Updated to v${run.to}. Switching to it…`, 8000);
-  // A page that loaded after a job finished has nothing to show for it.
-  if (run && run.state === "done" && run.kind !== "settings" && !pageIsStale() && UP.seen !== run.id && !$("setDlg").open && !UP.dismissing) {
-    UP.dismissing = true;
-    api("/api/update/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {}).finally(() => { UP.dismissing = false; });
+  // A finished update or change that this page didn't watch is already in it: the page was loaded (or reloaded) after it was
+  // done. So there's nothing to say about it anymore, here or on any other device, and it's cleared until the next one. Only
+  // a page that watched it, or is still on the old version, says "Updated · Reload", and only until it reloads once.
+  if (finishedHere(run)) {
+    UP.data = { ...u, run: null };
+    if (!UP.dismissing) {
+      UP.dismissing = true;
+      api("/api/update/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {}).finally(() => { UP.dismissing = false; });
+    }
   }
   renderPill();
   if ($("setDlg").open) renderSettings();

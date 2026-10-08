@@ -743,13 +743,21 @@ function limitsFrom(info) {
   }
   // Older builds only name the window that is limiting right now.
   if (!Object.keys(windows).length && Number.isFinite(info.utilization) && Number.isFinite(info.resetsAt) && (info.rateLimitType === "five_hour" || info.rateLimitType === "seven_day")) windows[info.rateLimitType] = { pct: info.utilization * 100, resetsAt: info.resetsAt };
-  return Object.keys(windows).length ? { windows, status: info.status } : null;
+  if (!Object.keys(windows).length) return null;
+  // Which window is limiting, and the usage credits ("extra usage"): whether they're on, in use, or used up. A plan limit
+  // that has been reached while credits are on isn't a stop: replies carry on, paid from the credits.
+  const out = { windows, status: info.status };
+  for (const k of ["rateLimitType", "overageStatus", "overageDisabledReason"]) if (typeof info[k] === "string") out[k] = info[k];
+  for (const k of ["resetsAt", "overageResetsAt"]) if (Number.isFinite(info[k])) out[k] = info[k];
+  for (const k of ["isUsingOverage", "overageInUse", "overageEnabled"]) if (typeof info[k] === "boolean") out[k] = info[k];
+  return out;
 }
 
 function noteLimits(info) {
   const got = limitsFrom(info);
   if (!got) return;
-  LIMITS = { windows: { ...((LIMITS && LIMITS.windows) || {}), ...got.windows }, status: got.status };
+  // every event describes the whole current state, apart from windows it didn't see this time
+  LIMITS = { ...got, windows: { ...((LIMITS && LIMITS.windows) || {}), ...got.windows } };
   clearTimeout(limitsTimer);
   limitsTimer = setTimeout(() => LIMITS && send({ type: "limits", limits: LIMITS }), 400);
 }

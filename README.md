@@ -36,6 +36,7 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 | --- | --- |
 | **General** | The site's name, and whether Fable 5.1 shows in the model picker. The site is redeployed in place, so **your chats are kept**. |
 | **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. Same in-place redeploy. |
+| **Chats** | Brings your claude.ai chats over from claude.ai's data export (see [Chats from claude.ai](#chats-from-claudeai)). |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
 | **Updates** | Shows when a new version is out and installs it in place. |
 | **Delete site** | Deletes the site and every chat in it, then removes the setup from your computer. The folder Claude works in is kept. You type the site's name to confirm. |
@@ -58,7 +59,11 @@ These need the program on your computer to be 1.4.0 or newer. On an older one th
 
 ### Plan usage
 
-**Plan usage** in the account menu shows how much of your Claude plan you've used: the current 5-hour session and the weekly limit, as percentages, with when each resets. These are the real numbers from your Claude account, not an estimate. Claude Code reads them from Anthropic's responses to every reply and reports them to ClaudeConnect, so they're as fresh as your last message. **Refresh** sends one tiny message to the cheapest model to read the latest.
+**Plan usage** in the account menu shows how much of your Claude plan you've used: the current 5-hour session and the weekly limit, as percentages, with when each resets. These are the real numbers from your Claude account, not an estimate. Claude Code reads them from Anthropic's responses to every reply and reports them to ClaudeConnect. Each time you open Plan usage it reads the latest by itself, with one tiny message to the cheapest model (at most every 20 seconds).
+
+It also shows your **usage credits** (claude.ai's "extra usage"): whether they're on, in use because you're past a plan limit, close to the spending limit you set, used up, or off (and why, when Claude says). Past a plan limit with credits on, replies carry on, so the page says you're using credits rather than that you've hit a limit. "You've hit a limit" only shows when replies really have stopped, and only until the limit resets.
+
+**Use usage credits from this site** is a switch on the same page, kept on the site so it applies on every device. Turned off, the site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1 (which runs on credits) is paused. A reply already under way can still go past the limit; that part is Claude's. Your credit balance, promotional credits and spending limit are only on claude.ai, which doesn't share them with other sites, so the page links there.
 
 Plans billed per token (an API key) don't report these, so nothing is shown. Claude Code marks this field as internal, so a future version could change it; if it disappears, the page just shows nothing.
 
@@ -77,7 +82,7 @@ Every chat here, in **Claude** or **Claude Code**, is a normal Claude Code conve
 - **Carry on from the site.** It resumes the same conversation, in the folder it began in, so Claude Code sees the same project and the same history. You can pick it up again in the terminal afterwards with `claude --resume`.
 - **Delete** on the site only hides a chat from the site (so it doesn't reappear). Nothing is deleted on your computer.
 
-Only a list (titles and the last part of each folder's name) goes to the site until you open a chat; then that chat's text is copied. Very long chats bring the latest part (up to 300 turns and about 3.5 MB), and the rest stays on your computer. Chats from claude.ai in the browser aren't stored on your computer, so they can't be shown here.
+Only a list (titles and the last part of each folder's name) goes to the site until you open a chat; then that chat's text is copied. Very long chats bring the latest part (up to 300 turns and about 3.5 MB), and the rest stays on your computer. Chats from claude.ai in the browser aren't stored on your computer; they come over another way, below.
 
 The sidebar lists up to 3,000 chats. It can only list what Claude Code still has: Claude Code deletes chats it hasn't touched for 30 days unless you raise `cleanupPeriodDays` in `~/.claude/settings.json` (to keep them all, set it to a large number such as `36500`). A chat you've opened on the site stays on the site even after Claude Code has deleted its copy.
 
@@ -91,9 +96,19 @@ If you'd rather share less, set `history` in `config.json` in the ClaudeConnect 
 
 This needs the program on your computer to be 1.5.0 or newer. Updating from the site brings it up to date.
 
+## Chats from claude.ai
+
+claude.ai keeps its chats on its own servers and has no way for another site to read them, not even with your sign-in. So they come over in claude.ai's own data export:
+
+1. On claude.ai open **Settings** → **Privacy** and choose **Export data**.
+2. claude.ai emails you a link. Download the `.zip`.
+3. On your site open **Settings** → **Chats** (or **Import claude.ai chats** in the account menu) and choose that file.
+
+The file is opened in your browser; only the conversations in it are sent, to your site and nowhere else. They're listed in the sidebar with your other chats, marked **claude.ai**. Open one and carry on: the first reply is given the conversation so far to read (the latest 150,000 characters of it if it's longer), and from then on it's a normal chat. Importing a newer export later only adds what's new, and a chat you've deleted on the site isn't brought back. Projects and uploaded files aren't in claude.ai's export, so only their names are kept with the messages.
+
 ## Updating
 
-The site checks this repository for a newer version every minute (skipping GitHub's own five-minute cache) and shows **Update available**. Click it for the patch notes, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done the page switches to the new version by itself, as soon as nothing you were typing, attaching or waiting for could be lost (**Reload now** is there if you'd rather not wait). It's the same address, so there's no new link. You can also run `<command> update` in a terminal.
+The site checks this repository for a newer version every minute (skipping GitHub's own five-minute cache) and shows **Update available**. Click it for the patch notes, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done the page switches to the new version by itself, as soon as nothing you were typing, attaching or waiting for could be lost (**Reload now** is there if you'd rather not wait). It's the same address, so there's no new link. Once a page has loaded the new version, **Updated** and **Reload** are gone, on every device, until the next update (the same goes for a change in Settings). You can also run `<command> update` in a terminal.
 
 The **Updates** panel in Settings keeps the patch notes: what an update brings is shown while it installs and when it's done, the first time each browser opens the new version it opens on them, and **Earlier updates** lists the last few.
 
