@@ -167,6 +167,8 @@ async function main() {
     }
   }
   writeFileSync(join(STAGE, "manifest.json"), raw);
+  // The installer imports its helpers as ES modules; this tells Node so, wherever the download folder happens to be.
+  writeFileSync(join(STAGE, "package.json"), JSON.stringify({ name: "claudeconnect-setup", private: true, type: "module" }));
   await report("download", "done");
   await report("verify", "active");
   step = "site";
@@ -181,8 +183,8 @@ async function main() {
   process.exit(r.status === null ? 1 : r.status);
 }
 
-if (Number(process.versions.node.split(".")[0]) < 20) {
-  console.error(`ClaudeConnect needs Node.js 20 or newer, and you have ${process.version}. Install the current LTS from nodejs.org, then run this again.`);
+if (Number(process.versions.node.split(".")[0]) < 22) {
+  console.error(`ClaudeConnect needs Node.js 22 or newer, and you have ${process.version}. Install the current LTS from nodejs.org, then run this again.`);
   process.exit(1);
 }
 if (!existsSync(os.homedir())) {

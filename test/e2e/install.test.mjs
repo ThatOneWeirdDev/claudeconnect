@@ -73,7 +73,7 @@ test("a first install, then an update, through the real launcher and installer",
   for (const f of ["agent.mjs", "installer.mjs", "ClaudeConnect.mjs", "manifest.json", "package.json", "config.json"]) assert.ok(existsSync(join(dir, f)), f);
   assert.equal(sha(join(dir, "agent.mjs")), RELEASE.files["agent/agent.mjs"]);
   assert.equal(sha(join(dir, "ClaudeConnect.mjs")), RELEASE.files["ClaudeConnect.mjs"]);
-  for (const f of ["worker.js", "app.html", "usage.js", "version.js"]) assert.equal(sha(join(dir, "site", f)), RELEASE.files["site/" + f], f);
+  for (const f of ["worker.js", "app.html", "version.js", "names.js", "image.js"]) assert.equal(sha(join(dir, "site", f)), RELEASE.files["site/" + f], f);
   assert.equal(readFileSync(join(dir, "site", "brand.js"), "utf8"), 'export default {"logo":null,"favicon":null};\n');
   assert.ok(!existsSync(join(dir, "stage")), "the download folder is cleaned up");
 
@@ -81,7 +81,7 @@ test("a first install, then an update, through the real launcher and installer",
   assert.equal(wr.name, "my-site");
   assert.equal(wr.account_id, "acct-1");
   assert.equal(wr.kv_namespaces[0].id, "kv-new");
-  assert.deepEqual(wr.vars, { SITE_NAME: "My Site", AI_NAME: "Buddy", COMMAND: "MySite", SHOW_FABLE: "0", APP_VERSION: RELEASE.version, UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main" });
+  assert.deepEqual(wr.vars, { SITE_NAME: "My Site", AI_NAME: "Buddy", COMMAND: "MySite", SHOW_FABLE: "0", APP_VERSION: RELEASE.version, UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "my-site" });
 
   const cfg1 = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   assert.equal(cfg1.site, "https://my-site.testacct.workers.dev");
@@ -134,4 +134,85 @@ test("a first install, then an update, through the real launcher and installer",
   }
   assert.ok(pid > 0, "a new agent is running");
   assert.equal(running(firstPid), false, "the old agent is gone");
+});
+
+test("the one-line install script sets everything up, and tells you if Node is too old or missing", async t => {
+  const github = await startRepo(ROOT);
+  const home = mkdtempSync(join(tmpdir(), "cc-onelinesh-"));
+  const cf = await startFakeCloudflare(home);
+  const bin = join(home, "bin");
+  mkdirSync(bin, { recursive: true });
+  const { makeFakes } = await import("../helpers/computer.mjs");
+  makeFakes(bin);
+  const env = { ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"), CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50" };
+  const dir = join(home, ".claudeconnect");
+  t.after(async () => {
+    try {
+      process.kill(Number(readFileSync(join(dir, "agent.pid"), "utf8")), "SIGKILL");
+    } catch {}
+    await github.close();
+    await cf.close();
+    rmSync(home, { recursive: true, force: true });
+  });
+  const sh = (args, e = env) =>
+    new Promise(resolve => {
+      const child = spawn("/bin/sh", [join(ROOT, "install.sh"), ...args], { env: e, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      child.stdout.on("data", d => (out += d));
+      child.stderr.on("data", d => (out += d));
+      const timer = setTimeout(() => child.kill("SIGKILL"), 120000);
+      child.on("close", status => {
+        clearTimeout(timer);
+        resolve({ status, out });
+      });
+    });
+
+  const ok = await sh(["--name", "Script Site", "--no-autostart", "--no-fable"]);
+  assert.equal(ok.status, 0, ok.out);
+  assert.match(ok.out, new RegExp(`Downloading ${RELEASE.version}`));
+  const cfg = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+  assert.equal(cfg.displayName, "Script Site");
+  assert.equal(sha(join(dir, "agent.mjs")), RELEASE.files["agent/agent.mjs"]);
+  assert.ok(existsSync(join(dir, "ClaudeConnect.mjs")), "a copy of the launcher stays for updates");
+  // no Node at all
+  const noNode = await sh([], { ...env, PATH: join(home, "nonexistent") });
+  assert.equal(noNode.status, 1);
+  assert.match(noNode.out, /needs Node\.js 22 or newer, and it isn't installed/);
+  // a Node that is too old
+  const old = join(home, "oldbin");
+  mkdirSync(old, { recursive: true });
+  writeFileSync(join(old, "node"), '#!/bin/sh\nif [ "$1" = "-p" ]; then echo 20; else echo v20.11.0; fi\n');
+  chmodSync(join(old, "node"), 0o755);
+  const tooOld = await sh([], { ...env, PATH: `${old}:/usr/bin:/bin` });
+  assert.equal(tooOld.status, 1);
+  assert.match(tooOld.out, /needs Node\.js 22 or newer, and you have v20\.11\.0/);
+  // GitHub unreachable
+  const down = await sh([], { ...env, CLAUDECONNECT_RAW: "http://127.0.0.1:9" });
+  assert.equal(down.status, 1);
+  assert.match(down.out, /Couldn't download http:\/\/127\.0\.0\.1:9/);
+});
+
+test("npx works: the package's bin runs the launcher", async t => {
+  const home = mkdtempSync(join(tmpdir(), "cc-npx-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const run = (cmd, args, env = {}) =>
+    new Promise(resolve => {
+      const child = spawn(cmd, args, { cwd: home, env: { ...process.env, HOME: home, ...env } });
+      let out = "";
+      child.stdout.on("data", d => (out += d));
+      child.stderr.on("data", d => (out += d));
+      child.on("close", status => resolve({ status, out }));
+    });
+  const packed = await run("npm", ["pack", ROOT, "--pack-destination", home, "--silent"]);
+  assert.equal(packed.status, 0, packed.out);
+  const tgz = join(home, packed.out.trim().split("\n").pop());
+  const prefix = join(home, "prefix");
+  const installed = await run("npm", ["install", "--prefix", prefix, "--no-audit", "--no-fund", "--silent", tgz]);
+  assert.equal(installed.status, 0, installed.out);
+  const link = join(prefix, "node_modules", ".bin", "claudeconnect");
+  assert.ok(existsSync(link), "the claudeconnect command exists");
+  // run it with GitHub unreachable: it must start, and fail the way the launcher does, not with a missing-file error
+  const ran = await run(link, [], { CLAUDECONNECT_RAW: "http://127.0.0.1:9", CLAUDECONNECT_RETRY_MS: "20" });
+  assert.equal(ran.status, 1);
+  assert.match(ran.out, /couldn't reach 127\.0\.0\.1/);
 });

@@ -18,6 +18,9 @@ process.stdin.on("data", d => (prompt += d)).on("end", () => {
   const out = o => console.log(JSON.stringify(o));
   out({ type: "system", subtype: "init", model: "claude-opus-5-5" });
   out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } });
+  // the shape of a real event, captured from Claude Code 2.1.293: fractions of each window, resets in epoch seconds
+  const now = Math.floor(Date.now() / 1000);
+  out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", resetsAt: now + 3 * 3600, rateLimitType: "five_hour", utilization: 0.42, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3 * 3600 }, seven_day: { utilization: 0.17, resetsAt: now + 4 * 86400 } } } });
   out({ type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0.0123,
     usage: { input_tokens: 11, output_tokens: 22, cache_read_input_tokens: 333, cache_creation_input_tokens: 44 },
     modelUsage: { "claude-opus-5-5": { inputTokens: 11, outputTokens: 22, cacheReadInputTokens: 333, cacheCreationInputTokens: 44, costUSD: 0.0123 } },
@@ -39,7 +42,7 @@ if (/ deploy /.test(" " + a + " ")) {
   mkdirSync(join(home, "deploys"), { recursive: true });
   const n = require("node:fs").readdirSync(join(home, "deploys")).length + 1;
   copyFileSync(join(process.cwd(), "wrangler.jsonc"), join(home, "deploys", n + ".json"));
-  for (const f of ["worker.js", "app.html", "usage.js", "version.js"]) if (!existsSync(join(process.cwd(), f))) { console.error("missing " + f); process.exit(2); }
+  for (const f of ["worker.js", "app.html", "version.js", "names.js", "image.js"]) if (!existsSync(join(process.cwd(), f))) { console.error("missing " + f); process.exit(2); }
   console.log("Deployed (fake)"); process.exit(0);
 }
 console.error("fake npx: unexpected " + a); process.exit(3);
@@ -50,6 +53,27 @@ export function makeFakes(bin) {
   writeFileSync(join(bin, "npx"), FAKE_NPX);
   chmodSync(join(bin, "claude"), 0o755);
   chmodSync(join(bin, "npx"), 0o755);
+}
+
+// Every live process (other than this one) that was started with this folder as its home. Linux only, which is
+// where the tests run; elsewhere there is nothing to find and the pid-file kill in the callers still applies.
+function onThisHome(home) {
+  const found = [];
+  let entries = [];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return found;
+  }
+  for (const e of entries) {
+    if (!/^\d+$/.test(e) || Number(e) === process.pid) continue;
+    try {
+      if (/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${e}/stat`, "utf8"))) continue;
+      const env = readFileSync(`/proc/${e}/environ`, "utf8").split("\0");
+      if (env.includes(`HOME=${home}`)) found.push(Number(e));
+    } catch {}
+  }
+  return found;
 }
 
 export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
@@ -65,12 +89,19 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   copyFileSync(join(ROOT, "ClaudeConnect.mjs"), join(dir, "ClaudeConnect.mjs"));
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ version: oldVersion, files: {} }));
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "claudeconnect", private: true, type: "module" }));
+  // a complete install: the setup program and the files of the deployed site sit next to the agent
+  copyFileSync(join(ROOT, "installer.mjs"), join(dir, "installer.mjs"));
   mkdirSync(join(dir, "site"), { recursive: true });
+  for (const f of readdirSync(join(ROOT, "site"))) copyFileSync(join(ROOT, "site", f), join(dir, "site", f));
   writeFileSync(join(dir, "site", "brand.js"), 'export default {"logo":null,"favicon":null};\n');
+  // the command the installer made on the user's PATH: a tiny script that runs the agent
+  const shim = join(bin, "TestConnect");
+  writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(dir, "agent.mjs")}" "$@"\n`);
+  chmodSync(shim, 0o755);
   const config = {
     name: "test-site", displayName: "Test Site", command: "TestConnect", aiName: "Testy", fable: false,
     accountId: "acct-123", kvId: "kv-123", site: site.origin, secret: AGENT_SECRET, workspace: join(home, "ws"),
-    permissionMode: "auto", shim: join(bin, "TestConnect"), version: oldVersion, repo: "ThatOneWeirdDev/claudeconnect", ref: "main",
+    permissionMode: "auto", shim, version: oldVersion, repo: "ThatOneWeirdDev/claudeconnect", ref: "main",
     token: site.jwt, tokenExp: Math.floor(Date.now() / 1000) + 86400 * 30, claudePath: join(bin, "claude"), id: "agent-real"
   };
   writeFileSync(join(dir, "config.json"), JSON.stringify(config, null, 2));
@@ -84,12 +115,17 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
       return 0;
     }
   };
+  // A killed process whose parent has gone can sit as a zombie in a container with no init, and still answers kill(pid, 0).
   const alive = pid => {
     try {
       process.kill(pid, 0);
-      return true;
     } catch {
       return false;
+    }
+    try {
+      return !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+    } catch {
+      return true;
     }
   };
   const log = () => (existsSync(join(dir, "agent.log")) ? read("agent.log") : "");
@@ -103,12 +139,20 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
       const child = spawn(process.execPath, [join(dir, "agent.mjs"), "run"], { env, stdio: "ignore" });
       return child;
     },
+    // Kill everything that was started on this temporary home, however it got there: the agent we started, the one a
+    // job started in its place, an installer still running detached. Their pid files can't be trusted for this, since
+    // a replacement may not have written its own yet. Several passes, because killing an installer can race with it
+    // starting one more agent.
     cleanup() {
-      const pid = pids();
-      if (pid && alive(pid)) {
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {}
+      for (let pass = 0; pass < 20; pass++) {
+        const found = onThisHome(home);
+        if (!found.length) break;
+        for (const pid of found) {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch {}
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
       }
       rmSync(home, { recursive: true, force: true });
     }

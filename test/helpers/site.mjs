@@ -40,16 +40,19 @@ const FRONT = `export default {
   }
 };`;
 
-// The real worker, with one extra door for tests: POST /api/__seed writes old chats, replies and usage rows straight
-// into the Durable Object's tables, because the only other way to get last month's data is to wait a month.
+// The real worker, with one extra door for tests: POST /api/__seed writes chats and messages straight into the Durable
+// Object's tables, and POST /api/__limits writes a plan-usage reading, because the real ones come from a signed-in Claude plan.
 const MAIN = `import Worker, { ChatgqlHub as Base } from "./worker.js";
 export class ChatgqlHub extends Base {
   async fetch(req) {
     if (new URL(req.url).pathname === "/api/__seed") {
       const b = await req.json();
       for (const c of b.chats || []) this.sql.exec("INSERT OR REPLACE INTO chats (id, title, model, effort, session_id, started, running, created, updated) VALUES (?, ?, 'claude-opus-5-5', 'medium', ?, 1, NULL, ?, ?)", c.id, c.title, c.id, c.created, c.updated);
-      for (const m of b.messages || []) this.sql.exec("INSERT OR REPLACE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, '{}', ?)", m.id, m.chat, m.role, m.content, m.created);
-      for (const u of b.usage || []) this.sql.exec("INSERT OR REPLACE INTO usage (run_id, model, ts, input, output, cache_read, cache_write, cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", u.run, u.model, u.ts, u.input, u.output, u.cacheRead || 0, u.cacheWrite || 0, u.cost || 0);
+      for (const m of b.messages || []) this.sql.exec("INSERT OR REPLACE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, ?, ?)", m.id, m.chat, m.role, m.content, m.meta ? JSON.stringify(m.meta) : "{}", m.created);
+      return Response.json({ ok: true });
+    }
+    if (new URL(req.url).pathname === "/api/__limits") {
+      await this.setLimits(await req.json());
       return Response.json({ ok: true });
     }
     return super.fetch(req);
@@ -67,10 +70,10 @@ export async function startSite(opts = {}) {
   const access = makeAccess();
   const jwt = access.sign();
   // Tests change `release` and `releaseStatus` on the object startSite returns, so this one object is both what they hold and what the mock reads.
-  const site = { release: opts.release || null, releaseStatus: 200, fetched: [], dir, access, jwt };
+  const site = { release: opts.release || null, releaseStatus: 200, fetched: [], dir, access, jwt, agentSecret: (opts.vars && opts.vars.AGENT_SECRET) || AGENT_SECRET, claimCode: (opts.vars && opts.vars.CLAIM_CODE) || CLAIM_CODE };
   const mf = new Miniflare({
     host: "127.0.0.1",
-    port: 0,
+    port: opts.port || 0,
     verbose: false,
     workers: [
       { name: "front", modules: true, scriptPath: join(dir, "front.mjs"), modulesRoot: dir, serviceBindings: { SITE: "site" }, bindings: { JWT: jwt } },
@@ -92,9 +95,9 @@ export async function startSite(opts = {}) {
           UPDATE_REPO: "ThatOneWeirdDev/claudeconnect",
           UPDATE_REF: "main",
           UPDATE_RAW: "https://raw.test",
-          ...(opts.vars || {}),
           AGENT_SECRET,
-          CLAIM_CODE
+          CLAIM_CODE,
+          ...(opts.vars || {})
         },
         outboundService: async request => {
           const url = new URL(request.url);
@@ -122,8 +125,9 @@ export async function startSite(opts = {}) {
   };
   const post = (path, body, headers) => api(path, { method: "POST", body: JSON.stringify(body || {}), headers });
   // First visit with the claim link makes the signed-in account the owner, like opening the link setup prints.
-  const claim = () => asOwner(`/?claim=${CLAIM_CODE}`, { redirect: "manual" });
+  const claim = () => asOwner(`/?claim=${site.claimCode}`, { redirect: "manual" });
   const seed = data => post("/api/__seed", data);
+  const setLimits = data => post("/api/__limits", data);
   return Object.assign(site, {
     mf,
     origin,
@@ -131,6 +135,7 @@ export async function startSite(opts = {}) {
     post,
     claim,
     seed,
+    setLimits,
     asOwner,
     async stop() {
       await mf.dispose();
@@ -141,7 +146,7 @@ export async function startSite(opts = {}) {
 
 // A stand-in for the agent's side of the WebSocket, driven by the test.
 export async function connectAgent(s, hello = {}, id = "agent-1") {
-  const res = await s.mf.dispatchFetch(s.origin + "/agent", { headers: { upgrade: "websocket", "cf-access-token": s.jwt, "x-chatgql-key": AGENT_SECRET, "x-agent-id": id } });
+  const res = await s.mf.dispatchFetch(s.origin + "/agent", { headers: { upgrade: "websocket", "cf-access-token": s.jwt, "x-chatgql-key": s.agentSecret, "x-agent-id": id } });
   const ws = res.webSocket;
   if (!ws) throw new Error("agent connection refused: " + res.status);
   ws.accept();
@@ -177,7 +182,7 @@ export async function connectAgent(s, hello = {}, id = "agent-1") {
       }),
     close: () => ws.close(1000, "test over")
   };
-  agent.send({ type: "hello", agent: "1.2.0", caps: ["update", "usage"], warning: "", tokenExp: 0, active: [], ...hello });
+  agent.send({ type: "hello", agent: "1.3.0", caps: ["update", "admin", "limits"], warning: "", tokenExp: 0, active: [], ...hello });
   await new Promise(r => setTimeout(r, 50));
   return agent;
 }

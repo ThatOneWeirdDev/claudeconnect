@@ -1,8 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import APP_HTML from "./app.html";
 import BRAND from "./brand.js";
-import { buildUsage, validZone } from "./usage.js";
 import { compareVersions, isNewer, cleanManifest, validRepo, validRef } from "./version.js";
+import { cleanSiteName, cleanAiName, cleanAddress } from "./names.js";
+import { checkImage } from "./image.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -17,14 +18,21 @@ const MODELS = {
 };
 const DEFAULT_MODEL = "claude-opus-5-5";
 const DEFAULT_REPO = "ThatOneWeirdDev/claudeconnect";
-const UPDATE_STEPS = ["download", "verify", "site", "computer", "restart", "online"];
+// What each kind of job does, in order. The page shows these as its checklist, so the labels are what people read.
+const PLANS = {
+  update: [["download", "Download the new version"], ["verify", "Check that it's intact"], ["site", "Update the site"], ["computer", "Update your computer"], ["restart", "Restart"], ["online", "Come back online"]],
+  settings: [["site", "Update the site"], ["computer", "Update your computer"], ["restart", "Restart"], ["online", "Come back online"]],
+  move: [["prepare", "Check the new address"], ["create", "Create the new site"], ["access", "Turn on Access for it"], ["switch", "Move your computer over"], ["cleanup", "Delete the old site"]],
+  delete: [["site", "Delete the site and its chats"], ["computer", "Clean up your computer"]]
+};
+const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
 const CHECK_EVERY = 30 * 60000;
 const CHECK_RETRY = 5 * 60000;
 const ACK_WITHIN = 30000;
 const QUIET_LIMIT = 10 * 60000;
 const MAX_ARTIFACT = 1900000;
 const MIME = { html: "text/html", htm: "text/html", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", ico: "image/x-icon", pdf: "application/pdf", md: "text/markdown", markdown: "text/markdown", txt: "text/plain", csv: "text/csv", json: "application/json", js: "text/javascript", mjs: "text/javascript", ts: "text/plain", tsx: "text/plain", jsx: "text/plain", css: "text/css", py: "text/plain", java: "text/plain", c: "text/plain", cpp: "text/plain", h: "text/plain", cs: "text/plain", go: "text/plain", rs: "text/plain", rb: "text/plain", php: "text/plain", sh: "text/plain", ps1: "text/plain", bat: "text/plain", sql: "text/plain", yml: "text/plain", yaml: "text/plain", toml: "text/plain", xml: "text/xml", ini: "text/plain", log: "text/plain", tex: "text/plain", kt: "text/plain", swift: "text/plain", lua: "text/plain", r: "text/plain", vue: "text/plain", svelte: "text/plain" };
-const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0E8C86"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
+const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="m-bg" width="64" height="64" rx="16"/><circle class="m-fg" cx="29" cy="29" r="12.5" fill="none" stroke-width="6.5"/><path class="m-fg" d="M41.5 29v22" stroke-width="6.5" stroke-linecap="round"/><path class="m-fg" d="M36 45h11" stroke-width="5" stroke-linecap="round"/></svg>`;
 
 const certCache = new Map();
 const keyCache = new Map();
@@ -80,7 +88,7 @@ function modelsFor(env) {
   return out;
 }
 
-const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0E8C86"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0D0D0D"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
 
 function json(data, status = 200, extra = {}) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra } });
@@ -203,15 +211,46 @@ async function authenticate(req, env, hub, url) {
   return { ok: true, email, claimed: !!claim, token, exp: p.exp };
 }
 
-function lockPage(state, lockName, lockMark) {
+// What a locked site says, and what its owner can do about it. Anyone can read this page, so it names nothing but the site,
+// and the steps only say where to click. Nothing here lets anyone in: the site opens only for a verified Cloudflare Access sign-in
+// that belongs to whoever claimed it.
+// Links the computer reports while a move waits for the owner. They're shown as links, so only web addresses are kept
+// (https, or this computer's own address for testing).
+function cleanJobInfo(v) {
+  if (!v || typeof v !== "object") return null;
+  const out = {};
+  for (const k of ["site", "claim", "dash"]) if (typeof v[k] === "string" && /^(https:\/\/|http:\/\/(127\.0\.0\.1|localhost)[:/])[^\s"'<>]{1,380}$/.test(v[k])) out[k] = v[k];
+  if (typeof v.name === "string" && /^[a-z0-9-]{1,63}$/.test(v.name)) out.name = v.name;
+  return Object.keys(out).length ? out : null;
+}
+
+function lockPage(state, lockName, lockMark, host, command) {
+  const worker = escHtml(String(host || "").split(".")[0] || "your-site");
+  const cmd = `<code>${escHtml(command)}</code>`;
+  const dash = `https://dash.cloudflare.com/?to=/:account/workers/services/view/${encodeURIComponent(String(host || "").split(".")[0] || "")}/production/settings`;
+  const claimStep = `Open your claim link, the address that ends in <code>?claim=…</code>. Lost it? Run ${cmd} <code>claim</code> on your computer for a fresh one.`;
   const copy = {
-    "no-access": ["Turn on Cloudflare Access", "This site isn't protected yet, so it stays locked. Turn on Cloudflare Access on the Access page the setup opened, then open the claim link the setup printed."],
-    "bad-token": ["Sign in again", "Your Cloudflare Access sign-in couldn't be verified. Reload the page to sign in again."],
-    "unclaimed": ["Finish setup", "Access is on. Open the claim link the setup printed to make this site yours."],
-    "denied": ["Not yours", "This site belongs to a different account. If it's yours and you turned Cloudflare Access off and on again, run the setup again and open the new claim link."]
-  }[state] || ["Locked", "This page is locked."];
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escHtml(lockName)}</title><link rel="icon" href="/favicon"><style>:root{color-scheme:light dark;--bg:#FBFBFD;--ink:#172036;--ink2:#4A5468;--line:#DDE2EA;--accent:#0E8C86}@media (prefers-color-scheme:dark){:root{--bg:#10161F;--ink:#E4EAF2;--ink2:#A9B4C4;--line:#222C3A;--accent:#39C3B8}}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px}main{max-width:460px}.m{display:block;width:44px;height:44px;margin-bottom:20px}.m svg,.m img{width:44px;height:44px;border-radius:10px;object-fit:contain}h1{font-size:22px;margin:0 0 8px;letter-spacing:-.01em}p{margin:0;color:var(--ink2)}</style></head><body><main><span class="m">${lockMark}</span><h1>${copy[0]}</h1><p>${copy[1]}</p></main></body></html>`;
-  return new Response(html, { status: state === "denied" ? 403 : 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY" } });
+    "no-access": {
+      title: "This site is locked",
+      text: "It isn't protected by Cloudflare Access, so nobody can open it, not even its owner. That's on purpose.",
+      steps: [
+        `Open the <a href="${dash}" rel="noopener noreferrer" target="_blank">Cloudflare dashboard</a> and go to <b>Workers &amp; Pages</b>, then <b>${worker}</b>.`,
+        `Open <b>Settings</b> &rarr; <b>Domains &amp; Routes</b>, find the <b>workers.dev</b> row and choose <b>Enable Cloudflare Access</b>.`,
+        `Choose <b>Manage Cloudflare Access</b> and make sure the policy allows only <b>your own email address</b>. Anyone who isn't on that list can't get in.`,
+        `Reload this page and sign in with that email. ${claimStep}`
+      ]
+    },
+    "bad-token": { title: "Sign in again", text: "Your Cloudflare Access sign-in couldn't be verified. Reload the page to sign in again.", steps: null },
+    "unclaimed": { title: "This site has no owner yet", text: "Access is on, but nobody has claimed the site, so it stays closed to everyone.", steps: [claimStep] },
+    "denied": {
+      title: "You don't have access",
+      text: "This site belongs to a different account.",
+      steps: [`Turned Access off and on again, or changed who is allowed in? Then the old claim no longer matches. Run ${cmd} <code>claim</code> on your computer, open the new claim link while signed in with the email you want to use, and it's yours again.`]
+    }
+  }[state] || { title: "Locked", text: "This page is locked.", steps: null };
+  const owner = copy.steps ? `<details><summary>I'm the owner</summary><ol>${copy.steps.map(x => `<li>${x}</li>`).join("")}</ol></details>` : "";
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${escHtml(lockName)}</title><link rel="icon" href="/favicon"><style>:root{color-scheme:light dark;--bg:#fff;--card:#f9f9f9;--ink:#0d0d0d;--ink2:#5d5d5d;--line:rgba(13,13,13,.1);--hover:rgba(13,13,13,.06);--code:#f3f3f3;--link:#0169cc;--solid:#0d0d0d;--solid-ink:#fff}@media (prefers-color-scheme:dark){:root{--bg:#212121;--card:#181818;--ink:#fff;--ink2:#afafaf;--line:rgba(255,255,255,.1);--hover:rgba(255,255,255,.08);--code:#303030;--link:#339cff;--solid:#fff;--solid-ink:#0d0d0d}}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:16px/1.6 ui-sans-serif,-apple-system,system-ui,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;padding:24px}main{width:100%;max-width:480px}.m{display:block;width:40px;height:40px;margin-bottom:22px}.m svg,.m img{width:40px;height:40px;border-radius:10px;object-fit:contain}.m-bg{fill:var(--ink)}.m-fg{stroke:var(--bg)}h1{font-size:24px;line-height:1.3;font-weight:600;margin:0 0 8px;letter-spacing:-.01em}p{margin:0;color:var(--ink2)}details{margin-top:24px}summary{display:inline-flex;align-items:center;height:40px;padding:0 18px;border-radius:999px;background:var(--solid);color:var(--solid-ink);font-weight:600;font-size:15px;cursor:pointer;list-style:none;user-select:none}summary::-webkit-details-marker{display:none}summary:hover{opacity:.88}summary:focus-visible{outline:2px solid var(--link);outline-offset:2px}details[open] summary{background:var(--hover);color:var(--ink)}ol{margin:18px 0 0;padding:18px 20px 18px 38px;background:var(--card);border:1px solid var(--line);border-radius:16px;color:var(--ink2);font-size:15px}li{margin:0 0 10px;padding-left:4px}li:last-child{margin:0}b{color:var(--ink);font-weight:600}a{color:var(--link)}code{font:13.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);padding:.1em .4em;border-radius:6px;color:var(--ink)}</style></head><body><main><span class="m">${lockMark}</span><h1>${copy.title}</h1><p>${copy.text}</p>${owner}</main></body></html>`;
+  return new Response(html, { status: state === "denied" ? 403 : 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY", "referrer-policy": "no-referrer", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" } });
 }
 
 const PAGE_HEADERS = {
@@ -252,7 +291,7 @@ export default {
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
       const lg = brandAsset("logo");
-      return lockPage(a.state, siteName(env), lg ? `<img src="/logo" alt="">` : DEFAULT_MARK);
+      return lockPage(a.state, siteName(env), lg ? `<img src="/logo" alt="">` : DEFAULT_MARK, url.hostname, commandName(env));
     }
     if (a.exp > notedExp) {
       notedExp = a.exp;
@@ -302,8 +341,7 @@ export class ChatgqlHub extends DurableObject {
     this.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_id TEXT, role TEXT, content TEXT, meta TEXT, created INTEGER)");
     this.sql.exec("CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, created)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, chat_id TEXT, name TEXT, mime TEXT, size INTEGER, data BLOB, created INTEGER)");
-    this.sql.exec("CREATE TABLE IF NOT EXISTS usage (run_id TEXT, model TEXT, ts INTEGER, input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER, cost REAL, PRIMARY KEY (run_id, model))");
-    this.sql.exec("CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts)");
+    this.sql.exec("DROP TABLE IF EXISTS usage");
     this.latest = null;
     this.checking = null;
     this.runs = new Map();
@@ -411,6 +449,7 @@ export class ChatgqlHub extends DurableObject {
 
   async fetch(req) {
     const url = new URL(req.url);
+    if (url.hostname !== "hub.internal") this.host = url.hostname;
     if (url.pathname === "/agent") return this.acceptAgent(req);
     if (url.pathname === "/agent/progress") return this.agentProgress(req);
     const am = url.pathname.match(/^\/a\/([A-Za-z0-9-]{8,64})$/);
@@ -477,6 +516,7 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "hello") return this.onHello(ws, m);
     if (m.type === "done") return this.completeRun(m);
     if (m.type === "update_ack") return this.updateAck(m);
+    if (m.type === "limits") return this.setLimits(m.limits);
     const r = this.runs.get(m.runId);
     if (!r) return;
     r.heard = true;
@@ -514,7 +554,7 @@ export class ChatgqlHub extends DurableObject {
     await this.ctx.storage.delete("lastSeen");
     const run = await this.ctx.storage.get("update");
     // An update that looked stuck or failed is still a success if the new version turns up within the hour.
-    if (run && (run.state === "running" || (run.state === "error" && Date.now() - (run.finishedAt || 0) < 3600000)) && compareVersions(m.agent, run.to) >= 0) await this.finishUpdate(run);
+    if (run && (run.kind || "update") === "update" && (run.state === "running" || (run.state === "error" && Date.now() - (run.finishedAt || 0) < 3600000)) && compareVersions(m.agent, run.to) >= 0) await this.finishUpdate(run);
     const tok = await this.ctx.storage.get("token");
     if (tok && tok.exp > (Number(m.tokenExp) || 0)) {
       try {
@@ -555,7 +595,12 @@ export class ChatgqlHub extends DurableObject {
     const p = url.pathname;
     const method = req.method;
     if (p === "/api/state" && method === "GET") return json(await this.state(req));
-    if (p === "/api/usage" && method === "GET") return json(this.usage(url));
+    if (p === "/api/limits" && method === "GET") return json(await this.limitsView());
+    if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
+    if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
+    if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
+    if (p === "/api/admin/delete" && method === "POST") return this.startDelete(req);
+    if (p === "/api/admin/cancel" && method === "POST") return this.cancelJob();
     if (p === "/api/update" && method === "GET") return json(await this.updateInfo());
     if (p === "/api/update/check" && method === "POST") return json(await this.updateInfo(true));
     if (p === "/api/update/start" && method === "POST") return this.startUpdate(req);
@@ -599,30 +644,52 @@ export class ChatgqlHub extends DurableObject {
       email: req.headers.get("x-chatgql-user") || "",
       version: appVersion(this.env),
       agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "" } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+      limits: await this.limitsView(),
       update: await this.updateInfo()
     };
   }
 
-  usage(url) {
-    const now = Date.now();
-    const since = now - 95 * 86400000;
-    const rows = this.rows("SELECT ts, model, input, output, cache_read, cache_write, cost FROM usage WHERE ts >= ?", since);
-    const replyTimes = this.rows("SELECT created FROM messages WHERE role = 'assistant' AND created >= ?", since).map(r => r.created);
-    const out = buildUsage({ rows, replyTimes, now, timeZone: validZone(url.searchParams.get("tz")) });
-    const first = this.one("SELECT MIN(ts) AS t FROM usage");
-    out.trackedSince = first && first.t ? first.t : null;
-    return out;
+  // ---- plan usage: the percentages Claude Code reads from Anthropic's response headers for the signed-in plan
+
+  async setLimits(raw) {
+    if (!raw || typeof raw !== "object" || !raw.windows || typeof raw.windows !== "object") return;
+    const windows = {};
+    for (const key of LIMIT_WINDOWS) {
+      const w = raw.windows[key];
+      if (!w || !Number.isFinite(w.pct) || !Number.isFinite(w.resetsAt)) continue;
+      windows[key] = { pct: Math.max(0, Math.min(999, Math.round(w.pct))), resetsAt: Math.round(w.resetsAt) };
+    }
+    if (!Object.keys(windows).length) return;
+    const status = ["allowed", "allowed_warning", "rejected"].includes(raw.status) ? raw.status : "allowed";
+    await this.ctx.storage.put("limits", { at: Date.now(), windows, status });
   }
 
-  recordUsage(runId, ts, usage, fallbackModel) {
-    if (!Array.isArray(usage)) return;
-    const n = v => (Number.isFinite(v) && v > 0 ? Math.min(Math.round(v), 1e12) : 0);
-    for (const u of usage.slice(0, 8)) {
-      if (!u || typeof u !== "object") continue;
-      const cost = Number.isFinite(u.cost) && u.cost > 0 ? Math.min(u.cost, 1e6) : 0;
-      this.sql.exec("INSERT OR IGNORE INTO usage (run_id, model, ts, input, output, cache_read, cache_write, cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", runId, String(u.model || fallbackModel || "").slice(0, 80), ts, n(u.input), n(u.output), n(u.cacheRead), n(u.cacheWrite), cost);
-    }
+  async limitsView() {
+    const l = await this.ctx.storage.get("limits");
+    if (!l) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const windows = {};
+    // A window that has reset since the reading no longer says how much is used: the page shows it as reset until the next reply.
+    for (const [k, w] of Object.entries(l.windows)) windows[k] = { ...w, reset: w.resetsAt <= now };
+    return { at: l.at, status: l.status, windows };
   }
+
+  async askLimits() {
+    const ws = this.agent();
+    if (!ws) return json({ error: `${siteName(this.env)} is offline, so it can't read your plan usage right now.`, code: "offline" }, 503);
+    const last = (await this.ctx.storage.get("limitsAsk")) || 0;
+    if (Date.now() - last < 20000) return json({ ok: true, wait: true });
+    await this.ctx.storage.put("limitsAsk", Date.now());
+    try {
+      this.sendAgent(ws, { type: "limits_refresh" });
+    } catch {
+      return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
+    }
+    return json({ ok: true });
+  }
+
+  // ---- updates and changes to the site itself. They all run on the owner's computer, which holds the Cloudflare sign-in;
+  // the site keeps the checklist so the page can follow along from any device and through every restart.
 
   updateSource() {
     const repo = validRepo(this.env.UPDATE_REPO) ? this.env.UPDATE_REPO : DEFAULT_REPO;
@@ -663,19 +730,20 @@ export class ChatgqlHub extends DurableObject {
       const now = Date.now();
       const unanswered = !run.acked && now - run.startedAt > (Number(this.env.UPDATE_ACK_MS) || ACK_WITHIN);
       if (unanswered || now - run.updatedAt > (Number(this.env.UPDATE_QUIET_MS) || QUIET_LIMIT)) {
-        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${siteName(this.env)} on your computer didn't pick up the update. Make sure ${commandName(this.env)} is running, then try again.` : `The update stopped reporting progress. Check your computer, or run ${commandName(this.env)} update there.` };
+        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${siteName(this.env)} on your computer didn't pick up the request. Make sure ${commandName(this.env)} is running, then try again.` : `It stopped reporting progress. Check your computer, or run ${commandName(this.env)} update there.` };
         await this.ctx.storage.put("update", run);
       }
     }
     return run || null;
   }
 
-  updateBlock(run) {
+  // Why a job can't start right now, or null. `need` is what the agent on the computer has to be able to do.
+  updateBlock(run, need = "update") {
     const ws = this.agent();
-    if (run && run.state === "running") return { code: "running", message: "An update is already running." };
-    if (!ws) return { code: "offline", message: `${siteName(this.env)} is offline. Start ${commandName(this.env)} on your computer, then update.` };
-    if (!(this.agentInfo(ws).caps || []).includes("update")) return { code: "agent_old", message: `The ${commandName(this.env)} program on your computer is too old to update from here. Run ${commandName(this.env)} update there once, and later updates can be done from this page.` };
-    if (this.one("SELECT 1 AS x FROM chats WHERE running IS NOT NULL")) return { code: "busy", message: "A reply is still being written. Wait for it to finish, or stop it, then update." };
+    if (run && run.state === "running") return { code: "running", message: "Something is already in progress." };
+    if (!ws) return { code: "offline", message: `${siteName(this.env)} is offline. Start ${commandName(this.env)} on your computer first.` };
+    if (!(this.agentInfo(ws).caps || []).includes(need)) return { code: "agent_old", message: `The ${commandName(this.env)} program on your computer is too old for this. Run ${commandName(this.env)} update there once, and it can be done from this page after that.` };
+    if (this.one("SELECT 1 AS x FROM chats WHERE running IS NOT NULL")) return { code: "busy", message: "A reply is still being written. Wait for it to finish, or stop it, then try again." };
     return null;
   }
 
@@ -699,23 +767,26 @@ export class ChatgqlHub extends DurableObject {
       source: src.label,
       checkedAt: c ? c.at : null,
       error: c && c.error ? c.error : "",
+      address: this.workerName() || null,
       run,
-      blocked: this.updateBlock(run)
+      // `blocked` is about updating; `blockedAdmin` about changing, moving or deleting the site
+      blocked: this.updateBlock(run, "update"),
+      blockedAdmin: this.updateBlock(run, "admin")
     };
   }
 
-  async startUpdate(req) {
-    const b = await req.json().catch(() => ({}));
+  // Starts a job: records the checklist, then hands the work to the computer.
+  async beginJob(kind, req, { to = null, message, need }) {
     const info = await this.updateInfo();
-    if (!info.available) return json({ error: "You're already up to date.", code: "current" }, 409);
-    if (String(b.to || "") !== info.latest) return json({ error: "A different version came out. Look at what's new, then update.", code: "changed" }, 409);
-    if (info.blocked) return json({ error: info.blocked.message, code: info.blocked.code }, 409);
+    const block = this.updateBlock(info.run, need);
+    if (block) return json({ error: block.message, code: block.code }, 409);
     const ws = this.agent();
     const now = Date.now();
-    const run = { id: crypto.randomUUID(), from: info.current, to: info.latest, state: "running", acked: false, step: "download", steps: {}, message: "", startedAt: now, updatedAt: now, finishedAt: null, by: req.headers.get("x-chatgql-user") || "" };
+    const plan = PLANS[kind].map(([key, label]) => ({ key, label }));
+    const run = { id: crypto.randomUUID(), kind, plan, from: info.current, to, state: "running", acked: false, step: plan[0].key, steps: {}, message: "", info: null, cancel: false, startedAt: now, updatedAt: now, finishedAt: null, by: req.headers.get("x-chatgql-user") || "" };
     await this.ctx.storage.put("update", run);
     try {
-      this.sendAgent(ws, { type: "update", id: run.id, to: run.to });
+      this.sendAgent(ws, { ...message, id: run.id });
     } catch {
       await this.ctx.storage.delete("update");
       return json({ error: `${siteName(this.env)} on your computer couldn't be reached. Try again in a moment.`, code: "offline" }, 503);
@@ -723,18 +794,84 @@ export class ChatgqlHub extends DurableObject {
     return json(await this.updateInfo());
   }
 
+  async startUpdate(req) {
+    const b = await req.json().catch(() => ({}));
+    const info = await this.updateInfo();
+    if (!info.available) return json({ error: "You're already up to date.", code: "current" }, 409);
+    if (String(b.to || "") !== info.latest) return json({ error: "A different version came out. Look at what's new, then update.", code: "changed" }, 409);
+    return this.beginJob("update", req, { to: info.latest, need: "update", message: { type: "update", to: info.latest } });
+  }
+
+  // The part of the workers.dev address that is this site's own name.
+  workerName() {
+    return String(this.env.WORKER_NAME || (this.host || "").split(".")[0] || "");
+  }
+
+  // Name, what the AI calls itself, Fable, logo and tab icon. Same site, same chats.
+  async startSettings(req) {
+    const b = await req.json().catch(() => null);
+    if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
+    const change = {};
+    if ("displayName" in b) {
+      const n = cleanSiteName(b.displayName);
+      if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
+      if (n !== siteName(this.env)) change.displayName = n;
+    }
+    if ("aiName" in b) {
+      const n = cleanAiName(b.aiName);
+      if (n && n !== aiName(this.env)) change.aiName = n;
+    }
+    if ("fable" in b && typeof b.fable === "boolean" && b.fable !== (this.env.SHOW_FABLE === "1")) change.fable = b.fable;
+    for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
+      if (!(key in b)) continue;
+      if (b[key] === null) {
+        change[key] = null;
+        continue;
+      }
+      const img = checkImage(b[key] && b[key].b64);
+      if (img.error) return json({ error: `${label}: ${img.error}.` }, 400);
+      change[key] = { type: img.type, b64: img.b64 };
+    }
+    if (!Object.keys(change).length) return json({ error: "Nothing was changed.", code: "nochange" }, 400);
+    return this.beginJob("settings", req, { need: "admin", message: { type: "admin", op: "settings", payload: change } });
+  }
+
+  // A new address is a new Worker: the old site stays up until the new one is ready and claimed, then it is deleted.
+  async startMove(req) {
+    const b = await req.json().catch(() => null);
+    const address = cleanAddress(b && b.address);
+    if (!address) return json({ error: "Use 1 to 63 lowercase letters, numbers or dashes, starting and ending with a letter or number." }, 400);
+    if (address === this.workerName()) return json({ error: "That's the address it already has.", code: "nochange" }, 400);
+    return this.beginJob("move", req, { need: "admin", message: { type: "admin", op: "move", payload: { address } } });
+  }
+
+  async startDelete(req) {
+    const b = await req.json().catch(() => null);
+    if (!b || String(b.confirm || "") !== siteName(this.env)) return json({ error: "Type the site's name to confirm.", code: "confirm" }, 400);
+    return this.beginJob("delete", req, { need: "admin", message: { type: "admin", op: "delete", payload: {} } });
+  }
+
+  async cancelJob() {
+    const run = await this.ctx.storage.get("update");
+    if (!run || run.state !== "running" || run.kind !== "move") return json({ error: "There's nothing to cancel." }, 409);
+    await this.ctx.storage.put("update", { ...run, cancel: true });
+    return json(await this.updateInfo());
+  }
+
   async finishUpdate(run) {
+    const keys = (run.plan || PLANS.update.map(([key]) => ({ key }))).map(x => x.key);
     const steps = {};
-    for (const s of UPDATE_STEPS) steps[s] = "done";
+    for (const k of keys) steps[k] = "done";
     const now = Date.now();
-    await this.ctx.storage.put("update", { ...run, state: "done", acked: true, steps, step: "online", message: "", updatedAt: now, finishedAt: now });
+    const last = keys[keys.length - 1];
+    await this.ctx.storage.put("update", { ...run, state: "done", acked: true, steps, step: last, message: "", updatedAt: now, finishedAt: now });
   }
 
   async updateAck(m) {
     const run = await this.ctx.storage.get("update");
     if (!run || run.state !== "running" || run.id !== m.id) return;
     const now = Date.now();
-    if (m.ok === false) await this.ctx.storage.put("update", { ...run, state: "error", message: String(m.error || "Your computer couldn't start the update.").slice(0, 300), updatedAt: now, finishedAt: now });
+    if (m.ok === false) await this.ctx.storage.put("update", { ...run, state: "error", message: String(m.error || "Your computer couldn't start that.").slice(0, 300), updatedAt: now, finishedAt: now });
     else await this.ctx.storage.put("update", { ...run, acked: true, updatedAt: now });
   }
 
@@ -748,25 +885,28 @@ export class ChatgqlHub extends DurableObject {
     if (!b || typeof b !== "object" || Array.isArray(b)) return json({ error: "Bad request" }, 400);
     const run = await this.ctx.storage.get("update");
     if (!run || run.id !== b.id) return json({ error: "No such update" }, 404);
-    if (run.state !== "running") return json({ ok: true });
+    if (run.state !== "running") return json({ ok: true, cancel: !!run.cancel });
     const now = Date.now();
+    const keys = (run.plan || PLANS.update.map(([key]) => ({ key }))).map(x => x.key);
     const next = { ...run, acked: true, updatedAt: now, steps: { ...run.steps } };
-    const at = UPDATE_STEPS.indexOf(b.step);
+    const at = keys.indexOf(b.step);
     if (at >= 0) {
-      for (let i = 0; i < at; i++) next.steps[UPDATE_STEPS[i]] = "done";
+      for (let i = 0; i < at; i++) next.steps[keys[i]] = "done";
       next.step = b.step;
       next.steps[b.step] = b.status === "done" ? "done" : b.status === "error" ? "error" : "active";
     }
+    const info = cleanJobInfo(b.info);
+    if (info) next.info = info;
     if (b.status === "error") {
       next.state = "error";
       next.finishedAt = now;
-      next.message = String(b.message || "The update didn't finish.").slice(0, 400);
-    } else if (b.step === "online" && b.status === "done") {
+      next.message = String(b.message || "It didn't finish.").slice(0, 400);
+    } else if (at === keys.length - 1 && b.status === "done") {
       await this.finishUpdate(next);
       return json({ ok: true });
     }
     await this.ctx.storage.put("update", next);
-    return json({ ok: true });
+    return json({ ok: true, cancel: !!next.cancel });
   }
 
   getChat(id) {
@@ -908,7 +1048,6 @@ export class ChatgqlHub extends DurableObject {
     const artifacts = this.saveArtifacts(chat.id, m.runId, Array.isArray(m.artifacts) ? m.artifacts : [], text);
     const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);
-    this.recordUsage(m.runId, now, m.usage, meta.model);
     if (m.started) this.sql.exec("UPDATE chats SET started = 1 WHERE id = ?", chat.id);
     if (chat.running === m.runId) this.sql.exec("UPDATE chats SET running = NULL, updated = ? WHERE id = ?", now, chat.id);
     this.push(m.runId, { type: "done", message: { id: "a-" + m.runId, role: "assistant", content: text, meta, created: now } });
