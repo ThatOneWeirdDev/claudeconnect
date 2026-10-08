@@ -21,6 +21,7 @@ const MODELS = {
   "claude-haiku-5-5": { name: "Haiku 5.5", efforts: [] }
 };
 const DEFAULT_MODEL = "claude-opus-5-5";
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_REPO = "ThatOneWeirdDev/claudeconnect";
 // What each kind of job does, in order. The page shows these as its checklist, so the labels are what people read.
 const PLANS = {
@@ -61,6 +62,9 @@ function cleanContext(c) {
   if (!Number.isFinite(used) || !Number.isFinite(window) || used < 0 || window < 1000 || window > 1e8) return null;
   return { used: Math.min(used, window * 4), window };
 }
+
+// A number from the environment, or the usual one. Only the tests set these, to not wait out real timeouts.
+const envNum = (v, d) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : d);
 
 function appVersion(env) {
   return String(env.APP_VERSION || "0.0.0").slice(0, 32);
@@ -349,12 +353,24 @@ export class ChatgqlHub extends DurableObject {
     this.sql.exec("CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, title TEXT, model TEXT, effort TEXT, session_id TEXT, started INTEGER DEFAULT 0, running TEXT, created INTEGER, updated INTEGER)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_id TEXT, role TEXT, content TEXT, meta TEXT, created INTEGER)");
     this.sql.exec("CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, created)");
+    // The chats Claude Code has saved on the computer (only a list; a chat is copied here when it is opened), and the ones
+    // deleted here, which are not listed again even though Claude Code still has them.
+    this.sql.exec("CREATE TABLE IF NOT EXISTS computer_sessions (id TEXT PRIMARY KEY, title TEXT, folder TEXT, updated INTEGER)");
+    this.sql.exec("CREATE TABLE IF NOT EXISTS hidden_sessions (id TEXT PRIMARY KEY)");
+    // How many questions of the chat's Claude Code session are already here, and the session file's time when that was true.
+    for (const col of ["synced_turns INTEGER", "synced_at INTEGER", "folder TEXT"]) {
+      try {
+        this.sql.exec(`ALTER TABLE chats ADD COLUMN ${col}`);
+      } catch {}
+    }
     this.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, chat_id TEXT, name TEXT, mime TEXT, size INTEGER, data BLOB, created INTEGER)");
     this.sql.exec("DROP TABLE IF EXISTS usage");
     this.latest = null;
     this.checking = null;
     this.runs = new Map();
     this.parts = new Map();
+    this.asks = new Map();
+    this.lastSync = new Map();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -526,6 +542,8 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "done") return this.completeRun(m);
     if (m.type === "update_ack") return this.updateAck(m);
     if (m.type === "limits") return this.setLimits(m.limits);
+    if (m.type === "sessions") return this.saveSessions(m.sessions);
+    if (m.type === "transcript") return this.gotTranscript(m);
     const r = this.runs.get(m.runId);
     if (!r) return;
     r.heard = true;
@@ -618,22 +636,25 @@ export class ChatgqlHub extends DurableObject {
       if (run && run.state !== "running") await this.ctx.storage.delete("update");
       return json(await this.updateInfo());
     }
-    if (p === "/api/chats" && method === "GET") return json({ chats: this.rows("SELECT id, title, updated, running FROM chats ORDER BY updated DESC LIMIT 400") });
+    if (p === "/api/chats" && method === "GET") return json({ chats: this.chatList() });
     const cm = p.match(/^\/api\/chats\/([A-Za-z0-9-]{8,64})$/);
     if (cm && method === "GET") return this.getChat(cm[1]);
     if (cm && method === "PATCH") {
       const b = await req.json().catch(() => ({}));
       const title = String(b.title || "").trim().slice(0, 120);
       if (!title) return json({ error: "Give the chat a name." }, 400);
+      if (!this.one("SELECT id FROM chats WHERE id = ?", cm[1])) return json({ error: "Open this chat once, and then you can rename it." }, 409);
       this.sql.exec("UPDATE chats SET title = ? WHERE id = ?", title, cm[1]);
       return json({ ok: true });
     }
     if (cm && method === "DELETE") {
-      const chat = this.one("SELECT running FROM chats WHERE id = ?", cm[1]);
+      const chat = this.one("SELECT running, session_id FROM chats WHERE id = ?", cm[1]);
       if (chat && chat.running) this.stopRun(chat.running);
       this.sql.exec("DELETE FROM messages WHERE chat_id = ?", cm[1]);
       this.sql.exec("DELETE FROM artifacts WHERE chat_id = ?", cm[1]);
       this.sql.exec("DELETE FROM chats WHERE id = ?", cm[1]);
+      // Claude Code still has the conversation, and would list it again. It is only hidden here; nothing on the computer is deleted.
+      for (const id of [cm[1], chat && chat.session_id]) if (typeof id === "string" && SESSION_ID.test(id)) this.sql.exec("INSERT OR IGNORE INTO hidden_sessions (id) VALUES (?)", id.toLowerCase());
       return json({ ok: true });
     }
     if (p === "/api/send" && method === "POST") return this.send(req);
@@ -652,7 +673,7 @@ export class ChatgqlHub extends DurableObject {
     return {
       email: req.headers.get("x-chatgql-user") || "",
       version: appVersion(this.env),
-      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
       update: await this.updateInfo()
     };
@@ -914,9 +935,22 @@ export class ChatgqlHub extends DurableObject {
     return json({ ok: true, cancel: !!next.cancel });
   }
 
-  getChat(id) {
-    const chat = this.one("SELECT id, title, model, effort, running, created, updated FROM chats WHERE id = ?", id);
-    if (!chat) return json({ error: "That chat doesn't exist anymore." }, 404);
+  async getChat(id) {
+    const cols = "id, title, model, effort, running, created, updated, folder, session_id, synced_turns, synced_at";
+    let chat = this.one(`SELECT ${cols} FROM chats WHERE id = ?`, id);
+    if (!chat) {
+      const known = SESSION_ID.test(id) ? this.one("SELECT id, title, folder, updated FROM computer_sessions WHERE id = ? AND id NOT IN (SELECT id FROM hidden_sessions)", id.toLowerCase()) : null;
+      if (!known) return json({ error: "That chat doesn't exist anymore." }, 404);
+      const r = await this.importSession(known);
+      if (r.error) return json({ error: r.error, code: r.code }, r.status);
+      chat = this.one(`SELECT ${cols} FROM chats WHERE id = ?`, id);
+    } else if (!chat.running) {
+      await this.syncChat(chat);
+      chat = this.one(`SELECT ${cols} FROM chats WHERE id = ?`, id);
+    }
+    delete chat.session_id;
+    delete chat.synced_turns;
+    delete chat.synced_at;
     const messages = this.rows("SELECT id, role, content, meta, created FROM messages WHERE chat_id = ? ORDER BY created ASC, rowid ASC", id).map(m => ({ ...m, meta: m.meta ? JSON.parse(m.meta) : {} }));
     const lastSent = [...messages].reverse().find(x => x.role === "user");
     chat.mode = (lastSent && lastSent.meta.mode) || "code";
@@ -927,6 +961,136 @@ export class ChatgqlHub extends DurableObject {
       partial = r ? { text: r.text, thinking: r.thinking, thinkingMs: r.thinkingMs || 0, tools: r.tools, status: r.status || "" } : { text: "", thinking: "", thinkingMs: 0, tools: [], status: "" };
     }
     return json({ chat, messages, partial });
+  }
+
+  // ---- Claude Code's own chats on the computer, shown next to the ones started here
+
+  chatList() {
+    const own = this.rows("SELECT id, title, updated, running, folder FROM chats ORDER BY updated DESC LIMIT 400");
+    const theirs = this.rows("SELECT id, title, updated, folder FROM computer_sessions WHERE id NOT IN (SELECT session_id FROM chats WHERE session_id IS NOT NULL) AND id NOT IN (SELECT id FROM chats) AND id NOT IN (SELECT id FROM hidden_sessions) ORDER BY updated DESC LIMIT 400").map(r => ({ ...r, running: null, computer: 1 }));
+    return [...own, ...theirs].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, 400);
+  }
+
+  saveSessions(list) {
+    if (!Array.isArray(list)) return;
+    const rows = [];
+    for (const x of list.slice(0, 600)) {
+      if (!x || typeof x !== "object" || typeof x.id !== "string" || !SESSION_ID.test(x.id)) continue;
+      const updated = Math.round(Number(x.updated));
+      if (!Number.isFinite(updated) || updated < 0) continue;
+      rows.push([x.id.toLowerCase(), String(typeof x.title === "string" ? x.title : "").replace(/\s+/g, " ").trim().slice(0, 120) || "Chat", String(typeof x.folder === "string" ? x.folder : "").replace(/\s+/g, " ").trim().slice(0, 60), updated]);
+    }
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM computer_sessions");
+      for (const r of rows) this.sql.exec("INSERT OR REPLACE INTO computer_sessions (id, title, folder, updated) VALUES (?, ?, ?, ?)", ...r);
+    });
+  }
+
+  historyOn() {
+    const ws = this.agent();
+    return !!ws && (this.agentInfo(ws).caps || []).includes("history");
+  }
+
+  // Ask the computer a question and wait for its answer. Null when it can't answer (offline, an older program, too slow).
+  askAgent(msg, ms = 12000) {
+    if (!this.historyOn()) return Promise.resolve(null);
+    const ws = this.agent();
+    const req = crypto.randomUUID();
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        this.asks.delete(req);
+        resolve(null);
+      }, envNum(this.env.ASK_TIMEOUT_MS, ms));
+      this.asks.set(req, { resolve, timer });
+      try {
+        this.sendAgent(ws, { ...msg, req });
+      } catch {
+        clearTimeout(timer);
+        this.asks.delete(req);
+        resolve(null);
+      }
+    });
+  }
+
+  gotTranscript(m) {
+    const a = this.asks.get(String(m.req || ""));
+    if (!a) return;
+    clearTimeout(a.timer);
+    this.asks.delete(m.req);
+    a.resolve(m);
+  }
+
+  // What the computer sent for a conversation, cleaned up. Nothing from it is trusted: it ends up as chat messages.
+  cleanTranscript(sessionId, list) {
+    const out = [];
+    const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+    const model = v => (typeof v === "string" && MODELS[v] ? v : null);
+    for (const x of Array.isArray(list) ? list.slice(0, 700) : []) {
+      if (!x || typeof x !== "object" || (x.role !== "user" && x.role !== "assistant") || typeof x.content !== "string") continue;
+      if (typeof x.id !== "string" || !new RegExp(`^i-${sessionId}-\\d{1,6}-[ua]$`).test(x.id)) continue;
+      const created = Math.round(Number(x.created));
+      if (!Number.isFinite(created) || created < 0) continue;
+      const mt = x.meta && typeof x.meta === "object" ? x.meta : {};
+      const meta = { model: model(mt.model), effort: null, mode: "code", perm: PERMS.includes(mt.perm) ? mt.perm : "auto", imported: true };
+      if (x.role === "user") {
+        meta.files = (Array.isArray(mt.files) ? mt.files.slice(0, 10) : []).map(f => ({ name: str(f && f.name, 120) || "file", size: Math.max(0, Math.round(Number(f && f.size)) || 0), type: str(f && f.type, 80) }));
+      } else {
+        Object.assign(meta, {
+          context: null,
+          tools: (Array.isArray(mt.tools) ? mt.tools.slice(0, 80) : []).filter(t => t && typeof t.id === "string").map(t => ({ id: str(t.id, 80), name: str(t.name, 60), label: str(t.label, 140), done: true, error: !!t.error })),
+          error: null,
+          denials: 0,
+          ms: null,
+          thinking: str(mt.thinking, 20000),
+          thinkingMs: null,
+          artifacts: []
+        });
+      }
+      out.push({ id: x.id, role: x.role, content: str(x.content, 120000), meta, created });
+    }
+    return out;
+  }
+
+  addImported(chatId, messages) {
+    for (const m of messages) this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, ?, ?)", m.id, chatId, m.role, m.content, JSON.stringify(m.meta), m.created);
+  }
+
+  // A conversation that so far exists only on the computer becomes a chat here the first time it is opened. Its id is the
+  // session's id, so it is the same chat from then on, and sending in it carries on the same session.
+  async importSession(s) {
+    if (!this.historyOn()) return { error: `${siteName(this.env)} can't reach your computer right now, and this chat is only there. Run ${commandName(this.env)} to bring it back online.`, code: "offline", status: 503 };
+    const r = await this.askAgent({ type: "transcript", sessionId: s.id, from: 0 });
+    if (!r) return { error: "Your computer didn't answer in time. Try again in a moment.", code: "slow", status: 504 };
+    if (!r.ok) return { error: r.error === "missing" ? "That chat isn't on your computer anymore." : "That chat can't be opened from here.", code: "gone", status: 404 };
+    const messages = this.cleanTranscript(s.id, r.messages);
+    const turns = Math.max(0, Math.round(Number(r.turns)) || 0);
+    const last = [...messages].reverse().find(x => x.role === "assistant" && x.meta.model);
+    const at = messages.length ? messages[messages.length - 1].created : s.updated;
+    this.sql.exec("INSERT OR IGNORE INTO chats (id, title, model, effort, session_id, started, created, updated, synced_turns, synced_at, folder) VALUES (?, ?, ?, NULL, ?, 1, ?, ?, ?, ?, ?)", s.id, s.title || "Chat", last ? last.meta.model : null, s.id, messages.length ? messages[0].created : at, at, turns, Math.round(Number(r.mtime)) || 0, s.folder || "");
+    this.addImported(s.id, messages);
+    return { ok: true };
+  }
+
+  // Bring a chat up to date with Claude Code's record of it: anything added on the computer since (in the terminal, say)
+  // is added here. Best effort, and not more than every few seconds per chat.
+  async syncChat(chat, ms = 8000) {
+    if (!chat.session_id || chat.running || !this.historyOn()) return;
+    if (Date.now() - (this.lastSync.get(chat.id) || 0) < envNum(this.env.SYNC_MIN_MS, 5000)) return;
+    this.lastSync.set(chat.id, Date.now());
+    // A chat from before this was possible has no record of where it stands; what is here is taken to be all of it so far.
+    const first = chat.synced_turns === null || chat.synced_turns === undefined;
+    const r = await this.askAgent({ type: "transcript", sessionId: chat.session_id, from: first ? 1e9 : chat.synced_turns }, ms);
+    if (!r || !r.ok) return;
+    const turns = Math.max(0, Math.round(Number(r.turns)) || 0);
+    // Only what isn't here yet: a turn sent again must change nothing, not even when the chat was last used.
+    const have = new Set(this.rows("SELECT id FROM messages WHERE chat_id = ?", chat.id).map(x => x.id));
+    const messages = first ? [] : this.cleanTranscript(chat.session_id, r.messages).filter(x => !have.has(x.id));
+    // The computer's clock and this one needn't agree, so what is added is placed after what is already here, in its own order.
+    let after = (this.one("SELECT MAX(created) AS c FROM messages WHERE chat_id = ?", chat.id) || {}).c || 0;
+    for (const m of messages) m.created = after = Math.max(m.created, after + 1);
+    this.addImported(chat.id, messages);
+    const at = messages.length ? Math.max(chat.updated || 0, after) : chat.updated;
+    this.sql.exec("UPDATE chats SET synced_turns = ?, synced_at = ?, updated = ? WHERE id = ?", turns, Math.round(Number(r.mtime)) || 0, at, chat.id);
   }
 
   stopRun(runId) {
@@ -963,6 +1127,7 @@ export class ChatgqlHub extends DurableObject {
     const perm = mode === "code" && PERMS.includes(b.perm) ? b.perm : "auto";
     const ws = this.agent();
     if (!ws) return json({ error: `${siteName(this.env)} is offline right now. Run ${commandName(this.env)} to bring it back online, then send again.`, code: "offline" }, 503);
+    if (chat) await this.syncChat(chat, 6000);
     const now = Date.now();
     if (!chat) {
       chat = { id: crypto.randomUUID(), title: titleFrom(text, files), model, effort, session_id: crypto.randomUUID(), started: 0, running: null, created: now, updated: now };
@@ -1059,6 +1224,7 @@ export class ChatgqlHub extends DurableObject {
     const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, mode: r ? r.mode : "code", perm: r ? r.perm : "auto", context: cleanContext(m.context), tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);
     if (m.started) this.sql.exec("UPDATE chats SET started = 1 WHERE id = ?", chat.id);
+    if (m.sync && Number.isInteger(m.sync.turns) && m.sync.turns >= 0) this.sql.exec("UPDATE chats SET synced_turns = ?, synced_at = ? WHERE id = ?", m.sync.turns, Math.round(Number(m.sync.mtime)) || 0, chat.id);
     if (chat.running === m.runId) this.sql.exec("UPDATE chats SET running = NULL, updated = ? WHERE id = ?", now, chat.id);
     this.push(m.runId, { type: "done", message: { id: "a-" + m.runId, role: "assistant", content: text, meta, created: now } });
     this.closeRun(m.runId);

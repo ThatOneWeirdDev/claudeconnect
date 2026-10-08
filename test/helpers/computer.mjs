@@ -25,13 +25,28 @@ if (a[0] === "--help") {
 let prompt = "";
 process.stdin.on("data", d => (prompt += d)).on("end", () => {
   // every real run leaves its arguments and what it was asked, for the tests to look at
-  fs.appendFileSync(path.join(home, "claude-runs.jsonl"), JSON.stringify({ args: a, prompt }) + "\\n");
+  fs.appendFileSync(path.join(home, "claude-runs.jsonl"), JSON.stringify({ args: a, prompt, cwd: process.cwd() }) + "\\n");
   const out = o => console.log(JSON.stringify(o));
+  // like older Claude Code, which only finds a conversation from the folder it began in: a run from the wrong folder fails here instead of passing quietly
+  const i = Math.max(a.indexOf("--session-id"), a.indexOf("--resume"));
+  const sid = i >= 0 ? a[i + 1] : "";
+  const dir = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(home, ".claude"), "projects", process.cwd().replace(/[^A-Za-z0-9]/g, "-"));
+  const file = path.join(dir, sid + ".jsonl");
+  if (a[i] === "--resume" && !fs.existsSync(file)) {
+    out({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["No conversation found with session ID: " + sid] });
+    process.exit(1);
+  }
   out({ type: "system", subtype: "init", model: "claude-opus-5-5" });
   out({ type: "assistant", message: { id: "m1", usage: { input_tokens: 11, cache_creation_input_tokens: 44, cache_read_input_tokens: 333, output_tokens: 22 }, content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } });
   // the shape of a real event, captured from Claude Code 2.1.293: fractions of each window, resets in epoch seconds
   const now = Math.floor(Date.now() / 1000);
   out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", resetsAt: now + 3 * 3600, rateLimitType: "five_hour", utilization: 0.42, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 0.42, resetsAt: now + 3 * 3600 }, seven_day: { utilization: 0.17, resetsAt: now + 4 * 86400 } } } });
+  if (sid) {
+    // what the real thing leaves behind: the question and the answer, with the folder it ran in
+    fs.mkdirSync(dir, { recursive: true });
+    const base = { isSidechain: false, cwd: process.cwd(), sessionId: sid, version: "2.1.300" };
+    fs.appendFileSync(file, JSON.stringify({ type: "user", ...base, timestamp: new Date().toISOString(), message: { role: "user", content: prompt } }) + "\\n" + JSON.stringify({ type: "assistant", ...base, timestamp: new Date().toISOString(), message: { id: "m1", role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "You said: " + prompt.trim().slice(0, 30) }] } }) + "\\n");
+  }
   out({ type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0.0123,
     usage: { input_tokens: 11, output_tokens: 22, cache_read_input_tokens: 333, cache_creation_input_tokens: 44 },
     modelUsage: { "claude-opus-5-5": { inputTokens: 11, outputTokens: 22, cacheReadInputTokens: 333, cacheCreationInputTokens: 44, costUSD: 0.0123, contextWindow: 200000, maxOutputTokens: 64000 } },
@@ -97,6 +112,7 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   makeFakes(bin);
   // the previous version, as an earlier install would have left it
   copyFileSync(join(ROOT, "agent", "agent.mjs"), join(dir, "agent.mjs"));
+  copyFileSync(join(ROOT, "agent", "sessions.mjs"), join(dir, "sessions.mjs"));
   copyFileSync(join(ROOT, "ClaudeConnect.mjs"), join(dir, "ClaudeConnect.mjs"));
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ version: oldVersion, files: {} }));
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "claudeconnect", private: true, type: "module" }));

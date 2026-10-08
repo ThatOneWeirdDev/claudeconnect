@@ -68,6 +68,27 @@ A site that isn't behind Cloudflare Access is closed to **everyone**, including 
 
 Lost your claim link, or turned Access off and on again? Run `<command> claim` on your computer for a fresh one. It works because that computer holds your Cloudflare sign-in.
 
+## Your chats are Claude Code's chats
+
+Every chat here, in **Claude** or **Claude Code**, is a normal Claude Code conversation, saved on your computer in Claude Code's own folder (`~/.claude/projects`). So the site and Claude Code share one history:
+
+- **Chats you started in the terminal or the desktop app are in the sidebar**, with the ones you started here. A chat from another project shows that project's folder name under its title.
+- **Open any of them** and its conversation is copied to the site, then kept in step: whatever you add in the terminal later shows up the next time you open it.
+- **Carry on from the site.** It resumes the same conversation, in the folder it began in, so Claude Code sees the same project and the same history. You can pick it up again in the terminal afterwards with `claude --resume`.
+- **Delete** on the site only hides a chat from the site (so it doesn't reappear). Nothing is deleted on your computer.
+
+Only a list (titles and the last part of each folder's name) goes to the site until you open a chat; then that chat's text is copied. Very long chats bring the latest part (up to 300 turns and about 3.5 MB), and the rest stays on your computer. Chats from claude.ai in the browser aren't stored on your computer, so they can't be shown here.
+
+If you'd rather share less, set `history` in `config.json` in the ClaudeConnect folder on your computer (`~/.claudeconnect`) and restart `<command>`:
+
+| `history` | What the site can list and open |
+| --- | --- |
+| `"all"` (the default) | Every Claude Code chat on this computer. |
+| `"workspace"` | Only chats started in the working folder. |
+| `"off"` | None. Chats started on the site still work. |
+
+This needs the program on your computer to be 1.5.0 or newer. Updating from the site brings it up to date.
+
 ## Updating
 
 The site checks this repository for a newer version every half hour and shows **Update available**. Click it for what's new, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done, **Confirm update** reloads the page onto the new version. It's the same address, so there's no new link. You can also run `<command> update` in a terminal.
@@ -79,7 +100,7 @@ The site checks this repository for a newer version every half hour and shows **
 By default `main` of this repository, saved at install and used for every later update:
 
 ```sh
-node ClaudeConnect.mjs --ref v1.4.0                  # a tag or commit, so nothing changes until you decide
+node ClaudeConnect.mjs --ref v1.5.0                  # a tag or commit, so nothing changes until you decide
 node ClaudeConnect.mjs --repo yourname/claudeconnect # your own fork
 ```
 
@@ -107,6 +128,7 @@ A site is deployed before the program on your computer is replaced, so a new sit
 | `ClaudeConnect.mjs` | Launcher: downloads, verifies, runs the installer. A copy is kept on your computer for updates. |
 | `installer.mjs` | Setup wizard, plus the no-questions operations the site's Settings use: `--remote-update`, and `--remote-op settings`, `move` or `delete`. |
 | `agent/agent.mjs` | The program on your computer that runs Claude Code and carries out what the site asks. |
+| `agent/sessions.mjs` | Reads Claude Code's saved chats, for the list and for opening them. |
 | `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
 | `site/app.html` | The web app. Its colours and type follow OpenAI's published ChatGPT design tokens. |
 | `site/names.js`, `site/image.js`, `site/version.js` | Shared checks for names, addresses, images and versions, kept separate so the site and the installer use the same rules and they can be tested. |

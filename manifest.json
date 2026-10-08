@@ -1,20 +1,19 @@
 {
   "name": "claudeconnect",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "released": "2026-10-08",
   "notes": [
-    "The model and effort buttons now sit under the message box and show what is picked, with a ring that fills as the chat uses up its context.",
-    "Switch between Claude (plain chat, no tools) and Claude Code under the message box, and choose how freely Claude Code acts: Auto, Accept edits or Plan.",
-    "Claude Code now runs with its own default instructions. The setting for what the AI calls itself is gone.",
-    "Updating no longer ends with a new link: one Confirm update button reloads the page onto the new version.",
-    "Fixed: the theme buttons in Settings show your choice when you leave that tab and come back."
+    "Your Claude Code chats are on the site: the ones you started in the terminal or the desktop app are listed with the ones you started here, you can open any of them, and carry on from where it left off. Chats started on the site are Claude Code's own, so everything stays in step.",
+    "On a phone, the Claude / Claude Code switch and permission mode now sit on their own row at the bottom of the message box.",
+    "The pencil in the top corner is gone. New chat is in the sidebar."
   ],
   "files": {
     "ClaudeConnect.mjs": "2ad4647b8c16dceb459dbc7ce243a30223035c5cf5c0ac96ff4639d739c35fd7",
     "installer.mjs": "f302b63efbc2ee000497073367e3e79e837856aa78bddfe3457dfbcfb37593e0",
-    "agent/agent.mjs": "6988462757c3f1670c979c1d1cf9b5dfa2789374b60ff1ed4b8b88cdaf0f3838",
-    "site/worker.js": "58bd71c2779a40dc399459ec8787adec7242690f699f1c0247e87453b2136332",
-    "site/app.html": "e4700aaf86867b21ff66e47a59593db5946a6db456f7ca8f8012beca39b1e5e6",
+    "agent/agent.mjs": "6fb7baa8a85fb7b199a11417c574f74a321bc9d1582b71561ce05be708d32b14",
+    "agent/sessions.mjs": "e9f1e45825503d119ce34eb2e36ea18de5e37760c298b7595c3d8333b6131885",
+    "site/worker.js": "7604592201605a7a6b233cec9fbb28c26fbe673c1d0fc8bb69c7cfb7424f4c65",
+    "site/app.html": "6df09f1357dfb0f49882a6449398ae91cb18c07da1a5cf3e049f36ffc6016da6",
     "site/version.js": "13cbf80951c6c37d24ef63839932e07960647b39b3975864a58a0554853b9339",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
