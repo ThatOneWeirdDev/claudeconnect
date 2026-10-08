@@ -194,3 +194,33 @@ test("without --remote-update nothing is sent to any site", async t => {
   await run(home, gh, ["--update-id", "u-1"]);
   assert.equal(site.posts.length, 0);
 });
+
+test("right after a release, an old cached manifest with the new files doesn't stop an update: every request skips the cache", async t => {
+  // what raw.githubusercontent.com does for a few minutes: the branch's manifest is old unless asked for fresh, the files are new
+  const old = buildRelease({ ...FILES, "installer.mjs": STUB + "// older\n" }, "1.1.0");
+  const gh = await startGithub(buildRelease(FILES, "1.2.0"), { staleManifest: old.manifestText });
+  const home = tmp();
+  t.after(async () => { await gh.close(); rmSync(home, { recursive: true, force: true }); });
+  const r = await run(home, gh, ["--update"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stub.manifest, "1.2.0");
+  assert.ok(gh.hits.filter(h => h.includes("/manifest.json")).every(h => h.includes("?cb=")), "not even the first look uses the cache");
+});
+
+test("with GitHub's API, everything comes from the one commit the branch is on, so a cached manifest can't mix in", async t => {
+  const sha = "a".repeat(40);
+  const old = buildRelease({ ...FILES, "installer.mjs": STUB + "// older\n" }, "1.1.0");
+  const gh = await startGithub(buildRelease(FILES, "1.2.0"), { sha, staleBranch: old.manifestText });
+  const home = tmp();
+  t.after(async () => { await gh.close(); rmSync(home, { recursive: true, force: true }); });
+  const r = await run(home, gh, ["--update"], { CLAUDECONNECT_GH_API: gh.url + "/api" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stub.manifest, "1.2.0");
+  assert.equal(r.stub.ref, "main", "the install still follows the branch");
+  assert.ok(gh.hits.includes("/api/repos/ThatOneWeirdDev/claudeconnect/commits/main"));
+  assert.ok(gh.hits.filter(h => /manifest\.json|installer\.mjs/.test(h)).every(h => h.startsWith(`/ThatOneWeirdDev/claudeconnect/${sha}/`)), gh.hits.join(" "));
+  // and if the API can't be reached, it falls back to skipping the cache
+  const down = await run(tmp(), gh, ["--update"], { CLAUDECONNECT_GH_API: "http://127.0.0.1:9" });
+  assert.equal(down.status, 1, "the branch's manifest is stale even when asked fresh here, so this one can't succeed");
+  assert.match(down.stderr, /didn't match its checksum/);
+});
