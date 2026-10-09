@@ -113,10 +113,10 @@ test("the balance is on unless it's been turned off, and the site can turn it of
   const { site, pc } = await boot(t, { credits: null });
   let st = (await site.api("/api/state")).body.agent;
   assert.equal(st.credits, true, "on for an install that never said");
-  assert.deepEqual(st.computer, { autostart: false, credits: true });
+  assert.deepEqual([st.computer.autostart, st.computer.credits, st.computer.history], [false, true, "all"]);
   const off = await site.post("/api/computer", { credits: false });
   assert.equal(off.status, 200, off.text);
-  assert.deepEqual(off.body.computer, { autostart: false, credits: false });
+  assert.deepEqual([off.body.computer.autostart, off.body.computer.credits], [false, false]);
   assert.equal(JSON.parse(pc.read("config.json")).credits, false, "kept on the computer");
   st = (await site.api("/api/state")).body.agent;
   assert.equal(st.credits, false);
@@ -127,4 +127,41 @@ test("the balance is on unless it's been turned off, and the site can turn it of
   assert.ok(readFileSync(join(pc.home, ".config", "autostart", "claudeconnect-test-site.desktop"), "utf8").includes("agent.mjs"));
   assert.equal((await site.post("/api/computer", { autostart: false })).body.computer.autostart, false);
   assert.equal((await site.post("/api/computer", { nonsense: true })).status, 400);
+});
+
+test("which chats the site sees and the working folder change from the site, without a restart", async t => {
+  const { site, pc } = await boot(t, { credits: null });
+  let c = (await site.api("/api/state")).body.agent.computer;
+  assert.equal(c.history, "all");
+  assert.equal(c.workspace, join(pc.home, "ws"));
+  const off = await site.post("/api/computer", { history: "off" });
+  assert.equal(off.body.computer.history, "off");
+  assert.equal(JSON.parse(pc.read("config.json")).history, "off");
+  await until(async () => (await site.api("/api/state")).body.agent.history === false, "the site to stop asking for chats");
+  const folder = join(pc.home, "Projects", "new");
+  const moved = await site.post("/api/computer", { workspace: folder });
+  assert.equal(moved.status, 200, moved.text);
+  assert.equal(moved.body.computer.workspace, folder);
+  assert.equal(JSON.parse(pc.read("config.json")).workspace, folder);
+  const bad = await site.post("/api/computer", { workspace: "relative/path" });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /full path/);
+  assert.equal(bad.body.computer.workspace, folder, "and it's left as it was");
+  // a message now runs in the new folder
+  const res = await site.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "where am I", model: "claude-opus-5-5" }) });
+  await res.text();
+  assert.equal(pc.claudeRuns().pop().cwd, folder);
+});
+
+test("the site's name, Fable and logo set in Settings are kept on the computer for the next update and for edit", async t => {
+  const { site, pc } = await boot(t, { credits: null });
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  assert.equal((await site.post("/api/site", { displayName: "Renamed", fable: true, logo: { b64: PNG } })).status, 200);
+  await until(async () => JSON.parse(pc.read("config.json")).displayName === "Renamed", "the computer to save the name");
+  const cfg = JSON.parse(pc.read("config.json"));
+  assert.equal(cfg.fable, true);
+  assert.equal(cfg.command, "TestConnect", "the command stays the same");
+  const brand = JSON.parse(pc.read("site/brand.js").replace(/^export default /, "").replace(/;\s*$/, ""));
+  assert.equal(brand.logo.b64, PNG);
+  assert.equal(brand.favicon, null);
 });

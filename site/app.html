@@ -481,6 +481,8 @@ svg{display:block}
 .mt-bar.hot i{background:var(--warn)}
 .mt-bar.full i{background:var(--danger)}
 .mt-sub{margin-top:6px;color:var(--text-3);font-size:13px}
+.ok-text{color:var(--ok);font-weight:500}
+.field .seg{align-self:flex-start;max-width:100%;overflow-x:auto}
 .prog{margin:2px 0 6px}
 .prog-step{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14.5px;font-weight:500}
 .prog-step small{margin-left:auto;color:var(--text-3);font-weight:400;font-size:13px}
@@ -635,13 +637,16 @@ const EFF = ["low", "medium", "high", "xhigh", "max"];
 const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
 const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", fable: false, version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
+// the built-in logo, the same as the site's own (DEFAULT_MARK in worker.js)
+const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="m-bg" width="64" height="64" rx="16"/><circle class="m-fg" cx="29" cy="29" r="12.5" fill="none" stroke-width="6.5"/><path class="m-fg" d="M41.5 29v22" stroke-width="6.5" stroke-linecap="round"/><path class="m-fg" d="M36 45h11" stroke-width="5" stroke-linecap="round"/></svg>`;
 const ALL_MODELS = [
   { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable. Built for long, hard tasks.", efforts: EFF, def: "high", tag: "Uses usage credits", credits: true },
   { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Deep reasoning for complex work.", efforts: EFF, def: "medium" },
   { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work.", efforts: EFF, def: "medium" },
   { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks.", efforts: [], def: null }
 ];
-const MODELS = ALL_MODELS.filter(m => m.id !== "claude-fable-5-1" || CFG.fable);
+// Fable shows only when it's turned on in Settings, which can change while the page is open
+function models() { return ALL_MODELS.filter(m => m.id !== "claude-fable-5-1" || CFG.fable); }
 const MAX_BYTES = 15 * 1024 * 1024;
 const $ = id => document.getElementById(id);
 const store = {
@@ -673,7 +678,7 @@ const S = {
   query: ""
 };
 const UP = { data: null, timer: null, failing: 0, checking: false, seen: "", dismissing: false, lastRun: null, gone: null, reloadTimer: null };
-if (!MODELS.find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
+if (!models().find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
 if (!MODE_NAME[S.mode]) S.mode = "code";
 if (!PERM_MODES.find(x => x.id === S.perm)) S.perm = "auto";
 const I = {
@@ -960,7 +965,7 @@ function renderCtx() {
 
 function noteHtml() { return switchNote() ? `<div class="pick-note">${I.info}<span>${esc(switchNote())}</span></div>` : ""; }
 function popModel() {
-  return MODELS.map(x => `<button class="pm${x.id === S.model ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}${x.credits && !useCredits() ? ", which are off here" : ""}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
+  return models().map(x => `<button class="pm${x.id === S.model ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}${x.credits && !useCredits() ? ", which are off here" : ""}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
 }
 function popEffort() {
   const m = modelOf(S.model);
@@ -1093,6 +1098,7 @@ async function loadState() {
   } catch {
     return;
   }
+  applySite(S.state.site);
   if (S.state.update) applyUpdate(S.state.update);
   renderChrome();
 }
@@ -1415,7 +1421,7 @@ async function openChat(id, push) {
   S.chat = j.chat;
   if (push) history.pushState({ id }, "", `/c/${id}`);
   document.title = (j.chat.title || "Chat") + " · " + CFG.name;
-  if (j.chat.model && MODELS.find(m => m.id === j.chat.model)) {
+  if (j.chat.model && models().find(m => m.id === j.chat.model)) {
     S.model = j.chat.model;
     if (j.chat.effort) S.efforts[S.model] = j.chat.effort;
   }
@@ -1871,7 +1877,7 @@ function profileMenu() {
   return `<div class="hdr">${esc(st.email || CFG.name)}</div>` +
     `<button type="button" role="menuitem" data-pm="usage">${I.gauge}<span>Plan usage</span>${chip}</button>` +
     `<button type="button" role="menuitem" data-pm="settings">${I.gear}<span>Settings</span></button>` +
-    (u && u.available ? `<button type="button" role="menuitem" data-pm="updates">${I.up}<span>Update available</span><span class="chip-r up">v${esc(u.latest)}</span></button>` : "") +
+    (updateAvailable(u) ? `<button type="button" role="menuitem" data-pm="updates">${I.up}<span>Update available</span><span class="chip-r up">v${esc(u.latest)}</span></button>` : "") +
     `<hr><div class="row" style="padding:0 4px 0 10px;height:38px;gap:10px;flex-wrap:nowrap"><span style="color:var(--text-2);display:flex">${I.sun.replace("<svg", '<svg style="width:18px;height:18px"')}</span><span>Theme</span><span class="themes">${THEMES.map(([k, label, ic]) => `<button type="button" data-theme-set="${k}" title="${label}" aria-label="${label}">${ic}</button>`).join("")}</span></div>`;
 }
 function closeProfile() {
@@ -2049,21 +2055,15 @@ function renderLimitNote() {
 /* ---------- settings: name, look, address, updates, delete; and the checklist for whatever is running ---------- */
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const SET = { tab: "general", draft: null, address: "", confirm: "", err: "", busy: false, justUpdated: false };
+const SET = { tab: "general", name: undefined, saving: "", saved: "", address: "", confirm: "", err: "", busy: false, justUpdated: false };
 const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["chats", "Chats", I.chat], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
 
-function freshDraft() {
-  SET.draft = { displayName: CFG.name, fable: !!CFG.fable, logo: undefined, favicon: undefined };
-  SET.err = "";
-}
-function isDirty() {
-  const d = SET.draft;
-  return !!d && (d.displayName.trim() !== CFG.name || d.fable !== !!CFG.fable || d.logo !== undefined || d.favicon !== undefined);
-}
+// Every setting here takes effect when it's changed: no Save button. Only a name being typed is held, until Enter or leaving
+// the field.
+function nameTyped() { return SET.name === undefined ? CFG.name : SET.name.trim().replace(/\s+/g, " "); }
+function isDirty() { return SET.name !== undefined && nameTyped() !== CFG.name; }
 function draftError() {
-  const d = SET.draft;
-  if (!NAME_OK.test(d.displayName.trim().replace(/\s+/g, " "))) return "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number.";
-  return "";
+  return NAME_OK.test(nameTyped()) ? "" : "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number.";
 }
 function hostParts() {
   const parts = location.hostname.split(".");
@@ -2072,7 +2072,6 @@ function hostParts() {
 
 function openSettings(tab) {
   if (tab) SET.tab = tab;
-  if (!SET.draft) freshDraft();
   if (!$("setDlg").open) $("setDlg").showModal();
   renderSettings();
   pollUpdate();
@@ -2089,7 +2088,7 @@ function renderSettings() {
   const u = UP.data;
   $("setTitle").textContent = "Settings";
   $("setSub").textContent = location.host;
-  const nav = TABS.map(([k, label, ic]) => `<button type="button" data-tab-set="${k}" class="${SET.tab === k ? "on" : ""}${k === "delete" ? " danger" : ""}">${ic}<span>${label}</span>${k === "updates" && u && u.available ? '<i class="badge"></i>' : ""}</button>`).join("");
+  const nav = TABS.map(([k, label, ic]) => `<button type="button" data-tab-set="${k}" class="${SET.tab === k ? "on" : ""}${k === "delete" ? " danger" : ""}">${ic}<span>${label}</span>${k === "updates" && updateAvailable(u) ? '<i class="badge"></i>' : ""}</button>`).join("");
   $("setBody").innerHTML = `<div class="set"><nav class="set-nav" aria-label="Settings sections">${nav}</nav><div class="set-body" id="setPane">${paneHtml()}</div></div>`;
   renderFoot();
 }
@@ -2099,21 +2098,22 @@ function blockedNote() {
   return b ? `<div class="note soft" style="margin:0 0 16px">${esc(b.message)}</div>` : "";
 }
 function imgField(key, label, hint) {
-  const d = SET.draft[key];
-  const prev = d && d.url ? `<img src="${esc(d.url)}" alt="">` : d === null ? I.image : key === "logo" ? $("brand").firstElementChild.outerHTML : '<img src="/favicon" alt="">';
-  const state = d && d.url ? "New image chosen" : d === null ? "Built-in image (after saving)" : "Current image";
-  return `<div class="img-field"><div class="img-prev">${prev}</div><div class="img-meta"><b>${label}</b><small>${state} · ${hint}</small></div><button type="button" class="btn ghost" data-img="${key}">Choose…</button>${d !== null ? `<button type="button" class="btn ghost" data-img-reset="${key}">Built-in</button>` : ""}</div>`;
+  const site = siteNow();
+  const own = !!site[key];
+  const prev = key === "logo" ? (own ? `<img src="/logo?v=${esc(site.v)}" alt="">` : DEFAULT_MARK) : `<img src="/favicon?v=${esc(site.v)}" alt="">`;
+  const state = SET.saving === key ? "Saving…" : own ? "Your own" : key === "favicon" ? "Same as the logo" : "Built-in";
+  return `<div class="img-field"><div class="img-prev">${prev}</div><div class="img-meta"><b>${label}</b><small>${state} · ${hint}</small></div><button type="button" class="btn ghost" data-img="${key}"${SET.saving ? " disabled" : ""}>Choose…</button>${own ? `<button type="button" class="btn ghost" data-img-reset="${key}"${SET.saving ? " disabled" : ""}>${key === "favicon" ? "Use the logo" : "Built-in"}</button>` : ""}</div>`;
 }
 
 function paneHtml() {
-  const d = SET.draft;
   const u = UP.data;
   if (SET.tab === "general") {
-    return `${blockedNote()}<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(d.displayName)}" autocomplete="off"><small>Shown at the top of the page and in the browser tab. The command <code>${esc(CFG.command)}</code> stays the same.</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${d.fable}" aria-label="Fable 5.1"></button></div></div>${computerHtml()}`;
+    const status = SET.saving === "name" ? "Saving…" : SET.saved === "name" ? "Saved" : "";
+    return `<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(SET.name === undefined ? CFG.name : SET.name)}" autocomplete="off" enterkeyhint="done"><small>Shown at the top of the page and in the browser tab. Saved when you press Enter or click away. The command <code>${esc(CFG.command)}</code> stays the same.${status ? ` <b class="ok-text">${status}</b>` : ""}</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${!!CFG.fable}" aria-label="Fable 5.1"></button></div>${SET.err && SET.tab === "general" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div>${computerHtml()}`;
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
-    return `${blockedNote()}<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. The tab icon falls back to the logo if you don't pick one.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
+    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. A new one is used as soon as you pick it.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
   }
   if (SET.tab === "address") {
     const h = hostParts();
@@ -2131,11 +2131,11 @@ function updatesHtml() {
   const v = x => "v" + x;
   if (!u) return '<p class="fine">Loading…</p>';
   if (pageIsStale()) return `<div class="sec"><h3>Updated to ${esc(v(u.current))}</h3>${whatsNewHtml(u, "Patch notes")}<p class="fine">Switching this page to ${esc(v(u.current))}.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div></div>`;
-  if (u.available) {
+  if (updateAvailable(u)) {
     return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}${questionsHtml(u)}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and you can close this while it runs.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
   }
   const earlier = (u.history || []).length ? `<details class="earlier"><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
-  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(u.current))}${u.latest && u.latest !== u.current ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
+  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(newerThan(CFG.version, u.current) ? CFG.version : u.current))}${updateAvailable(u) ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
 }
 // What a new version asks, answered here before it's installed. The answers are kept by the site and given to the new version
 // once it's running on the computer.
@@ -2154,26 +2154,37 @@ function questionsHtml(u) {
 // This computer's own settings (the same ones `<command> edit` asks about), changed straight away.
 const PC = { busy: "", err: "" };
 const PC_ROWS = [["autostart", () => `Start ${CFG.name} when you log in`, "Keeps it online whenever you're logged in to this computer."], ["credits", () => "Show your usage credit balance", "Plan usage shows your balance, promotional credits and this month's spending. The computer asks Claude for them with Claude Code's sign-in, which never leaves it."]];
+const SCOPES = [["all", "All"], ["workspace", "Working folder only"], ["off", "None"]];
 function computerHtml() {
   const a = S.state && S.state.agent;
   const c = a && a.online && a.computer;
-  const rows = PC_ROWS.map(([k, label, help]) => `<div class="switch"><div class="t"><span>${esc(label())}</span><small>${esc(help)}</small></div><button type="button" class="toggle" role="switch" data-pc="${k}" aria-checked="${!!(c && c[k])}" aria-label="${esc(label())}"${!c || PC.busy ? " disabled" : ""}></button></div>`).join("");
+  const off = !c ? " disabled" : "";
+  const rows = PC_ROWS.map(([k, label, help]) => `<div class="switch"><div class="t"><span>${esc(label())}</span><small>${esc(help)}</small></div><button type="button" class="toggle" role="switch" data-pc="${k}" aria-checked="${!!(c && c[k])}" aria-label="${esc(label())}"${off}></button></div>`).join("");
   const why = !a || !a.online ? `${esc(CFG.name)} is offline, so these can't be changed right now.` : !c ? `Update ${esc(CFG.name)} to change these here, or run <code>${esc(CFG.command)} edit</code> on your computer.` : "";
-  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${rows}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
+  const scope = c && c.history ? `<div class="field"><label>Claude Code chats from this computer in the sidebar</label><div class="seg" role="group" aria-label="Claude Code chats in the sidebar">${SCOPES.map(([k, label]) => `<button type="button" data-pc="history" data-value="${k}" class="${c.history === k ? "on" : ""}" aria-pressed="${c.history === k}">${label}</button>`).join("")}</div><small>Chats you started in the terminal or the desktop app. "Working folder only" lists the ones from the folder below.</small></div>` : "";
+  const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>Where Claude Code works and where files you attach go. Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
+  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${rows}${scope}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
 }
+// The switch moves at once; if the computer says no, it moves back and says why.
 async function setComputer(key, value) {
+  const a = S.state && S.state.agent;
+  if (!a || !a.computer || (key === "workspace" && (!value || value === a.computer.workspace))) return;
+  const before = { ...a.computer };
+  a.computer = { ...a.computer, [key]: value };
+  if (key === "credits") a.credits = value;
+  if (key === "workspace") PC.ws = value;
   PC.busy = key;
   PC.err = "";
   renderSettings();
   try {
     const r = await apiJson("/api/computer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ [key]: value }) });
-    if (S.state && S.state.agent) {
-      S.state.agent.computer = r.computer;
-      if (r.computer && "credits" in r.computer) S.state.agent.credits = r.computer.credits;
-    }
+    a.computer = r.computer || a.computer;
   } catch (e) {
+    a.computer = (e.data && e.data.computer) || before;
     PC.err = e.message === "Signed out" ? "" : e.message;
   }
+  a.credits = !!a.computer.credits;
+  PC.ws = undefined;
   PC.busy = "";
   renderSettings();
 }
@@ -2186,25 +2197,50 @@ function whatsNewHtml(u, head) {
   return w && w.notes.length ? `<h3>${esc(head)}</h3>${w.released ? `<p class="fine" style="margin:0 0 4px">Released ${esc(w.released)}</p>` : ""}${notesList(w.notes)}` : "";
 }
 
-function renderFoot() {
-  const foot = $("setFoot");
-  const show = (SET.tab === "general" || SET.tab === "appearance") && isDirty() && !upRun();
-  foot.hidden = !show;
-  if (!show) return;
-  const err = SET.tab === "general" ? draftError() : "";
-  foot.innerHTML = `<span class="hint">${SET.err && !err ? esc(SET.err) : "You have unsaved changes."}</span><button type="button" class="btn ghost" data-act="discard">Discard</button><button type="button" class="btn primary" data-act="save"${err || SET.busy || (UP.data && UP.data.blockedAdmin) ? " disabled" : ""}>${SET.busy ? "Saving…" : "Save changes"}</button>`;
-}
+// There's nothing to save anymore: every change applies by itself.
+function renderFoot() { $("setFoot").hidden = true; }
 
+// The site's name, Fable and images as they are now. Changing them takes effect at once, on every device, with no redeploy.
+function siteNow() { return (S.state && S.state.site) || { name: CFG.name, fable: !!CFG.fable, logo: !!document.querySelector("#brand img"), favicon: false, v: "0" }; }
+function applySite(site) {
+  if (!site) return;
+  if (S.state) S.state.site = site;
+  CFG.name = site.name;
+  CFG.fable = !!site.fable;
+  document.title = S.chat && S.chat.title ? `${S.chat.title} · ${CFG.name}` : CFG.name;
+  $("topTitle").textContent = CFG.name;
+  $("brand").setAttribute("aria-label", CFG.name);
+  const mark = $("brand").firstElementChild;
+  const want = site.logo ? `<img src="/logo?v=${esc(site.v)}" alt="">` : DEFAULT_MARK;
+  if (mark && mark.outerHTML !== want) mark.outerHTML = want;
+  const icon = document.querySelector('link[rel="icon"]');
+  if (icon) icon.href = `/favicon?v=${site.v}`;
+  if (!models().find(m => m.id === S.model)) { S.model = DEFAULT_MODEL; renderBar(); }
+}
+async function saveSite(what, body) {
+  SET.saving = what;
+  SET.saved = "";
+  SET.err = "";
+  renderSettings();
+  try {
+    applySite(await apiJson("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+    SET.saved = what;
+    if (what === "name") SET.name = undefined;
+  } catch (e) {
+    SET.err = e.message === "Signed out" ? "" : e.message;
+  }
+  SET.saving = "";
+  renderSettings();
+}
+function saveName() {
+  if (SET.name === undefined || !isDirty() || draftError() || SET.saving) return;
+  saveSite("name", { displayName: nameTyped() });
+}
 function readImage(file, key) {
   if (!file) return;
   if (file.size > 512 * 1024) { SET.err = "That image is bigger than 512 KB."; renderSettings(); return; }
   const r = new FileReader();
-  r.onload = () => {
-    const url = String(r.result);
-    SET.draft[key] = { b64: url.split(",")[1] || "", url };
-    SET.err = "";
-    renderSettings();
-  };
+  r.onload = () => saveSite(key, { [key]: { b64: String(r.result).split(",")[1] || "" } });
   r.onerror = () => toast("Couldn't read that image.");
   r.readAsDataURL(file);
 }
@@ -2223,11 +2259,13 @@ async function adminCall(path, body) {
 }
 
 $("setBody").addEventListener("input", e => {
-  if (e.target.id === "fName") { SET.draft.displayName = e.target.value; renderFoot(); const err = draftError(); e.target.classList.toggle("bad", !!err); }
+  if (e.target.id === "fName") { SET.name = e.target.value; SET.saved = ""; e.target.classList.toggle("bad", !!draftError()); }
   else if (e.target.id === "fAddr") { SET.address = e.target.value.trim().toLowerCase(); const bad = SET.address && !SLUG_OK.test(SET.address); const b = $("setBody").querySelector("[data-act=move]"); if (b) b.disabled = !SET.address || !!bad || !!(UP.data && UP.data.blockedAdmin); }
   else if (e.target.id === "fDel") { SET.confirm = e.target.value; const b = $("setBody").querySelector("[data-act=delete]"); if (b) b.disabled = SET.confirm !== CFG.name || !!(UP.data && UP.data.blockedAdmin); }
 });
 $("setBody").addEventListener("change", e => {
+  if (e.target.id === "fName") saveName();
+  if (e.target.id === "fWs") setComputer("workspace", e.target.value.trim());
   if (e.target.id === "fImg" && SET.pickKey) { readImage(e.target.files[0], SET.pickKey); e.target.value = ""; }
   if (e.target.id === "fImport" && e.target.files[0]) importExport(e.target.files[0]);
 });
@@ -2238,35 +2276,25 @@ $("setBody").addEventListener("click", async e => {
   if (th) return setTheme(th.dataset.themeSet);
   const copy = e.target.closest("[data-copy-link]");
   if (copy) return copyText(copy.dataset.copyLink, copy);
-  if (e.target.closest("#fFable")) { SET.draft.fable = !SET.draft.fable; return renderSettings(); }
+  if (e.target.closest("#fFable")) return SET.saving || saveSite("fable", { fable: !CFG.fable });
   const pc = e.target.closest("[data-pc]");
-  if (pc) return PC.busy || setComputer(pc.dataset.pc, pc.getAttribute("aria-checked") !== "true");
+  if (pc) return setComputer(pc.dataset.pc, pc.dataset.value !== undefined ? pc.dataset.value : pc.getAttribute("aria-checked") !== "true");
   const ans = e.target.closest("[data-answer]");
   if (ans) { ANSWERS[ans.dataset.answer] = ans.getAttribute("aria-checked") !== "true"; return renderSettings(); }
   const img = e.target.closest("[data-img]");
   if (img) { SET.pickKey = img.dataset.img; $("fImg").click(); return; }
   const reset = e.target.closest("[data-img-reset]");
-  if (reset) { SET.draft[reset.dataset.imgReset] = null; return renderSettings(); }
+  if (reset) return saveSite(reset.dataset.imgReset, { [reset.dataset.imgReset]: null });
   const act = e.target.closest("[data-act]");
   if (!act) return;
   await doAct(act.dataset.act);
 });
-$("setFoot").addEventListener("click", async e => {
-  const act = e.target.closest("[data-act]");
-  if (act) await doAct(act.dataset.act);
+$("setBody").addEventListener("keydown", e => {
+  if (e.target.id === "fName" && e.key === "Enter") { e.preventDefault(); saveName(); }
+  if (e.target.id === "fWs" && e.key === "Enter") { e.preventDefault(); e.target.blur(); }
 });
 
 async function doAct(act) {
-  const d = SET.draft;
-  if (act === "discard") { freshDraft(); return renderSettings(); }
-  if (act === "save") {
-    if (draftError()) return;
-    const body = {};
-    if (d.displayName.trim().replace(/\s+/g, " ") !== CFG.name) body.displayName = d.displayName.trim().replace(/\s+/g, " ");
-    if (d.fable !== !!CFG.fable) body.fable = d.fable;
-    for (const k of ["logo", "favicon"]) if (d[k] !== undefined) body[k] = d[k] === null ? null : { b64: d[k].b64 };
-    return adminCall("/api/admin/settings", body);
-  }
   if (act === "move") {
     if (!confirm(`Set up ${SET.address}${hostParts().suffix}?\n\nThe new site is created first and this one keeps working until you've turned on Cloudflare Access for it. Then this site is deleted, along with its chats.`)) return;
     return adminCall("/api/admin/move", { address: SET.address });
@@ -2442,6 +2470,9 @@ async function importExport(file) {
 function upRun() { return UP.data && UP.data.run ? UP.data.run : null; }
 // Behind the site: the site runs a newer version than this page. Never the other way round: for a moment after an update the
 // page can be new while the site still answers as the old one, and that page is already where it should be.
+// Only when GitHub has something newer than both this page and the site. Right after an update the site can still answer as
+// the old version for a moment while this page is already the new one; that's not an update waiting.
+function updateAvailable(u) { return !!(u && u.available && u.latest && newerThan(u.latest, CFG.version)); }
 function pageIsStale() { return !!(UP.data && UP.data.current && newerThan(UP.data.current, CFG.version)); }
 function newerThan(a, b) {
   const x = /^(\d+)\.(\d+)\.(\d+)/.exec(String(a || ""));
@@ -2552,7 +2583,7 @@ function renderPill() {
   else if (run && run.state === "done" && run.kind === "settings") { text = "Reload"; short = "Reload"; }
   else if (run && run.state === "done" && UP.seen === run.id && !pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
   else if (pageIsStale() && !reloadAsked()) { text = "Updated · Reload"; short = "Reload"; }
-  else if (u && u.available) { text = "Update available"; short = "Update"; }
+  else if (updateAvailable(u)) { text = "Update available"; short = "Update"; }
   b.hidden = !text;
   b.className = cls;
   $("pillText").textContent = text;
@@ -2586,7 +2617,7 @@ function maybeReload(wait) {
   UP.reloadTimer = setTimeout(() => {
     const r = upRun();
     if (!pageIsStale() || (r && r.state !== "done")) return;
-    if ($("input").value.trim() || S.files.length || S.busy || S.live || (SET.draft && isDirty())) return maybeReload(2000);
+    if ($("input").value.trim() || S.files.length || S.busy || S.live || isDirty()) return maybeReload(2000);
     try { sessionStorage.setItem("gql.reloadedTo", `${UP.data.current}#${tries + 1}`); } catch {}
     reloadNow();
   }, Math.max(wait, tries * 5000));

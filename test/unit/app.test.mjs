@@ -391,3 +391,16 @@ test("a reply shows its thinking, text and tools in the order they happened", ()
   assert.ok(order.every((x, i) => x >= 0 && (i === 0 || x > order[i - 1])), html);
   assert.equal(ctx.partsOf({ thinking: "x" }, "y"), null, "an older reply has no pieces");
 });
+
+test("right after an update the page doesn't offer it again, and settings have no Save button", () => {
+  const ctx = { CFG: { version: "1.10.0" } };
+  vm.runInNewContext(lift("updateAvailable") + lift("newerThan") + "this.updateAvailable = updateAvailable;", ctx);
+  assert.equal(ctx.updateAvailable({ available: true, latest: "1.10.0", current: "1.9.0" }), false, "the site still answers as 1.9.0 for a moment; this page is already 1.10.0");
+  assert.equal(ctx.updateAvailable({ available: true, latest: "1.11.0", current: "1.10.0" }), true);
+  assert.equal(ctx.updateAvailable({ available: false, latest: "1.10.0" }), false);
+  assert.equal(ctx.updateAvailable(null), false);
+  assert.doesNotMatch(script, /Save changes|data-act="save"|data-act="discard"|You have unsaved changes/);
+  // changes go to the site as they're made
+  assert.match(script, /if \(e\.target\.closest\("#fFable"\)\) return SET\.saving \|\| saveSite\("fable", \{ fable: !CFG\.fable \}\);/);
+  assert.match(script, /r\.onload = \(\) => saveSite\(key, /);
+});
