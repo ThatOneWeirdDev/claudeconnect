@@ -140,7 +140,7 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(dir, "agent.mjs")}" "$@"\n`);
   chmodSync(shim, 0o755);
   const config = {
-    name: "test-site", displayName: "Test Site", command: "TestConnect", fable: false,
+    name: "test-site", displayName: "Test Site", command: "TestConnect", fable: false, // fable: as installs before 1.12.0 saved it
     accountId: "acct-123", kvId: "kv-123", site: site.origin, secret: AGENT_SECRET, workspace: join(home, "ws"),
     permissionMode: "auto", shim, version: oldVersion, repo: "ThatOneWeirdDev/claudeconnect", ref: "main",
     token: site.jwt, tokenExp: Math.floor(Date.now() / 1000) + 86400 * 30, claudePath: join(bin, "claude"), id: "agent-real"

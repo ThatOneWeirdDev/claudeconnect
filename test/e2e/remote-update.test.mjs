@@ -103,7 +103,7 @@ test("updating from the site: the site stays up, progress is shown, the computer
   assert.equal(d.vars.SITE_NAME, "Test Site");
   assert.equal(d.vars.AI_NAME, undefined, "there is no AI name any more");
   assert.equal(d.vars.COMMAND, "TestConnect");
-  assert.equal(d.vars.SHOW_FABLE, "0");
+  assert.equal(d.vars.SHOW_FABLE, undefined, "Fable 5.1 is always in the model picker");
   assert.match(pc.npxLog(), /auth token/);
 
   // the computer step: new files in place, matching the release

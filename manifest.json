@@ -1,18 +1,20 @@
 {
   "name": "claudeconnect",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "released": "2026-10-09",
   "notes": [
-    "\"Updated\" means updated: the update keeps its progress bar going until the site really answers as the new version, then the page switches over at once.",
-    "Limit resets: if your Claude account has resets (like the one Anthropic gave subscribers to clear a limit whenever they choose), Plan usage lists them, with how many are left, and a button to use one."
+    "Fable 5.1 is always in the model picker, marked as using usage credits. If your Claude account has none, the picker says so, and a message to Fable 5.1 tells you you have no usage credits instead of being sent.",
+    "The edit command in the terminal now has every setting the site's Settings has: the theme, which Claude Code chats the site lists, the working folder, using usage credits from the site, a new address, and deleting the site.",
+    "The theme is kept on the site, so it's the same on every device.",
+    "Bringing chats over from claude.ai's data export is gone, and chats brought over that way are removed from the site. They're still on claude.ai."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "1426eb181a4b573b761939a20414b565b530b855ae31747bdb07034c0e51ca25",
-    "agent/agent.mjs": "2333adde9118cffe80821d2b47db4e888848c3cb826169f2cd37609fc48012cd",
+    "installer.mjs": "f1560cfa5ce7162c26e9b457aa2b772c2359897b14f56960a033dab74d36c0f2",
+    "agent/agent.mjs": "a7954a6ebb0175f445cfb063b50cca0da2466bb01899fae6688e413b1565e1de",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
-    "site/worker.js": "92ccc1717c6bb75baca3793fff5ca7971aa7ecdfeaf5d5a3b2821584feb8dafa",
-    "site/app.html": "5dbd5c5d21d977128481aeb207e20a464944c6202842a239951304050cfbd761",
+    "site/worker.js": "b080b25f7b1b400c2f778274a87a5abf1c6f65b3d2ef56f391a63978371c4a7b",
+    "site/app.html": "23c80ee382bb9c9687d32658461de0da0ff08cb12056471d766f5d087e077f6f",
     "site/version.js": "8a042367a589983c42664b26f4f457f7c05b89f9c2cca3dfe9e10c3b70091bd9",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
