@@ -47,10 +47,11 @@ if (!cfg.id) {
 const NAME = cfg.displayName || "ClaudeConnect";
 const COMMAND = cfg.command || "ClaudeConnect";
 const SLUG = String(cfg.name || "claudeconnect").replace(/[^a-z0-9-]/gi, "").toLowerCase() || "claudeconnect";
-const WORKSPACE = cfg.workspace || join(os.homedir(), NAME);
+// Both can be changed from the site while this runs (Settings → General → This computer).
+let WORKSPACE = cfg.workspace || join(os.homedir(), NAME);
 const API = cfg.api || "https://api.cloudflare.com/client/v4";
 // Which of the chats Claude Code has saved on this computer the site may list and open: "all", "workspace" (only the working folder) or "off".
-const HISTORY = ["all", "workspace", "off"].includes(cfg.history) ? cfg.history : "all";
+let HISTORY = ["all", "workspace", "off"].includes(cfg.history) ? cfg.history : "all";
 
 function saveConfig() {
   try {
@@ -838,7 +839,7 @@ function creditsOn() {
 // This computer's own settings, which the site shows and can change: starting at login, and reading the credit balance.
 // Answers to an update's new questions arrive the same way, once the new version is running.
 function computerSettings() {
-  return { autostart: existsSync(startupPaths().file), credits: creditsOn() };
+  return { autostart: existsSync(startupPaths().file), credits: creditsOn(), history: HISTORY, workspace: WORKSPACE };
 }
 
 function setComputer(m) {
@@ -853,7 +854,46 @@ function setComputer(m) {
   } catch (e) {
     log("Couldn't change a setting:", e.message || e);
   }
-  send({ type: "computer", req: m.req, values: computerSettings() });
+  let error = "";
+  // which of Claude Code's chats the site can list and open
+  if (["all", "workspace", "off"].includes(v.history) && v.history !== HISTORY) {
+    HISTORY = cfg.history = v.history;
+    saveConfig();
+    lastSessions = "";
+    if (HISTORY === "off") send({ type: "sessions", sessions: [] });
+    else reportSessions(true);
+  }
+  // the folder Claude Code works in; it's made if it isn't there
+  if (typeof v.workspace === "string" && v.workspace.trim() && v.workspace.trim() !== WORKSPACE) {
+    const dir = resolvePath(v.workspace.trim().replace(/^~(?=$|[\\/])/, os.homedir()));
+    try {
+      if (!isAbsolute(v.workspace.trim().replace(/^~/, "/"))) throw new Error("use a full path, like ~/Projects or /Users/you/Projects");
+      mkdirSync(join(dir, "uploads"), { recursive: true });
+      WORKSPACE = cfg.workspace = dir;
+      saveConfig();
+      log(`Working folder is now ${WORKSPACE}`);
+    } catch (e) {
+      error = `That folder can't be used: ${String((e && e.message) || e).slice(0, 160)}`;
+    }
+  }
+  // the hello says what this computer can do, and that can change with these
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(helloMessage()));
+  send({ type: "computer", req: m.req, values: computerSettings(), error });
+}
+
+// The site's name, Fable and images, as changed in Settings. Kept here for the next update's deploy and for `<command> edit`.
+function saveSite(m) {
+  if (typeof m.displayName === "string" && m.displayName.trim()) cfg.displayName = m.displayName.trim().slice(0, 40);
+  if (typeof m.fable === "boolean") cfg.fable = m.fable;
+  saveConfig();
+  const brand = m.brand && typeof m.brand === "object" ? m.brand : null;
+  const file = join(HERE, "site", "brand.js");
+  if (brand && existsSync(dirname(file))) {
+    const img = v => (v && typeof v.type === "string" && typeof v.b64 === "string" ? { type: v.type, b64: v.b64 } : null);
+    try {
+      writeFileSync(file, "export default " + JSON.stringify({ logo: img(brand.logo), favicon: img(brand.favicon) }) + ";\n");
+    } catch {}
+  }
 }
 
 async function readCredits() {
@@ -1132,6 +1172,11 @@ function onMessage(raw) {
   else if (m.type === "limits_refresh") probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
   else if (m.type === "transcript") handleTranscript(m);
   else if (m.type === "computer") setComputer(m);
+  else if (m.type === "site") saveSite(m);
+}
+
+function helloMessage() {
+  return { type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(creditsOn() ? ["credits"] : []), "computer"], computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] };
 }
 
 let pingTimer = null;
@@ -1205,7 +1250,7 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(creditsOn() ? ["credits"] : []), "computer"], computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify(helloMessage()));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);

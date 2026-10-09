@@ -56,6 +56,7 @@ export class ChatgqlHub extends Base {
       if (req.method === "POST") {
         const b = await req.json();
         await this.ctx.storage.put(b.key, b.value);
+        if (b.key === "site") this.siteRec = b.value; // as the Object reads it when it starts
         return Response.json({ ok: true });
       }
       return Response.json({ value: (await this.ctx.storage.get(new URL(req.url).searchParams.get("key"))) ?? null });

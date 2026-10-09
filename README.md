@@ -38,12 +38,12 @@ Setup asks for a name, signs you in to Cloudflare, creates the site, then walks 
 
 ## Everything from the site
 
-Open your site, click your account at the bottom of the sidebar, and choose **Settings**. Whatever you change here, your computer carries out and the page follows along step by step, from any device.
+Open your site, click your account at the bottom of the sidebar, and choose **Settings**. There's no Save button: a switch, a new logo or a name (when you press Enter or click away) takes effect straight away, on every device, with no redeploy. The site tells your computer too, so its own copy matches for the next update and for `<command> edit`; a change made later with `<command> edit` wins.
 
 | Settings page | What it does |
 | --- | --- |
-| **General** | The site's name, and whether Fable 5.1 shows in the model picker (the site is redeployed in place, so **your chats are kept**). Under **This computer**: whether it starts when you log in, and whether Plan usage shows your usage credit balance. These change straight away. Everything `<command> edit` asks about is here. |
-| **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. Same in-place redeploy. |
+| **General** | The site's name, and whether Fable 5.1 shows in the model picker. Under **This computer**: whether it starts when you log in, whether Plan usage shows your usage credit balance, which of Claude Code's chats from this computer the sidebar lists, and the folder Claude Code works in. Everything `<command> edit` asks about is here, and more. |
+| **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. |
 | **Chats** | Brings your claude.ai chats over from claude.ai's data export (see [Chats from claude.ai](#chats-from-claudeai)). |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
 | **Updates** | Shows when a new version is out and installs it in place. |

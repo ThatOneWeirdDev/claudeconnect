@@ -35,10 +35,15 @@ const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
 // The settings that live on the computer, which the site can show and change.
 const COMPUTER_KEYS = ["autostart", "credits"];
 
+// and two that aren't yes/no: which of Claude Code's chats the site can see, and the folder Claude Code works in
+const HISTORY_SCOPES = ["all", "workspace", "off"];
+
 function cleanComputer(v) {
   if (!v || typeof v !== "object") return null;
   const out = {};
   for (const k of COMPUTER_KEYS) if (typeof v[k] === "boolean") out[k] = v[k];
+  if (HISTORY_SCOPES.includes(v.history)) out.history = v.history;
+  if (typeof v.workspace === "string" && v.workspace.trim() && v.workspace.length <= 400 && !/[\0\r\n]/.test(v.workspace)) out.workspace = v.workspace;
   return Object.keys(out).length ? out : null;
 }
 // A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
@@ -95,11 +100,24 @@ function escHtml(v) {
   return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function brandAsset(kind) {
+// The logo or tab icon this deploy was made with: { type, b64 }, or null for the built-in one.
+function brandImage(kind) {
   const b = BRAND && BRAND[kind];
-  if (!b || !b.b64) return null;
-  if (!brandBytes[kind]) brandBytes[kind] = b64urlBytes(b.b64);
-  return { type: b.type, bytes: brandBytes[kind] };
+  return b && b.b64 ? { type: b.type, b64: b.b64 } : null;
+}
+
+// A short fingerprint, to tell one deployed value from another and to version image addresses.
+function fingerprint(v) {
+  const t = typeof v === "string" ? v : JSON.stringify(v === undefined ? null : v);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+
+function imageBytes(img) {
+  const key = fingerprint(img.b64);
+  if (!brandBytes[key]) brandBytes[key] = b64urlBytes(img.b64);
+  return brandBytes[key];
 }
 
 function kindOf(mime, name) {
@@ -114,12 +132,6 @@ function kindOf(mime, name) {
 function mimeOf(name) {
   const ext = (String(name).match(/\.([A-Za-z0-9]+)$/) || [])[1];
   return (ext && MIME[ext.toLowerCase()]) || "application/octet-stream";
-}
-
-function modelsFor(env) {
-  const out = {};
-  for (const [id, m] of Object.entries(MODELS)) if (id !== "claude-fable-5-1" || env.SHOW_FABLE === "1") out[id] = m;
-  return out;
 }
 
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0D0D0D"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
@@ -296,36 +308,36 @@ const PAGE_HEADERS = {
   "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 };
 
-function appPage(env) {
-  const name = siteName(env);
-  const logo = brandAsset("logo");
-  const mark = logo ? `<img src="/logo" alt="">` : DEFAULT_MARK;
-  const cfg = JSON.stringify({ name, command: commandName(env), fable: env.SHOW_FABLE === "1", version: appVersion(env) }).replace(/</g, "\\u003c");
-  const html = APP_HTML.split("__SITE_NAME__").join(escHtml(name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg);
+// `site` is the site's name, Fable and images as they are now (see siteSettings in the Durable Object).
+function appPage(env, site) {
+  const mark = site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK;
+  const cfg = JSON.stringify({ name: site.name, command: commandName(env), fable: site.fable, version: appVersion(env) }).replace(/</g, "\\u003c");
+  const html = APP_HTML.split("__SITE_NAME__").join(escHtml(site.name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg).split('href="/favicon"').join(`href="/favicon?v=${site.v}"`);
   return new Response(html, { headers: PAGE_HEADERS });
 }
 
-function brandResponse(kind) {
-  const a = brandAsset(kind) || (kind === "favicon" ? brandAsset("logo") : null);
-  if (!a) {
+// An address with ?v= is one version of the image, so it can be kept for good; without, it's whatever is current.
+function brandResponse(kind, img, versioned) {
+  const cache = versioned ? "public, max-age=31536000, immutable" : "public, max-age=300";
+  if (!img) {
     if (kind === "logo") return new Response("Not found", { status: 404 });
-    return new Response(FAVICON, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=3600" } });
+    return new Response(FAVICON, { headers: { "content-type": "image/svg+xml", "cache-control": cache } });
   }
-  return new Response(a.bytes, { headers: { "content-type": a.type, "cache-control": "public, max-age=3600", "x-content-type-options": "nosniff", "content-security-policy": "sandbox" } });
+  return new Response(imageBytes(img), { headers: { "content-type": img.type, "cache-control": cache, "x-content-type-options": "nosniff", "content-security-policy": "sandbox" } });
 }
 
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
-    if (url.pathname === "/favicon.svg" || url.pathname === "/favicon" || url.pathname === "/favicon.ico") return brandResponse("favicon");
-    if (url.pathname === "/logo") return brandResponse("logo");
     const hub = env.HUB.get(env.HUB.idFromName("main"));
+    const icon = url.pathname === "/favicon.svg" || url.pathname === "/favicon" || url.pathname === "/favicon.ico" ? "favicon" : url.pathname === "/logo" ? "logo" : "";
+    if (icon) return brandResponse(icon, await hub.siteImage(icon), url.searchParams.has("v"));
     const a = await authenticate(req, env, hub, url);
     const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress";
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
-      const lg = brandAsset("logo");
-      return lockPage(a.state, siteName(env), lg ? `<img src="/logo" alt="">` : DEFAULT_MARK, url.hostname, commandName(env));
+      const site = await hub.siteSettings();
+      return lockPage(a.state, site.name, site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK, url.hostname, commandName(env));
     }
     if (a.exp > notedExp) {
       notedExp = a.exp;
@@ -354,10 +366,9 @@ export default {
       }
       const h = new Headers(req.headers);
       h.set("x-chatgql-user", a.email);
-      h.set("x-show-fable", env.SHOW_FABLE === "1" ? "1" : "0");
       return hub.fetch(new Request(req, { headers: h }));
     }
-    if (url.pathname === "/" || url.pathname.startsWith("/c/")) return appPage(env);
+    if (url.pathname === "/" || url.pathname.startsWith("/c/")) return appPage(env, await hub.siteSettings());
     return new Response("Not found", { status: 404 });
   }
 };
@@ -371,6 +382,10 @@ export class ChatgqlHub extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+    this.siteRec = {};
+    ctx.blockConcurrencyWhile(async () => {
+      this.siteRec = (await ctx.storage.get("site")) || {};
+    });
     this.sql.exec("CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, title TEXT, model TEXT, effort TEXT, session_id TEXT, started INTEGER DEFAULT 0, running TEXT, created INTEGER, updated INTEGER)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_id TEXT, role TEXT, content TEXT, meta TEXT, created INTEGER)");
     this.sql.exec("CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, created)");
@@ -394,6 +409,75 @@ export class ChatgqlHub extends DurableObject {
     this.asks = new Map();
     this.lastSync = new Map();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+  }
+
+  // ---- the site's name, whether Fable is in the model picker, the logo and the tab icon. Changed from Settings, they're kept
+  // here and take effect straight away, with no redeploy. Each change remembers the deployed value it replaced, and holds only
+  // while that is still what's deployed: a later deploy with a different value (from `<command> edit`, say) wins.
+  deployedSite() {
+    return { name: siteName(this.env), fable: this.env.SHOW_FABLE === "1", logo: fingerprint(brandImage("logo")), favicon: fingerprint(brandImage("favicon")) };
+  }
+
+  site() {
+    const d = this.deployedSite();
+    const r = this.siteRec || {};
+    const held = k => r[k] && r[k].over === d[k];
+    return {
+      name: held("name") ? r.name.value : d.name,
+      fable: held("fable") ? r.fable.value : d.fable,
+      logo: held("logo") ? r.logo.value : brandImage("logo"),
+      favicon: held("favicon") ? r.favicon.value : brandImage("favicon")
+    };
+  }
+
+  siteName() {
+    return this.site().name;
+  }
+
+  // What a page or the locked page needs: the images only as whether there are any, and a version for their addresses.
+  siteSettings() {
+    const s = this.site();
+    return { name: s.name, fable: s.fable, logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
+  }
+
+  // The tab icon falls back to the logo.
+  siteImage(kind) {
+    const s = this.site();
+    return kind === "favicon" ? s.favicon || s.logo : s.logo;
+  }
+
+  async setSite(req) {
+    const b = await req.json().catch(() => null);
+    if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
+    const d = this.deployedSite();
+    const rec = { ...this.siteRec };
+    if ("displayName" in b) {
+      const n = cleanSiteName(b.displayName);
+      if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
+      rec.name = { value: n, over: d.name };
+    }
+    if (typeof b.fable === "boolean") rec.fable = { value: b.fable, over: d.fable };
+    for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
+      if (!(key in b)) continue;
+      if (b[key] === null) {
+        rec[key] = { value: null, over: d[key] };
+        continue;
+      }
+      const img = checkImage(b[key] && b[key].b64);
+      if (img.error) return json({ error: `${label}: ${img.error}.` }, 400);
+      rec[key] = { value: { type: img.type, b64: img.b64 }, over: d[key] };
+    }
+    this.siteRec = rec;
+    await this.ctx.storage.put("site", rec);
+    // The computer keeps its own copy, for the next update's deploy and for `<command> edit`. An older program ignores this.
+    const ws = this.agent();
+    const now = this.site();
+    if (ws) {
+      try {
+        this.sendAgent(ws, { type: "site", displayName: now.name, fable: now.fable, brand: { logo: now.logo, favicon: now.favicon } });
+      } catch {}
+    }
+    return json(this.siteSettings());
   }
 
   async getIdentity() {
@@ -642,7 +726,7 @@ export class ChatgqlHub extends DurableObject {
     }
     const active = new Set(Array.isArray(m.active) ? m.active : []);
     for (const c of this.rows("SELECT id, running FROM chats WHERE running IS NOT NULL")) {
-      if (!active.has(c.running)) await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${siteName(this.env)} restarted before the reply finished.` });
+      if (!active.has(c.running)) await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${this.siteName()} restarted before the reply finished.` });
     }
   }
 
@@ -666,7 +750,7 @@ export class ChatgqlHub extends DurableObject {
   async alarm() {
     if (this.agent()) return;
     for (const c of this.rows("SELECT id, running FROM chats WHERE running IS NOT NULL")) {
-      await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${siteName(this.env)} went offline before the reply finished.` });
+      await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${this.siteName()} went offline before the reply finished.` });
     }
   }
 
@@ -679,6 +763,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
     if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
+    if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/import" && method === "POST") return this.importChats(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
@@ -732,6 +817,7 @@ export class ChatgqlHub extends DurableObject {
       agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history"), credits: info.computer ? info.computer.credits : (info.caps || []).includes("credits"), computer: info.computer || null } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
       prefs: await this.prefs(),
+      site: this.siteSettings(),
       credits: (await this.ctx.storage.get("credits")) || null,
       update: await this.updateInfo()
     };
@@ -821,14 +907,14 @@ export class ChatgqlHub extends DurableObject {
   // sent there and the page gets back what it is now.
   async setComputer(req) {
     const b = await req.json().catch(() => null);
-    const values = {};
-    for (const k of COMPUTER_KEYS) if (b && typeof b[k] === "boolean") values[k] = b[k];
+    const values = cleanComputer(b) || {};
     if (!Object.keys(values).length) return json({ error: "Nothing was changed." }, 400);
     const ws = this.agent();
-    if (!ws) return json({ error: `${siteName(this.env)} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
     if (!(this.agentInfo(ws).caps || []).includes("computer")) return json({ error: `The ${commandName(this.env)} program on your computer is too old for this. Update it first.`, code: "agent_old" }, 409);
     const r = await this.askAgent({ type: "computer", values }, 10000, "computer");
     if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
+    if (r.error) return json({ error: String(r.error).slice(0, 200), computer: cleanComputer(r.values) }, 400);
     return json({ computer: cleanComputer(r.values) });
   }
 
@@ -867,7 +953,7 @@ export class ChatgqlHub extends DurableObject {
 
   async askLimits() {
     const ws = this.agent();
-    if (!ws) return json({ error: `${siteName(this.env)} is offline, so it can't read your plan usage right now.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline, so it can't read your plan usage right now.`, code: "offline" }, 503);
     const last = (await this.ctx.storage.get("limitsAsk")) || 0;
     if (Date.now() - last < 20000) return json({ ok: true, wait: true });
     await this.ctx.storage.put("limitsAsk", Date.now());
@@ -922,7 +1008,7 @@ export class ChatgqlHub extends DurableObject {
       const now = Date.now();
       const unanswered = !run.acked && now - run.startedAt > (Number(this.env.UPDATE_ACK_MS) || ACK_WITHIN);
       if (unanswered || now - run.updatedAt > (Number(this.env.UPDATE_QUIET_MS) || QUIET_LIMIT)) {
-        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${siteName(this.env)} on your computer didn't pick up the request. Make sure ${commandName(this.env)} is running, then try again.` : `It stopped reporting progress. Check your computer, or run ${commandName(this.env)} update there.` };
+        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${this.siteName()} on your computer didn't pick up the request. Make sure ${commandName(this.env)} is running, then try again.` : `It stopped reporting progress. Check your computer, or run ${commandName(this.env)} update there.` };
         await this.ctx.storage.put("update", run);
       }
     }
@@ -933,7 +1019,7 @@ export class ChatgqlHub extends DurableObject {
   updateBlock(run, need = "update") {
     const ws = this.agent();
     if (run && run.state === "running") return { code: "running", message: "Something is already in progress." };
-    if (!ws) return { code: "offline", message: `${siteName(this.env)} is offline. Start ${commandName(this.env)} on your computer first.` };
+    if (!ws) return { code: "offline", message: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.` };
     if (!(this.agentInfo(ws).caps || []).includes(need)) return { code: "agent_old", message: `The ${commandName(this.env)} program on your computer is too old for this. Run ${commandName(this.env)} update there once, and it can be done from this page after that.` };
     if (this.one("SELECT 1 AS x FROM chats WHERE running IS NOT NULL")) return { code: "busy", message: "A reply is still being written. Wait for it to finish, or stop it, then try again." };
     return null;
@@ -991,7 +1077,7 @@ export class ChatgqlHub extends DurableObject {
       this.sendAgent(ws, { ...message, id: run.id });
     } catch {
       await this.ctx.storage.delete("update");
-      return json({ error: `${siteName(this.env)} on your computer couldn't be reached. Try again in a moment.`, code: "offline" }, 503);
+      return json({ error: `${this.siteName()} on your computer couldn't be reached. Try again in a moment.`, code: "offline" }, 503);
     }
     return json(await this.updateInfo());
   }
@@ -1021,7 +1107,7 @@ export class ChatgqlHub extends DurableObject {
     if ("displayName" in b) {
       const n = cleanSiteName(b.displayName);
       if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
-      if (n !== siteName(this.env)) change.displayName = n;
+      if (n !== this.siteName()) change.displayName = n;
     }
     if ("fable" in b && typeof b.fable === "boolean" && b.fable !== (this.env.SHOW_FABLE === "1")) change.fable = b.fable;
     for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
@@ -1049,7 +1135,7 @@ export class ChatgqlHub extends DurableObject {
 
   async startDelete(req) {
     const b = await req.json().catch(() => null);
-    if (!b || String(b.confirm || "") !== siteName(this.env)) return json({ error: "Type the site's name to confirm.", code: "confirm" }, 400);
+    if (!b || String(b.confirm || "") !== this.siteName()) return json({ error: "Type the site's name to confirm.", code: "confirm" }, 400);
     return this.beginJob("delete", req, { need: "admin", message: { type: "admin", op: "delete", payload: {} } });
   }
 
@@ -1338,7 +1424,7 @@ export class ChatgqlHub extends DurableObject {
   // A conversation that so far exists only on the computer becomes a chat here the first time it is opened. Its id is the
   // session's id, so it is the same chat from then on, and sending in it carries on the same session.
   async importSession(s) {
-    if (!this.historyOn()) return { error: `${siteName(this.env)} can't reach your computer right now, and this chat is only there. Run ${commandName(this.env)} to bring it back online.`, code: "offline", status: 503 };
+    if (!this.historyOn()) return { error: `${this.siteName()} can't reach your computer right now, and this chat is only there. Run ${commandName(this.env)} to bring it back online.`, code: "offline", status: 503 };
     const r = await this.askAgent({ type: "transcript", sessionId: s.id, from: 0 });
     if (!r) return { error: "Your computer didn't answer in time. Try again in a moment.", code: "slow", status: 504 };
     if (!r.ok) return { error: r.error === "missing" ? "That chat isn't on your computer anymore." : "That chat can't be opened from here.", code: "gone", status: 404 };
@@ -1400,13 +1486,13 @@ export class ChatgqlHub extends DurableObject {
       if (!chat) return json({ error: "That chat doesn't exist anymore." }, 404);
       if (chat.running) return json({ error: "Still answering in this chat." }, 409);
     }
-    const allowed = req.headers.get("x-show-fable") === "1" ? MODELS : Object.fromEntries(Object.entries(MODELS).filter(([id]) => id !== "claude-fable-5-1"));
+    const allowed = this.site().fable ? MODELS : Object.fromEntries(Object.entries(MODELS).filter(([id]) => id !== "claude-fable-5-1"));
     const model = allowed[b.model] ? b.model : DEFAULT_MODEL;
     const effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
     const mode = MODES.includes(b.mode) ? b.mode : "code";
     const perm = mode === "code" && PERMS.includes(b.perm) ? b.perm : "auto";
     const ws = this.agent();
-    if (!ws) return json({ error: `${siteName(this.env)} is offline right now. Run ${commandName(this.env)} to bring it back online, then send again.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline right now. Run ${commandName(this.env)} to bring it back online, then send again.`, code: "offline" }, 503);
     const held = await this.creditsBlock(model);
     if (held) return json({ error: held.message, code: held.code, resetsAt: held.resetsAt || null }, 409);
     if (chat) await this.syncChat(chat, 6000);
@@ -1426,7 +1512,7 @@ export class ChatgqlHub extends DurableObject {
     this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], parts: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
     this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: earlier + text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
-    this.armRun(runId, 30000, `${siteName(this.env)} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
+    this.armRun(runId, 30000, `${this.siteName()} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
     return new Response(ts.readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
   }
 
