@@ -167,3 +167,44 @@ test("the site's name, Fable and logo set in Settings are kept on the computer f
   assert.equal(brand.logo.b64, PNG);
   assert.equal(brand.favicon, null);
 });
+
+test("limit resets on the account are listed, and one can be used from the site", async t => {
+  const claims = [];
+  let left = 1;
+  const api = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    let body = "";
+    req.on("data", d => (body += d));
+    req.on("end", () => {
+      if (req.url.startsWith("/api/oauth/usage")) return res.end(JSON.stringify({ five_hour: { utilization: 100 }, extra_usage: { is_enabled: false }, cedar_ember: { eligible: true, at_limit: true, grants: [{ id: "launch_reset", label: "Limit reset", resets_total: 1, resets_left: left, usable_now: left > 0, use_requires_limit: true, paused: false, clears: ["five_hour", "seven_day"] }], next_grant_id: "launch_reset" } }));
+      if (req.method === "POST" && req.url === `/api/organizations/${ORG}/reset_rate_limits`) {
+        claims.push({ auth: req.headers.authorization, body: JSON.parse(body) });
+        left = 0;
+        return res.end(JSON.stringify({ result: "reset", resets_left: 0, cleared: ["five_hour", "seven_day"] }));
+      }
+      res.statusCode = 404;
+      res.end("{}");
+    });
+  });
+  await new Promise(r => api.listen(0, "127.0.0.1", r));
+  t.after(() => api.close());
+  const { site, pc } = await boot(t, { credits: true, anthropic: `http://127.0.0.1:${api.address().port}` });
+  mkdirSync(join(pc.home, ".claude"), { recursive: true });
+  writeFileSync(join(pc.home, ".claude", ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "sk-ant-oat-test", expiresAt: Date.now() + 3600e3 } }));
+  writeFileSync(join(pc.home, ".claude.json"), JSON.stringify({ oauthAccount: { organizationUuid: ORG } }));
+  await site.post("/api/limits/refresh");
+  const c = await until(async () => (await site.api("/api/credits")).body?.resets, "the resets");
+  assert.deepEqual(c[0].grants[0], { id: "launch_reset", label: "Limit reset", left: 1, total: 1, usableNow: true, needsLimit: true, paused: false, endsAt: "", clears: ["five_hour", "seven_day"] });
+  assert.equal(c[0].atLimit, true);
+  const used = await site.post("/api/resets/use", { program: "cedar_ember", grant: "launch_reset" });
+  assert.equal(used.status, 200, used.text);
+  assert.deepEqual(used.body, { result: "reset", reason: "", resetsLeft: 0, cleared: ["five_hour", "seven_day"] });
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].auth, "Bearer sk-ant-oat-test");
+  assert.equal(claims[0].body.program, "cedar_ember");
+  assert.equal(claims[0].body.grant_id, "launch_reset");
+  assert.match(claims[0].body.request_id, /^[A-Za-z0-9_-]{1,64}$/);
+  // and the list is read again afterwards
+  await until(async () => (await site.api("/api/credits")).body?.resets?.[0]?.grants?.[0]?.left === 0, "the resets left to update");
+  assert.equal((await site.post("/api/resets/use", { program: "x; rm", grant: "launch_reset" })).status, 400);
+});

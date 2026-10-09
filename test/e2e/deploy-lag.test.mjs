@@ -32,3 +32,13 @@ test("an Object running older code than the Worker restarts itself, and the requ
   // and through the Worker as usual
   assert.equal((await s.api("/api/state")).body.site.name, "Kept Name");
 });
+
+test("the page and the computer can ask which version really answers, front and back", async t => {
+  const s = await startSite({ appVersion: "1.11.0" });
+  t.after(() => s.stop());
+  await s.claim();
+  assert.deepEqual((await s.api("/api/version")).body, { worker: "1.11.0", hub: "1.11.0" });
+  const agent = await s.mf.dispatchFetch(s.origin + "/agent/version", { headers: { "cf-access-token": s.jwt, "x-chatgql-key": s.agentSecret } });
+  assert.deepEqual(await agent.json(), { worker: "1.11.0", hub: "1.11.0" });
+  assert.equal((await s.mf.dispatchFetch(s.origin + "/agent/version", { headers: { "cf-access-token": s.jwt } })).status, 403, "not without the computer's key");
+});

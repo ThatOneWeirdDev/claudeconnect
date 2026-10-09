@@ -356,6 +356,20 @@ async function siteOf(env, hub) {
   }
 }
 
+// Which version is really answering: this Worker, and the Durable Object behind it (null if it's too old to say). An Object on
+// older code restarts when asked, and is asked once more on the fresh one.
+async function liveVersions(env) {
+  let hub = null;
+  for (let i = 0; i < 2 && hub === null; i++) {
+    try {
+      hub = await env.HUB.get(env.HUB.idFromName("main")).hubVersion(appVersion(env));
+    } catch {
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+  return { worker: appVersion(env), hub };
+}
+
 async function siteImageOf(env, hub, kind) {
   try {
     return await hub.siteImage(kind);
@@ -388,7 +402,7 @@ async function handle(req, env, ctx) {
     const icon = url.pathname === "/favicon.svg" || url.pathname === "/favicon" || url.pathname === "/favicon.ico" ? "favicon" : url.pathname === "/logo" ? "logo" : "";
     if (icon) return brandResponse(icon, await siteImageOf(env, hub, icon), url.searchParams.has("v"));
     const a = await authenticate(req, env, hub, url);
-    const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress";
+    const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress" || url.pathname === "/agent/version";
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
       const site = await siteOf(env, hub);
@@ -402,6 +416,7 @@ async function handle(req, env, ctx) {
     if (isAgent) {
       if (!env.AGENT_SECRET || !safeEqual(req.headers.get("x-chatgql-key") || "", env.AGENT_SECRET)) return json({ error: "Forbidden" }, 403);
       if (url.pathname === "/agent/check") return new Response(null, { status: 204 });
+      if (url.pathname === "/agent/version") return json(await liveVersions(env));
       const h = new Headers(req.headers);
       h.set("x-agent-key", env.AGENT_SECRET);
       h.delete("x-chatgql-key");
@@ -413,6 +428,7 @@ async function handle(req, env, ctx) {
       }
       return hubFetch(env, new Request("https://hub.internal/agent", { headers: h }));
     }
+    if (url.pathname === "/api/version") return json(await liveVersions(env));
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/a/")) {
       if (req.method !== "GET" && req.method !== "HEAD") {
         const origin = req.headers.get("origin");
@@ -652,6 +668,11 @@ export class ChatgqlHub extends DurableObject {
     this.runs.delete(runId);
   }
 
+  hubVersion(version) {
+    this.restartIfOlder(version);
+    return appVersion(this.env);
+  }
+
   // Running older code than the Worker that's calling: restart, so the next try runs the deployed version (see hubFetch).
   restartIfOlder(version) {
     if (version && isNewer(version, appVersion(this.env)) && typeof this.ctx.abort === "function") this.ctx.abort(`version ${version} is deployed`);
@@ -730,7 +751,7 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "limits") return this.setLimits(m.limits);
     if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
-    if (m.type === "transcript") return this.gotTranscript(m);
+    if (m.type === "transcript" || m.type === "reset_result") return this.gotTranscript(m);
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
       return this.gotTranscript(m);
@@ -825,6 +846,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
     if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
+    if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/import" && method === "POST") return this.importChats(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
@@ -961,7 +983,27 @@ export class ChatgqlHub extends DurableObject {
     const promos = (Array.isArray(raw.dollars) ? raw.dollars.slice(0, 6) : []).filter(d => d && typeof d === "object" && typeof d.key === "string" && /^[a-z0-9_]{1,40}$/.test(d.key));
     const dollars = promos.map(d => ({ key: d.key, limit: cents(d.limit), used: cents(d.used), remaining: cents(d.remaining), expires: num(d.expires) })).filter(d => d.remaining !== null || d.limit !== null);
     if (dollars.length) out.dollars = dollars;
-    if (!out.extra && !out.balance && !out.dollars) {
+    // Limit resets on the account (Claude's cedar_ember, and any other reset program it reports the same way)
+    const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+    const resets = (Array.isArray(raw.resets) ? raw.resets.slice(0, 4) : []).filter(r => r && typeof r === "object" && /^[a-z0-9_]{1,40}$/.test(r.program)).map(r => ({
+      program: r.program,
+      eligible: r.eligible === true,
+      atLimit: r.atLimit === true,
+      cooldownUntil: str(r.cooldownUntil, 40),
+      grants: (Array.isArray(r.grants) ? r.grants.slice(0, 10) : []).filter(g => g && typeof g.id === "string" && /^[a-z0-9_-]{1,40}$/.test(g.id)).map(g => ({
+        id: g.id,
+        label: str(g.label, 80),
+        left: num(g.left),
+        total: num(g.total),
+        usableNow: g.usableNow === true,
+        needsLimit: g.needsLimit === true,
+        paused: g.paused === true,
+        endsAt: str(g.endsAt, 40),
+        clears: (Array.isArray(g.clears) ? g.clears : []).filter(c => typeof c === "string" && /^[a-z0-9_]{1,40}$/.test(c)).slice(0, 8)
+      }))
+    }));
+    if (resets.length) out.resets = resets;
+    if (!out.extra && !out.balance && !out.dollars && !out.resets) {
       const prev = await this.ctx.storage.get("credits");
       const error = ["expired", "signin", "unavailable"].includes(raw.error) ? raw.error : "unavailable";
       await this.ctx.storage.put("credits", prev && (prev.extra || prev.balance || prev.dollars) ? { ...prev, error, errorAt: out.at } : { at: out.at, error });
@@ -993,6 +1035,22 @@ export class ChatgqlHub extends DurableObject {
     try {
       this.sendAgent(ws, { type: "computer", values: a.values });
     } catch {}
+  }
+
+  // Use one of the account's limit resets. The computer asks Claude for it with Claude Code's sign-in, then reads the numbers
+  // again, so Plan usage shows the limit cleared.
+  async useReset(req) {
+    const b = await req.json().catch(() => null);
+    const program = b && typeof b.program === "string" && /^[a-z0-9_]{1,40}$/.test(b.program) ? b.program : null;
+    const grant = b && typeof b.grant === "string" && /^[a-z0-9_-]{1,40}$/.test(b.grant) ? b.grant : null;
+    if (!program || !grant) return json({ error: "That reset couldn't be read." }, 400);
+    const ws = this.agent();
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!(this.agentInfo(ws).caps || []).includes("resets")) return json({ error: `Update ${this.siteName()} to use resets from here.`, code: "agent_old" }, 409);
+    const r = await this.askAgent({ type: "reset_claim", program, grant }, 30000, "resets");
+    if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
+    const result = ["reset", "already_used", "not_limited", "cooldown", "ineligible", "unavailable", "error"].includes(r.result) ? r.result : "error";
+    return json({ result, reason: typeof r.reason === "string" ? r.reason.slice(0, 40) : "", resetsLeft: Number.isFinite(r.resetsLeft) ? r.resetsLeft : null, cleared: Array.isArray(r.cleared) ? r.cleared.filter(c => typeof c === "string").slice(0, 8).map(c => c.slice(0, 40)) : [] });
   }
 
   async prefs() {

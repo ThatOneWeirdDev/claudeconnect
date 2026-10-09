@@ -488,6 +488,10 @@ svg{display:block}
 .prog-step small{margin-left:auto;color:var(--text-3);font-weight:400;font-size:13px}
 .credits{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
 .credits p{margin:0 0 14px;color:var(--text-2);font-size:13.5px}
+.reset-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 0}
+.reset-row .t{display:flex;flex-direction:column;gap:2px;font-size:14px;min-width:0}
+.reset-row small{color:var(--text-3);font-size:12.5px}
+.reset-row .btn{height:32px;padding:0 14px;font-size:13px;flex:none}
 .bal{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-3);font-size:13.5px}
 .bal div{display:flex;justify-content:space-between;gap:12px}
 .bal span{color:var(--text-2)}
@@ -1922,7 +1926,7 @@ const CREDIT_WHY = {
   group_zero_credit_limit: "The spending limit for your group is zero.",
   member_zero_credit_limit: "Your spending limit is zero."
 };
-const U = { refreshing: false, saving: false };
+const U = { refreshing: false, saving: false, resetting: "" };
 function useCredits() { return !(S.state && S.state.prefs && S.state.prefs.useCredits === false); }
 function creditsHtml(l) {
   const c = l && l.credits;
@@ -1930,7 +1934,51 @@ function creditsHtml(l) {
   const why = c && c.state === "off" && CREDIT_WHY[c.reason] ? " " + CREDIT_WHY[c.reason] : "";
   const resets = c && c.resetsAt && c.state !== "on" ? ` Their period resets ${relTime(c.resetsAt)}.` : "";
   const on = useCredits();
-  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div>${balanceHtml()}</div>`;
+  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div>${balanceHtml()}</div>${resetsHtml()}`;
+}
+// Limit resets on the account: Claude gives subscribers resets they can use whenever they like, which clear a usage limit.
+const WINDOW_WORDS = { five_hour: "5-hour limit", seven_day: "weekly limit", seven_day_opus: "weekly Opus limit", seven_day_sonnet: "weekly Sonnet limit" };
+function clearsText(list) {
+  const words = [...new Set((list || []).map(k => WINDOW_WORDS[k] || (k.startsWith("seven_day") ? "weekly limit" : "usage limit")))];
+  return words.length ? words.join(" and ") : "your usage limit";
+}
+function resetsHtml() {
+  const b = S.state && S.state.credits;
+  const groups = (b && b.resets) || [];
+  const grants = groups.flatMap(g => g.grants.map(x => ({ ...x, program: g.program, atLimit: g.atLimit, cooldownUntil: g.cooldownUntil, eligible: g.eligible })));
+  if (!grants.length) return "";
+  const rows = grants.map(x => {
+    const left = x.left === null ? "" : `${x.left}${x.total !== null ? ` of ${x.total}` : ""} left`;
+    const cool = x.cooldownUntil && Date.parse(x.cooldownUntil) > Date.now() ? `Usable again ${relTime(Date.parse(x.cooldownUntil) / 1000)}` : "";
+    const why = !x.left ? "None left" : x.paused ? "Paused" : cool || (x.needsLimit && !x.atLimit ? "Usable once you hit a limit" : "");
+    const can = x.left > 0 && (x.usableNow || (!x.paused && !cool && (!x.needsLimit || x.atLimit)));
+    return `<div class="reset-row"><div class="t"><span>${esc(x.label || "Limit reset")}</span><small>Clears your ${esc(clearsText(x.clears))}${left ? ` · ${esc(left)}` : ""}${x.endsAt && Date.parse(x.endsAt) ? ` · until ${new Date(x.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</small></div>${can ? `<button type="button" class="btn ghost" data-reset="${esc(x.program)}" data-grant="${esc(x.id)}" data-clears="${esc(clearsText(x.clears))}"${U.resetting ? " disabled" : ""}>${U.resetting === x.id ? "Using…" : "Use one"}</button>` : `<small class="muted">${esc(why)}</small>`}</div>`;
+  }).join("");
+  return `<div class="credits"><div class="mt-top"><b>Limit resets</b></div>${rows}</div>`;
+}
+const RESET_SAID = {
+  reset: c => `Done: your ${c} ${/ and /.test(c) ? "are" : "is"} cleared.`,
+  already_used: () => "That reset was already used.",
+  not_limited: () => "You're not at a limit, so there's nothing to reset yet.",
+  cooldown: () => "A reset was used recently. Try again a bit later.",
+  ineligible: () => "Claude says this reset can't be used on your account right now.",
+  unavailable: () => "Claude says resets aren't available right now.",
+  error: () => "That didn't go through. Try again in a moment."
+};
+async function useReset(btn) {
+  if (U.resetting) return;
+  if (!confirm(`Use a limit reset now? It clears your ${btn.dataset.clears}.`)) return;
+  U.resetting = btn.dataset.grant;
+  renderUsage();
+  try {
+    const r = await apiJson("/api/resets/use", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ program: btn.dataset.reset, grant: btn.dataset.grant }) });
+    const words = r.cleared && r.cleared.length ? clearsText(r.cleared) : btn.dataset.clears;
+    toast((RESET_SAID[r.result] || RESET_SAID.error)(words) + (r.result === "reset" && r.resetsLeft !== null ? ` ${r.resetsLeft} left.` : ""), 7000);
+  } catch (e) {
+    if (e.message !== "Signed out") toast(e.message);
+  }
+  U.resetting = "";
+  refreshUsage();
 }
 // What Claude's own names for its promotional credits are, in words. iguana_necktie is the Claude Code cloud-session credit.
 const PROMO_NAMES = { iguana_necktie: "Claude Code cloud credits" };
@@ -1980,7 +2028,8 @@ function renderUsage() {
       const cls = w.reset ? "" : pct >= 100 ? " full" : pct >= 80 ? " hot" : "";
       return `<div><div class="mt-top"><b>${label}</b><span>${w.reset ? "Reset" : pct + "% used"}</span></div><div class="mt-bar${cls}"><i style="width:${w.reset ? 0 : Math.min(100, pct)}%"></i></div><div class="mt-sub">${w.reset ? "It has reset. This updates with your next reply." : `Resets ${esc(relTime(w.resetsAt))}`} · ${sub}</div></div>`;
     }).join("")}</div>`;
-    if (l.limited) html += `<div class="note err">You've hit a limit. Replies resume when it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}.</div>`;
+    const canReset = ((S.state.credits && S.state.credits.resets) || []).some(g => g.grants.some(x => x.left > 0 && !x.paused));
+    if (l.limited) html += `<div class="note err">You've hit a limit. Replies resume when it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}${canReset ? ", or use a limit reset below" : ""}.</div>`;
     else if (l.over && !useCredits()) html += `<div class="note warn">You've reached a plan limit. Usage credits are turned off for this site, so new messages wait until it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}.</div>`;
   }
   html += creditsHtml(l);
@@ -2037,7 +2086,12 @@ async function setUseCredits(on) {
   renderUsage();
   renderLimitNote();
 }
-$("usageBody").addEventListener("click", e => { const t = e.target.closest("[data-usage=credits]"); if (t && !U.saving) setUseCredits(!useCredits()); });
+$("usageBody").addEventListener("click", e => {
+  const t = e.target.closest("[data-usage=credits]");
+  if (t && !U.saving) return setUseCredits(!useCredits());
+  const r = e.target.closest("[data-reset]");
+  if (r) useReset(r);
+});
 $("usageClose").onclick = () => $("usageDlg").close();
 $("usageDlg").addEventListener("click", e => { if (e.target === $("usageDlg")) $("usageDlg").close(); });
 function renderLimitNote() {
@@ -2565,9 +2619,16 @@ function renderJob() {
       html = stepsHtml(run) + `<div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload to see them</button></div>`;
     } else {
       const to = run.to || (UP.data && UP.data.current);
-      title.textContent = `Updated to v${to}`;
-      sub.textContent = "Your chats are all still here.";
-      html = stepsHtml(run) + runNotes(run) + `<p class="fine">Switching this page to the new version.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div>`;
+      if (!liveAt(to)) {
+        // the steps are done, but the site hasn't answered as the new version yet: the bar keeps going until it does
+        title.textContent = `Updating to v${to}`;
+        sub.textContent = run.from ? `From v${run.from}` : "";
+        html = `<div class="prog"><div class="mt-bar"><i style="width:96%"></i></div><div class="prog-step"><span class="spin"></span><span>Making sure the new version is live</span><small>almost done</small></div></div><details class="earlier"><summary>All steps</summary>${stepsHtml(run)}</details>`;
+      } else {
+        title.textContent = `Updated to v${to}`;
+        sub.textContent = "Your chats are all still here.";
+        html = stepsHtml(run) + runNotes(run) + `<p class="fine">Switching this page to the new version.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div>`;
+      }
     }
   } else {
     title.textContent = kind === "move" && run.step === "cleanup" ? "The new site is ready" : "That didn't finish";
@@ -2593,6 +2654,7 @@ function renderPill() {
     text = run.kind === "delete" ? "Deleting…" : `${OPEN_LABEL[run.kind || "update"]} ${at}/${total}`; short = `${at}/${total}`; cls += " busy";
   } else if (run && run.state === "error") { text = "Didn't finish"; short = "Failed"; cls += " bad"; }
   else if (run && run.state === "done" && run.kind === "settings") { text = "Reload"; short = "Reload"; }
+  else if (run && run.state === "done" && run.kind !== "settings" && !liveAt(run.to)) { text = "Finishing…"; short = "…"; cls += " busy"; }
   else if (run && run.state === "done" && UP.seen === run.id && !pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
   else if (pageIsStale() && !reloadAsked()) { text = "Updated · Reload"; short = "Reload"; }
   else if (updateAvailable(u)) { text = "Update available"; short = "Update"; }
@@ -2676,6 +2738,26 @@ async function pollUpdate() {
   if ($("setDlg").open && upRun()) renderSettings();
   schedulePoll();
 }
+// Which version the site really answers as, front and back (GET /api/version), checked after an update says it's done.
+function liveAt(version) { return !version || (UP.live && UP.live.worker === version && UP.live.hub === version) || CFG.version === version; }
+async function checkLive(version) {
+  if (UP.checkingLive) return;
+  UP.checkingLive = true;
+  for (let i = 0; i < 90 && !liveAt(version); i++) {
+    try {
+      const r = await fetch("/api/version", { credentials: "same-origin", cache: "no-store" });
+      if (r.ok) UP.live = await r.json();
+    } catch {}
+    // an older site has no /api/version: what it says about itself has to do
+    if (!liveAt(version) && UP.data && UP.data.current === version && i >= 2) UP.live = { worker: version, hub: version };
+    if (!liveAt(version)) await new Promise(res => setTimeout(res, 700));
+  }
+  UP.live = UP.live && liveAt(version) ? UP.live : { worker: version, hub: version };
+  UP.checkingLive = false;
+  renderPill();
+  if ($("setDlg").open) renderSettings();
+  if (pageIsStale()) maybeReload(0);
+}
 function finishedHere(run) { return !!run && run.state === "done" && !pageIsStale() && UP.seen !== run.id; }
 function applyUpdate(u) {
   if (!u) return;
@@ -2701,7 +2783,9 @@ function applyUpdate(u) {
   if (!$("pmenu").hidden) $("pmenu").innerHTML = profileMenu();
   renderChrome();
   schedulePoll();
-  if (pageIsStale()) maybeReload(prev && prev.state === "running" ? 2500 : 600);
+  // a finished update is only "updated" once the site answers as the new version; then the page moves over at once
+  if (run && run.state === "done" && run.kind !== "settings" && !liveAt(run.to)) return checkLive(run.to);
+  if (pageIsStale()) maybeReload(prev && prev.state === "running" ? 300 : 600);
 }
 
 applyTheme();

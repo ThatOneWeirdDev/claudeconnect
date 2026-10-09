@@ -54,7 +54,8 @@ test("a first install, then an update, through the real launcher and installer",
     ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"),
     CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50",
     // there's no real site here for the agent to connect to
-    CLAUDECONNECT_CONNECT_MS: "500"
+    CLAUDECONNECT_CONNECT_MS: "500",
+    CLAUDECONNECT_LIVE_MS: "300"
   };
   const dir = join(home, ".claudeconnect");
   t.after(async () => {

@@ -832,6 +832,32 @@ function claudeSignIn() {
   return { token: o.accessToken, org: UUID.test(String(org)) ? org : "" };
 }
 
+// Use one of the account's limit resets, the way Claude Code's own "use a reset" does, then read everything again.
+async function claimReset(m) {
+  const reply = o => send({ type: "reset_result", req: m.req, ...o });
+  if (!creditsOn()) return reply({ result: "unavailable", reason: "turned_off" });
+  const s = claudeSignIn();
+  if (!s || s.expired || !s.org) return reply({ result: "unavailable", reason: s && s.expired ? "expired" : "signin" });
+  if (!/^[a-z0-9_]{1,40}$/.test(String(m.program)) || !/^[a-z0-9_-]{1,40}$/.test(String(m.grant))) return reply({ result: "error", reason: "bad_request" });
+  let r;
+  try {
+    r = await fetch(`${ANTHROPIC_API}/api/organizations/${s.org}/reset_rate_limits`, {
+      method: "POST",
+      headers: { authorization: "Bearer " + s.token, "anthropic-beta": "oauth-2025-04-20", "content-type": "application/json", accept: "application/json", "user-agent": `ClaudeConnect/${VERSION}` },
+      body: JSON.stringify({ program: m.program, grant_id: m.grant, request_id: randomBytes(16).toString("hex") }),
+      signal: AbortSignal.timeout(25000)
+    });
+  } catch {
+    return reply({ result: "error", reason: "network" });
+  }
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || typeof j !== "object") return reply({ result: r.status === 429 ? "cooldown" : "error", reason: `http_${r.status}` });
+  log(`Used a limit reset: ${j.result}${Number.isFinite(j.resets_left) ? `, ${j.resets_left} left` : ""}`);
+  reply({ result: String(j.result || "error"), reason: typeof j.reason === "string" ? j.reason : "", resetsLeft: Number.isFinite(j.resets_left) ? j.resets_left : null, cleared: Array.isArray(j.cleared) ? j.cleared : [] });
+  // the limits it cleared, and the resets left, as they are now
+  probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
+}
+
 function creditsOn() {
   return cfg.credits !== false;
 }
@@ -911,7 +937,8 @@ async function readCredits() {
   };
   const num = v => (typeof v === "number" && Number.isFinite(v) ? v : null);
   const out = {};
-  const u = await get("/api/oauth/usage");
+  // ?cedar_ember=1 asks for the limit resets too; an account or server that won't have it gets the plain reading
+  const u = (await get("/api/oauth/usage?cedar_ember=1")) || (await get("/api/oauth/usage"));
   const e = u && u.extra_usage && typeof u.extra_usage === "object" ? u.extra_usage : null;
   if (e) out.extra = { enabled: e.is_enabled === true, limit: num(e.monthly_limit), used: num(e.used_credits) };
   // Promotional credit that comes with an amount in dollars, like the Claude Code cloud-session credit (Claude calls that one
@@ -928,7 +955,20 @@ async function readCredits() {
     const promos = (Array.isArray(p.promo_tranches) ? p.promo_tranches : []).filter(t => t && num(t.remaining_amount_minor_units) > 0);
     out.balance = { amount: p.amount, currency: typeof p.currency === "string" ? p.currency : "", promos: promos.slice(0, 10).map(t => ({ amount: t.remaining_amount_minor_units, currency: typeof t.currency === "string" ? t.currency : "", expires: Date.parse(t.expires_at) || null, name: typeof t.name === "string" ? t.name : "" })) };
   }
-  if (!out.extra && !out.balance && !out.dollars) out.error = "unavailable";
+  // Limit resets: Claude gives subscribers resets they can use whenever they like (cedar_ember), and reports any other reset
+  // program the same way. Each grant says how many are left, whether it can be used now, and which limits it clears.
+  for (const program of ["cedar_ember", "juniper_tide"]) {
+    const r = u && u[program];
+    if (!r || typeof r !== "object" || !Array.isArray(r.grants)) continue;
+    (out.resets = out.resets || []).push({
+      program,
+      eligible: r.eligible === true,
+      atLimit: r.at_limit === true,
+      cooldownUntil: typeof r.cooldown_until === "string" ? r.cooldown_until : "",
+      grants: r.grants.filter(g => g && typeof g.id === "string").map(g => ({ id: g.id, label: typeof g.label === "string" ? g.label : "", left: num(g.resets_left), total: num(g.resets_total), usableNow: g.usable_now === true, needsLimit: g.use_requires_limit === true, paused: g.paused === true, endsAt: typeof g.ends_at === "string" ? g.ends_at : "", clears: Array.isArray(g.clears) ? g.clears.filter(c => typeof c === "string") : [] }))
+    });
+  }
+  if (!out.extra && !out.balance && !out.dollars && !out.resets) out.error = "unavailable";
   send({ type: "credits", credits: out });
 }
 
@@ -1182,10 +1222,11 @@ function onMessage(raw) {
   else if (m.type === "transcript") handleTranscript(m);
   else if (m.type === "computer") setComputer(m);
   else if (m.type === "site") saveSite(m);
+  else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
 
 function helloMessage() {
-  return { type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(creditsOn() ? ["credits"] : []), "computer"], computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] };
+  return { type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(creditsOn() ? ["credits", "resets"] : []), "computer"], computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] };
 }
 
 let pingTimer = null;
