@@ -264,7 +264,7 @@ test("after an update or a settings change, the notice goes once the page has re
   const apply = lift("applyUpdate");
   assert.match(apply, /if \(finishedHere\(run\)\) \{\n    UP\.data = \{ \.\.\.u, run: null \};/);
   assert.match(apply, /api\("\/api\/update\/dismiss"/);
-  assert.doesNotMatch(apply, /run\.kind !== "settings"/);
+  assert.ok(script.includes('function finishedHere(run) { return !!run && run.state === "done" && !pageIsStale() && UP.seen !== run.id; }'), "settings changes are cleared the same way as updates");
 });
 
 test("Plan usage reads the latest as soon as it opens, and has no Refresh button", () => {
@@ -403,4 +403,17 @@ test("right after an update the page doesn't offer it again, and settings have n
   // changes go to the site as they're made
   assert.match(script, /if \(e\.target\.closest\("#fFable"\)\) return SET\.saving \|\| saveSite\("fable", \{ fable: !CFG\.fable \}\);/);
   assert.match(script, /r\.onload = \(\) => saveSite\(key, /);
+});
+
+test("an update only says it's done once the site answers as the new version, and the bar keeps going until then", () => {
+  const ctx = { CFG: { version: "1.10.2" }, UP: { live: null } };
+  vm.runInNewContext(lift("liveAt") + "this.liveAt = liveAt;", ctx);
+  assert.equal(ctx.liveAt("1.11.0"), false, "the steps are done but nothing has said it's live yet");
+  ctx.UP.live = { worker: "1.11.0", hub: "1.10.2" };
+  assert.equal(ctx.liveAt("1.11.0"), false, "the front is new but the part that keeps the chats isn't yet");
+  ctx.UP.live = { worker: "1.11.0", hub: "1.11.0" };
+  assert.equal(ctx.liveAt("1.11.0"), true);
+  const job = lift("renderJob");
+  assert.match(job, /if \(!liveAt\(to\)\) \{[\s\S]*Making sure the new version is live/);
+  assert.match(lift("applyUpdate"), /if \(run && run\.state === "done" && run\.kind !== "settings" && !liveAt\(run\.to\)\) return checkLive\(run\.to\);/);
 });

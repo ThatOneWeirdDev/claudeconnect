@@ -146,7 +146,8 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
     token: site.jwt, tokenExp: Math.floor(Date.now() / 1000) + 86400 * 30, claudePath: join(bin, "claude"), id: "agent-real"
   };
   writeFileSync(join(dir, "config.json"), JSON.stringify(config, null, 2));
-  const env = { ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, CLAUDECONNECT_RAW: githubUrl, CLAUDECONNECT_RETRY_MS: "50" };
+  // the fake wrangler records deploys without changing the site, so it never answers as the new version: don't wait long for it
+  const env = { ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, CLAUDECONNECT_RAW: githubUrl, CLAUDECONNECT_RETRY_MS: "50", CLAUDECONNECT_LIVE_MS: "300" };
   const read = f => readFileSync(join(dir, f), "utf8");
   const pidFile = join(dir, "agent.pid");
   const pids = () => {

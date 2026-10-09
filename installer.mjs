@@ -469,6 +469,21 @@ function waitForConnected(logPath, from, ms) {
   })();
 }
 
+// Waits until the site (its Worker and its Durable Object) answers as `version`, or a minute and a half has passed. A deploy
+// reaches Cloudflare's edge in seconds, and an Object on the old code restarts as soon as the new Worker calls it.
+async function siteServes(cfg, version, ms = Number(process.env.CLAUDECONNECT_LIVE_MS) || 90000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    try {
+      const r = await fetch(cfg.site.replace(/\/$/, "") + "/agent/version", { headers: { "cf-access-token": cfg.token || "", "x-chatgql-key": cfg.secret || "", "x-agent-id": cfg.id || "" }, signal: AbortSignal.timeout(8000) });
+      const v = r.ok ? await r.json() : null;
+      if (v && v.worker === version && v.hub === version) return true;
+    } catch {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return false;
+}
+
 async function remoteUpdate(manifest) {
   const old = readJson(CONFIG);
   if (!old || !old.accountId || !old.kvId || !old.name || !old.site) fail("This computer isn't set up yet, so there's nothing to update. Run ClaudeConnect.mjs and choose to set it up.");
@@ -484,6 +499,8 @@ async function remoteUpdate(manifest) {
     installSite(manifest);
     writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
     deploy(SITE, old, "the new version");
+    // "Updated" has to mean updated: this step lasts until the site really answers as the new version, front and back
+    await siteServes(old, manifest.version);
     await report("site", "done");
     at = "computer";
     await report("computer", "active");
