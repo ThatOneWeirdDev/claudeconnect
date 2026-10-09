@@ -2060,6 +2060,10 @@ const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.ima
 
 // Every setting here takes effect when it's changed: no Save button. Only a name being typed is held, until Enter or leaving
 // the field.
+// Right after an update the site can answer as the version before for a few seconds, which doesn't know these yet.
+function switching(e) {
+  return e.message === "Not found" || (e.data && e.data.code === "restarting") ? `${CFG.name} is still switching to its new version. Try again in a few seconds.` : e.message;
+}
 function nameTyped() { return SET.name === undefined ? CFG.name : SET.name.trim().replace(/\s+/g, " "); }
 function isDirty() { return SET.name !== undefined && nameTyped() !== CFG.name; }
 function draftError() {
@@ -2181,7 +2185,7 @@ async function setComputer(key, value) {
     a.computer = r.computer || a.computer;
   } catch (e) {
     a.computer = (e.data && e.data.computer) || before;
-    PC.err = e.message === "Signed out" ? "" : e.message;
+    PC.err = e.message === "Signed out" ? "" : switching(e);
   }
   a.credits = !!a.computer.credits;
   PC.ws = undefined;
@@ -2227,7 +2231,7 @@ async function saveSite(what, body) {
     SET.saved = what;
     if (what === "name") SET.name = undefined;
   } catch (e) {
-    SET.err = e.message === "Signed out" ? "" : e.message;
+    SET.err = e.message === "Signed out" ? "" : switching(e);
   }
   SET.saving = "";
   renderSettings();
