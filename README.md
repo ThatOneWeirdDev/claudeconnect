@@ -33,7 +33,7 @@ Setup asks for a name, signs you in to Cloudflare, creates the site, then walks 
 | Command | What it does |
 | --- | --- |
 | `<command> update` | Updates the site and this computer to the newest version, in place. Your chats, name, look and settings are kept. If the new version brings a setting of its own, it asks about that, and nothing else. |
-| `<command> edit` | Goes through the settings one at a time, each with what it is now and a y/n: the name, logo, tab icon, Fable 5.1 in the model picker, starting when you log in, and showing your usage credit balance. Then it shows what will change and asks once more before saving. |
+| `<command> edit` | Goes through every setting the site's **Settings** has, in the same order, each with what it is now and a y/n: the name, logo, tab icon and theme; starting when you log in, showing your usage credit balance, which of Claude Code's chats from this computer the site lists, and the working folder; whether the site uses usage credits; and the address. Then it shows what will change and asks once more before saving. Last it asks whether to delete the site, which needs you to type its name. |
 | `<command> help` | Lists the rest: start, stop, logs, status, open, claim and so on. |
 
 ## Everything from the site
@@ -42,9 +42,8 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 
 | Settings page | What it does |
 | --- | --- |
-| **General** | The site's name, and whether Fable 5.1 shows in the model picker. Under **This computer**: whether it starts when you log in, whether Plan usage shows your usage credit balance, which of Claude Code's chats from this computer the sidebar lists, and the folder Claude Code works in. Everything `<command> edit` asks about is here, and more. |
-| **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. |
-| **Chats** | Brings your claude.ai chats over from claude.ai's data export (see [Chats from claude.ai](#chats-from-claudeai)). |
+| **General** | The site's name. Under **This computer**: whether it starts when you log in, whether Plan usage shows your usage credit balance, which of Claude Code's chats from this computer the sidebar lists, and the folder Claude Code works in. |
+| **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. The theme is kept on the site, so it's the same on every device. |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
 | **Updates** | Shows when a new version is out and installs it in place. |
 | **Delete site** | Deletes the site and every chat in it, then removes the setup from your computer. The folder Claude works in is kept. You type the site's name to confirm. |
@@ -73,7 +72,9 @@ It also shows your **usage credits** (claude.ai's "extra usage"): whether they'r
 
 **Limit resets** on your Claude account (Anthropic gives subscribers resets they can use whenever they choose) are listed there too, with how many are left and what each clears, and **Use one** uses one, the same way Claude Code's own reset does. It's done by your computer with Claude Code's sign-in, like the balance below, so it needs **Show your usage credit balance** on.
 
-**Use usage credits from this site** is a switch on the same page, kept on the site so it applies on every device. Turned off, the site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1 (which runs on credits) is paused. A reply already under way can still go past the limit; that part is Claude's.
+**Use usage credits from this site** is a switch on the same page (and in `<command> edit`), kept on the site so it applies on every device. Turned off, the site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1 (which runs on credits) is paused. A reply already under way can still go past the limit; that part is Claude's.
+
+**Fable 5.1 is always in the model picker**, marked **Uses usage credits**, because it only runs on them. When Claude Code or your balance says you have none (used up, not turned on for your Claude account, or a balance of nothing), the picker says so, picking it tells you, and a message to it isn't sent: you're told you have no usage credits. Your computer reads the plan and the balance again straight away, so after topping up on claude.ai you can just send again.
 
 **Your balance, promotional credits (including the free Claude Code cloud credits, with what's left and when they run out) and this month's spending** show on the same page too. That needs your Claude account, and claude.ai doesn't let other sites in, so it's done by the program on your computer with Claude Code's own sign-in, the same way Claude Code's `/usage` asks. It's on unless you turn it off, in **Settings** → **General** → **This computer** or with `<command> edit`. The sign-in is read on your computer and sent only to Anthropic; the site only ever gets the numbers. It's read each time you open Plan usage. These come from parts of Claude's API that Claude Code uses but Anthropic hasn't published, so a future change on their side could make them disappear; the page then says it couldn't read them, and they're always on claude.ai.
 
@@ -94,29 +95,19 @@ Every chat here, in **Claude** or **Claude Code**, is a normal Claude Code conve
 - **Carry on from the site.** It resumes the same conversation, in the folder it began in, so Claude Code sees the same project and the same history. You can pick it up again in the terminal afterwards with `claude --resume`.
 - **Delete** on the site only hides a chat from the site (so it doesn't reappear). Nothing is deleted on your computer.
 
-Only a list (titles and the last part of each folder's name) goes to the site until you open a chat; then that chat's text is copied. Very long chats bring the latest part (up to 300 turns and about 3.5 MB), and the rest stays on your computer. Chats from claude.ai in the browser aren't stored on your computer; they come over another way, below.
+Only a list (titles and the last part of each folder's name) goes to the site until you open a chat; then that chat's text is copied. Very long chats bring the latest part (up to 300 turns and about 3.5 MB), and the rest stays on your computer. Chats from claude.ai in the browser aren't stored on your computer, so they aren't on the site.
 
 The sidebar lists up to 3,000 chats. It can only list what Claude Code still has: Claude Code deletes chats it hasn't touched for 30 days unless you raise `cleanupPeriodDays` in `~/.claude/settings.json` (to keep them all, set it to a large number such as `36500`). A chat you've opened on the site stays on the site even after Claude Code has deleted its copy.
 
-If you'd rather share less, set `history` in `config.json` in the ClaudeConnect folder on your computer (`~/.claudeconnect`) and restart `<command>`:
+If you'd rather share less, choose in **Settings** → **General** → **This computer** or with `<command> edit`:
 
-| `history` | What the site can list and open |
+| Setting | What the site can list and open |
 | --- | --- |
-| `"all"` (the default) | Every Claude Code chat on this computer. |
-| `"workspace"` | Only chats started in the working folder. |
-| `"off"` | None. Chats started on the site still work. |
+| **All** (the default) | Every Claude Code chat on this computer. |
+| **Working folder only** | Only chats started in the working folder. |
+| **None** | None. Chats started on the site still work. |
 
 This needs the program on your computer to be 1.5.0 or newer. Updating from the site brings it up to date.
-
-## Chats from claude.ai
-
-claude.ai keeps its chats on its own servers and has no way for another site to read them, not even with your sign-in. So they come over in claude.ai's own data export:
-
-1. On claude.ai open **Settings** → **Privacy** and choose **Export data**.
-2. claude.ai emails you a link. Download the `.zip`.
-3. On your site open **Settings** → **Chats** (or **Import claude.ai chats** in the account menu) and choose that file.
-
-The file is opened in your browser; only the conversations in it are sent, to your site and nowhere else. They're listed in the sidebar with your other chats, marked **claude.ai**. Open one and carry on: the first reply is given the conversation so far to read (the latest 150,000 characters of it if it's longer), and from then on it's a normal chat. Importing a newer export later only adds what's new, and a chat you've deleted on the site isn't brought back. Projects and uploaded files aren't in claude.ai's export, so only their names are kept with the messages.
 
 ## Updating
 

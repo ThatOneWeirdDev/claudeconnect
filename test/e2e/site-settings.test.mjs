@@ -1,4 +1,4 @@
-// The site's name, Fable and images, changed from Settings: they take effect straight away with no redeploy, the computer is
+// The site's name and images, changed from Settings: they take effect straight away with no redeploy, the computer is
 // told so it keeps its own copy, and a later deploy with different values (from `<command> edit`) wins.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -6,31 +6,32 @@ import { startSite, connectAgent } from "../helpers/site.mjs";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-test("a new name, Fable and logo take effect at once, on the page, the locked page and the images", async t => {
+test("a new name and logo take effect at once, on the page, the locked page and the images", async t => {
   const s = await startSite({ appVersion: "1.10.0" });
   t.after(() => s.stop());
   await s.claim();
   const agent = await connectAgent(s);
   const before = (await s.api("/api/state")).body.site;
-  assert.deepEqual([before.name, before.fable, before.logo, before.favicon], ["Test Site", false, false, false]);
+  assert.deepEqual([before.name, before.logo, before.favicon], ["Test Site", false, false]);
+  assert.equal(before.fable, undefined, "Fable 5.1 isn't a setting any more");
 
-  const r = await s.post("/api/site", { displayName: "  My   Place ", fable: true, logo: { b64: PNG } });
+  const r = await s.post("/api/site", { displayName: "  My   Place ", logo: { b64: PNG } });
   assert.equal(r.status, 200, r.text);
-  assert.deepEqual([r.body.name, r.body.fable, r.body.logo], ["My Place", true, true]);
+  assert.deepEqual([r.body.name, r.body.logo], ["My Place", true]);
   assert.notEqual(r.body.v, before.v, "the images get a new address");
   // the page is served with it, with no redeploy
   const page = await (await s.asOwner("/")).text();
   assert.match(page, /<title>My Place<\/title>/);
   assert.match(page, new RegExp(`<img src="/logo\\?v=${r.body.v}"`));
   assert.match(page, new RegExp(`href="/favicon\\?v=${r.body.v}"`));
-  assert.match(page, /"fable":true/);
+  assert.doesNotMatch(page, /"fable"/);
   const logo = await s.asOwner(`/logo?v=${r.body.v}`);
   assert.equal(logo.headers.get("content-type"), "image/png");
   assert.match(logo.headers.get("cache-control"), /immutable/);
   assert.equal((await s.asOwner("/favicon")).headers.get("content-type"), "image/png", "the tab icon falls back to the logo");
   const locked = await (await s.mf.dispatchFetch(s.origin + "/", { headers: { "x-test-anonymous": "1" } })).text();
   assert.match(locked, /<title>My Place<\/title>/);
-  // Fable can be sent to now
+  // Fable 5.1 can always be sent to
   const send = s.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "hi", model: "claude-fable-5-1" }) });
   const run = await agent.next(m => m.type === "run");
   assert.equal(run.model, "claude-fable-5-1");
@@ -39,7 +40,7 @@ test("a new name, Fable and logo take effect at once, on the page, the locked pa
   // and the computer was told, so its own copy matches for the next update and for `edit`
   const told = await agent.next(m => m.type === "site");
   assert.equal(told.displayName, "My Place");
-  assert.equal(told.fable, true);
+  assert.equal(told.fable, undefined);
   assert.equal(told.brand.logo.b64, PNG);
   assert.equal(told.brand.favicon, null);
 

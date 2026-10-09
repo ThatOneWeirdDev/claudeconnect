@@ -155,13 +155,12 @@ test("which chats the site sees and the working folder change from the site, wit
   assert.equal(pc.claudeRuns().pop().cwd, folder);
 });
 
-test("the site's name, Fable and logo set in Settings are kept on the computer for the next update and for edit", async t => {
+test("the site's name and logo set in Settings are kept on the computer for the next update and for edit", async t => {
   const { site, pc } = await boot(t, { credits: null });
   const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-  assert.equal((await site.post("/api/site", { displayName: "Renamed", fable: true, logo: { b64: PNG } })).status, 200);
+  assert.equal((await site.post("/api/site", { displayName: "Renamed", logo: { b64: PNG } })).status, 200);
   await until(async () => JSON.parse(pc.read("config.json")).displayName === "Renamed", "the computer to save the name");
   const cfg = JSON.parse(pc.read("config.json"));
-  assert.equal(cfg.fable, true);
   assert.equal(cfg.command, "TestConnect", "the command stays the same");
   const brand = JSON.parse(pc.read("site/brand.js").replace(/^export default /, "").replace(/;\s*$/, ""));
   assert.equal(brand.logo.b64, PNG);

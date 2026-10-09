@@ -54,11 +54,14 @@ const CHECK_WAIT = 5 * 60000;
 const UPDATE_LOG_KEEP = 8;
 // The most chats listed in the sidebar (and the most the computer is asked to report). Matches MAX_SESSIONS in agent/sessions.mjs.
 const CHAT_LIST_MAX = 3000;
-// Chats imported from claude.ai: the most one batch from the page may hold, the most messages kept per chat, and how much of
-// the conversation the first reply in one is given to read.
-const IMPORT_MAX_BYTES = 8000000;
-const IMPORT_MAX_MESSAGES = 2000;
-const IMPORT_CONTEXT_CHARS = 150000;
+// What Fable 5.1 says when the account has no usage credits for it.
+const NO_CREDITS = {
+  out: "You have no usage credits left! Fable 5.1 only runs on usage credits. Add some on claude.ai (Settings → Usage), or pick another model.",
+  off: "You have no usage credits! They aren't turned on for your Claude account, and Fable 5.1 only runs on them. Turn them on at claude.ai (Settings → Usage), or pick another model.",
+  none: "You have no usage credits! Fable 5.1 only runs on usage credits. Add some on claude.ai (Settings → Usage), or pick another model."
+};
+const NO_CREDITS_ERROR = /usage credits|out of credits|extra usage|overage|credit balance|insufficient (?:credit|balance|funds)/i;
+const THEMES = ["system", "light", "dark"];
 const ACK_WITHIN = 30000;
 const QUIET_LIMIT = 10 * 60000;
 const MAX_ARTIFACT = 1900000;
@@ -308,10 +311,10 @@ const PAGE_HEADERS = {
   "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 };
 
-// `site` is the site's name, Fable and images as they are now (see siteSettings in the Durable Object).
+// `site` is the site's name and images as they are now (see siteSettings in the Durable Object).
 function appPage(env, site) {
   const mark = site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK;
-  const cfg = JSON.stringify({ name: site.name, command: commandName(env), fable: site.fable, version: appVersion(env) }).replace(/</g, "\\u003c");
+  const cfg = JSON.stringify({ name: site.name, command: commandName(env), version: appVersion(env) }).replace(/</g, "\\u003c");
   const html = APP_HTML.split("__SITE_NAME__").join(escHtml(site.name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg).split('href="/favicon"').join(`href="/favicon?v=${site.v}"`);
   return new Response(html, { headers: PAGE_HEADERS });
 }
@@ -345,7 +348,7 @@ async function hubFetch(env, request) {
 }
 
 function deployedSettings(env) {
-  return { name: siteName(env), fable: env.SHOW_FABLE === "1", logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
+  return { name: siteName(env), logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
 }
 
 async function siteOf(env, hub) {
@@ -402,7 +405,7 @@ async function handle(req, env, ctx) {
     const icon = url.pathname === "/favicon.svg" || url.pathname === "/favicon" || url.pathname === "/favicon.ico" ? "favicon" : url.pathname === "/logo" ? "logo" : "";
     if (icon) return brandResponse(icon, await siteImageOf(env, hub, icon), url.searchParams.has("v"));
     const a = await authenticate(req, env, hub, url);
-    const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress" || url.pathname === "/agent/version";
+    const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress" || url.pathname === "/agent/version" || url.pathname === "/agent/prefs";
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
       const site = await siteOf(env, hub);
@@ -425,6 +428,13 @@ async function handle(req, env, ctx) {
         const body = await req.text();
         if (body.length > 20000) return json({ error: "Too large" }, 413);
         return hubFetch(env, new Request("https://hub.internal/agent/progress", { method: "POST", headers: h, body }));
+      }
+      // the site's own settings, for `<command> edit`
+      if (url.pathname === "/agent/prefs") {
+        if (req.method !== "GET" && req.method !== "POST") return json({ error: "Expected GET or POST" }, 405);
+        const body = req.method === "POST" ? await req.text() : null;
+        if (body && body.length > 2000) return json({ error: "Too large" }, 413);
+        return hubFetch(env, new Request("https://hub.internal/agent/prefs", { method: req.method, headers: h, body }));
       }
       return hubFetch(env, new Request("https://hub.internal/agent", { headers: h }));
     }
@@ -465,13 +475,17 @@ export class ChatgqlHub extends DurableObject {
     this.sql.exec("CREATE TABLE IF NOT EXISTS computer_sessions (id TEXT PRIMARY KEY, title TEXT, folder TEXT, updated INTEGER)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS hidden_sessions (id TEXT PRIMARY KEY)");
     // How many questions of the chat's Claude Code session are already here, and the session file's time when that was true.
-    // origin: "claude.ai" for a chat imported from a claude.ai data export, else empty
+    // origin was "claude.ai" for a chat imported from a claude.ai data export, which this no longer does.
     for (const col of ["synced_turns INTEGER", "synced_at INTEGER", "folder TEXT", "origin TEXT"]) {
       try {
         this.sql.exec(`ALTER TABLE chats ADD COLUMN ${col}`);
       } catch {}
     }
     this.sql.exec("CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, chat_id TEXT, name TEXT, mime TEXT, size INTEGER, data BLOB, created INTEGER)");
+    // Chats brought over from a claude.ai export before that was taken out. They're still on claude.ai.
+    this.sql.exec("DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE origin = 'claude.ai')");
+    this.sql.exec("DELETE FROM artifacts WHERE chat_id IN (SELECT id FROM chats WHERE origin = 'claude.ai')");
+    this.sql.exec("DELETE FROM chats WHERE origin = 'claude.ai'");
     this.sql.exec("DROP TABLE IF EXISTS usage");
     this.latest = null;
     this.checking = null;
@@ -482,11 +496,11 @@ export class ChatgqlHub extends DurableObject {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
-  // ---- the site's name, whether Fable is in the model picker, the logo and the tab icon. Changed from Settings, they're kept
+  // ---- the site's name, the logo and the tab icon. Changed from Settings, they're kept
   // here and take effect straight away, with no redeploy. Each change remembers the deployed value it replaced, and holds only
   // while that is still what's deployed: a later deploy with a different value (from `<command> edit`, say) wins.
   deployedSite() {
-    return { name: siteName(this.env), fable: this.env.SHOW_FABLE === "1", logo: fingerprint(brandImage("logo")), favicon: fingerprint(brandImage("favicon")) };
+    return { name: siteName(this.env), logo: fingerprint(brandImage("logo")), favicon: fingerprint(brandImage("favicon")) };
   }
 
   site() {
@@ -495,7 +509,6 @@ export class ChatgqlHub extends DurableObject {
     const held = k => r[k] && r[k].over === d[k];
     return {
       name: held("name") ? r.name.value : d.name,
-      fable: held("fable") ? r.fable.value : d.fable,
       logo: held("logo") ? r.logo.value : brandImage("logo"),
       favicon: held("favicon") ? r.favicon.value : brandImage("favicon")
     };
@@ -509,7 +522,7 @@ export class ChatgqlHub extends DurableObject {
   siteSettings(version) {
     this.restartIfOlder(version);
     const s = this.site();
-    return { name: s.name, fable: s.fable, logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
+    return { name: s.name, logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
   }
 
   // The tab icon falls back to the logo.
@@ -528,7 +541,6 @@ export class ChatgqlHub extends DurableObject {
       if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
       rec.name = { value: n, over: d.name };
     }
-    if (typeof b.fable === "boolean") rec.fable = { value: b.fable, over: d.fable };
     for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
       if (!(key in b)) continue;
       if (b[key] === null) {
@@ -546,7 +558,7 @@ export class ChatgqlHub extends DurableObject {
     const now = this.site();
     if (ws) {
       try {
-        this.sendAgent(ws, { type: "site", displayName: now.name, fable: now.fable, brand: { logo: now.logo, favicon: now.favicon } });
+        this.sendAgent(ws, { type: "site", displayName: now.name, brand: { logo: now.logo, favicon: now.favicon } });
       } catch {}
     }
     return json(this.siteSettings());
@@ -684,6 +696,7 @@ export class ChatgqlHub extends DurableObject {
     if (url.hostname !== "hub.internal") this.host = url.hostname;
     if (url.pathname === "/agent") return this.acceptAgent(req);
     if (url.pathname === "/agent/progress") return this.agentProgress(req);
+    if (url.pathname === "/agent/prefs") return this.agentPrefs(req);
     const am = url.pathname.match(/^\/a\/([A-Za-z0-9-]{8,64})$/);
     if (am) return this.serveArtifact(am[1], url.searchParams.has("download"));
     try {
@@ -848,7 +861,6 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
-    if (p === "/api/import" && method === "POST") return this.importChats(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
     if (p === "/api/admin/delete" && method === "POST") return this.startDelete(req);
@@ -900,6 +912,7 @@ export class ChatgqlHub extends DurableObject {
       version: appVersion(this.env),
       agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history"), credits: info.computer ? info.computer.credits : (info.caps || []).includes("credits"), computer: info.computer || null } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
+      noCredits: await this.noCredits(),
       prefs: await this.prefs(),
       site: this.siteSettings(),
       credits: (await this.ctx.storage.get("credits")) || null,
@@ -1057,20 +1070,53 @@ export class ChatgqlHub extends DurableObject {
     return { useCredits: true, ...((await this.ctx.storage.get("prefs")) || {}) };
   }
 
+  // Kept on the site, so they're the same on every device: whether usage credits are used from here, and the theme. A site
+  // from before the theme was kept here has none until it's picked, and each browser goes on with its own until then.
   async setPrefs(req) {
     const b = await req.json().catch(() => null);
     if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
     const p = await this.prefs();
     if (typeof b.useCredits === "boolean") p.useCredits = b.useCredits;
+    if (THEMES.includes(b.theme)) p.theme = b.theme;
     await this.ctx.storage.put("prefs", p);
     return json(p);
   }
 
+  // The same settings, read and changed by `<command> edit` on the computer, with its own key.
+  async agentPrefs(req) {
+    if (!this.env.AGENT_SECRET || !safeEqual(req.headers.get("x-agent-key") || "", this.env.AGENT_SECRET)) return json({ error: "Forbidden" }, 403);
+    return req.method === "POST" ? this.setPrefs(req) : json(await this.prefs());
+  }
+
+  // Whether the account has no usage credits to spend, from what Claude Code said with the latest reply and, while the computer
+  // reads it, the balance: "out" (used up), "off" (not turned on, or turned off for the account) or "none" (a balance of
+  // nothing). Null when there's no sign of that.
+  async noCredits() {
+    const l = await this.limitsView();
+    const c = l && l.credits;
+    if (c && c.state === "out") return { why: "out", message: NO_CREDITS.out };
+    if (c && c.state === "off") return { why: "off", message: NO_CREDITS.off };
+    const ws = this.agent();
+    const info = ws ? this.agentInfo(ws) : null;
+    const b = info && info.computer && info.computer.credits ? await this.ctx.storage.get("credits") : null;
+    if (b && b.extra && b.extra.enabled === false) return { why: "off", message: NO_CREDITS.off };
+    if (b && b.balance && b.balance.amount <= 0 && !(b.balance.promos || []).length) return { why: "none", message: NO_CREDITS.none };
+    return null;
+  }
+
   // With usage credits turned off here, nothing new is sent that would be paid from them: not while a plan limit is reached,
   // and not to a model that only runs on them. A reply already running can still go past a limit; that's Claude's call.
+  // Fable 5.1 only runs on usage credits, so with none on the account it isn't sent at all. The computer reads the plan and
+  // the balance again straight away, so sending again after topping up works.
   async creditsBlock(model) {
-    if ((await this.prefs()).useCredits) return null;
-    if (model === "claude-fable-5-1") return { code: "credits_off", message: "Fable 5.1 runs on usage credits, and they're turned off for this site. Pick another model, or turn usage credits on in Plan usage." };
+    const fable = model === "claude-fable-5-1";
+    if ((await this.prefs()).useCredits) {
+      const none = fable ? await this.noCredits() : null;
+      if (!none) return null;
+      this.askLimits().catch(() => {});
+      return { code: "no_credits", message: none.message };
+    }
+    if (fable) return { code: "credits_off", message: "Fable 5.1 runs on usage credits, and they're turned off for this site. Pick another model, or turn usage credits on in Plan usage." };
     const l = await this.limitsView();
     if (l && l.over) return { code: "credits_off", resetsAt: l.resetsAt, message: "You've reached your plan's limit, and usage credits are turned off for this site, so nothing more is sent until it resets. To keep going, turn usage credits on in Plan usage." };
     return null;
@@ -1224,7 +1270,7 @@ export class ChatgqlHub extends DurableObject {
     return String(this.env.WORKER_NAME || (this.host || "").split(".")[0] || "");
   }
 
-  // Name, Fable, logo and tab icon. Same site, same chats.
+  // Name, logo and tab icon. Same site, same chats.
   async startSettings(req) {
     const b = await req.json().catch(() => null);
     if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
@@ -1234,7 +1280,6 @@ export class ChatgqlHub extends DurableObject {
       if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
       if (n !== this.siteName()) change.displayName = n;
     }
-    if ("fable" in b && typeof b.fable === "boolean" && b.fable !== (this.env.SHOW_FABLE === "1")) change.fable = b.fable;
     for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
       if (!(key in b)) continue;
       if (b[key] === null) {
@@ -1337,7 +1382,7 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async getChat(id) {
-    const cols = "id, title, model, effort, running, created, updated, folder, origin, started, session_id, synced_turns, synced_at";
+    const cols = "id, title, model, effort, running, created, updated, folder, started, session_id, synced_turns, synced_at";
     let chat = this.one(`SELECT ${cols} FROM chats WHERE id = ?`, id);
     if (!chat) {
       const known = SESSION_ID.test(id) ? this.one("SELECT id, title, folder, updated FROM computer_sessions WHERE id = ? AND id NOT IN (SELECT id FROM hidden_sessions)", id.toLowerCase()) : null;
@@ -1368,7 +1413,7 @@ export class ChatgqlHub extends DurableObject {
   // ---- Claude Code's own chats on the computer, shown next to the ones started here
 
   chatList() {
-    const own = this.rows("SELECT id, title, updated, running, folder, origin FROM chats ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX);
+    const own = this.rows("SELECT id, title, updated, running, folder FROM chats ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX);
     const theirs = this.rows("SELECT id, title, updated, folder FROM computer_sessions WHERE id NOT IN (SELECT session_id FROM chats WHERE session_id IS NOT NULL) AND id NOT IN (SELECT id FROM chats) AND id NOT IN (SELECT id FROM hidden_sessions) ORDER BY updated DESC LIMIT ?", CHAT_LIST_MAX).map(r => ({ ...r, running: null, computer: 1 }));
     return [...own, ...theirs].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, CHAT_LIST_MAX);
   }
@@ -1458,94 +1503,6 @@ export class ChatgqlHub extends DurableObject {
     for (const m of messages) this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, ?, ?)", m.id, chatId, m.role, m.content, JSON.stringify(m.meta), m.created);
   }
 
-  // ---- chats from claude.ai. claude.ai keeps them on its own servers and has no way for another site to read them, so they
-  // come from the data export (Settings → Privacy → Export data on claude.ai): the page reads the export and sends it here in
-  // batches. A chat's id is the claude.ai conversation's, so importing the same export again adds only what's new.
-  async importChats(req) {
-    const raw = await req.text();
-    if (raw.length > IMPORT_MAX_BYTES) return json({ error: "That batch is too large." }, 413);
-    let b;
-    try {
-      b = JSON.parse(raw);
-    } catch {
-      return json({ error: "That couldn't be read." }, 400);
-    }
-    const list = b && Array.isArray(b.conversations) ? b.conversations.slice(0, 200) : null;
-    if (!list) return json({ error: "That couldn't be read." }, 400);
-    const str = (v, n) => (typeof v === "string" ? v : "").slice(0, n);
-    const time = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.round(Number(v)) : d);
-    let added = 0;
-    let updated = 0;
-    let skipped = 0;
-    for (const c of list) {
-      const id = c && typeof c.id === "string" && SESSION_ID.test(c.id) ? c.id.toLowerCase() : null;
-      if (!id || this.one("SELECT id FROM hidden_sessions WHERE id = ?", id)) {
-        skipped++;
-        continue;
-      }
-      const have = this.one("SELECT origin, updated FROM chats WHERE id = ?", id);
-      // the same id as a chat that didn't come from claude.ai: leave that one alone
-      if (have && have.origin !== "claude.ai") {
-        skipped++;
-        continue;
-      }
-      const msgs = [];
-      let k = 0;
-      for (const m of Array.isArray(c.messages) ? c.messages.slice(-IMPORT_MAX_MESSAGES) : []) {
-        k++;
-        if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
-        const files = (Array.isArray(m.files) ? m.files.slice(0, 20) : []).map(f => ({ name: str(f && f.name, 120) || "file", size: Math.max(0, Math.round(Number(f && f.size)) || 0), type: "" }));
-        const content = str(m.content, 120000);
-        if (!content && !files.length) continue;
-        const mid = typeof m.id === "string" && SESSION_ID.test(m.id) ? `w-${m.id.toLowerCase()}` : `w-${id}-${k}`;
-        const meta = m.role === "user" ? { files, model: null, effort: null, mode: "claude", perm: "auto", origin: "claude.ai" } : { model: null, effort: null, mode: "claude", perm: "auto", context: null, tools: [], error: null, denials: 0, ms: null, thinking: str(m.thinking, 20000), thinkingMs: null, artifacts: [], origin: "claude.ai" };
-        msgs.push({ id: mid, role: m.role, content, meta, created: time(m.created, 0) });
-      }
-      if (!msgs.length) {
-        skipped++;
-        continue;
-      }
-      const first = msgs[0].created || Date.now();
-      const last = Math.max(time(c.updated, 0), ...msgs.map(m => m.created));
-      for (const m of msgs) if (!m.created) m.created = first;
-      const title = str(c.title, 200).replace(/\s+/g, " ").trim().slice(0, 120) || titleFrom(msgs.find(m => m.role === "user")?.content || "", []);
-      if (have) {
-        const before = this.one("SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?", id).n;
-        this.addImported(id, msgs);
-        if (this.one("SELECT COUNT(*) AS n FROM messages WHERE chat_id = ?", id).n > before) {
-          this.sql.exec("UPDATE chats SET updated = MAX(updated, ?) WHERE id = ?", last, id);
-          updated++;
-        } else skipped++;
-        continue;
-      }
-      this.sql.exec("INSERT INTO chats (id, title, model, effort, session_id, started, created, updated, folder, origin) VALUES (?, ?, NULL, NULL, ?, 0, ?, ?, '', 'claude.ai')", id, title, crypto.randomUUID(), time(c.created, first), last);
-      this.addImported(id, msgs);
-      added++;
-    }
-    return json({ ok: true, added, updated, skipped });
-  }
-
-  // The conversation so far of a chat imported from claude.ai, for the first reply in it to read. The newest part, if it's long.
-  importedContext(chatId) {
-    const rows = this.rows("SELECT role, content, meta FROM messages WHERE chat_id = ? ORDER BY created ASC, rowid ASC", chatId);
-    const parts = [];
-    let size = 0;
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const r = rows[i];
-      let files = [];
-      try {
-        files = (JSON.parse(r.meta || "{}").files || []).map(f => f.name);
-      } catch {}
-      const body = (r.content || "") + (files.length ? `\n(attached: ${files.join(", ")})` : "");
-      const part = r.role === "user" ? `<user>\n${body}\n</user>` : `<assistant>\n${body}\n</assistant>`;
-      if (size + part.length > IMPORT_CONTEXT_CHARS && parts.length) break;
-      parts.unshift(part.slice(-IMPORT_CONTEXT_CHARS));
-      size += part.length;
-    }
-    if (!parts.length) return "";
-    return `This conversation started on claude.ai and was carried over here. Here it is so far${parts.length < rows.length ? " (the latest part)" : ""}, so you can carry on from it:\n\n<conversation>\n${parts.join("\n")}\n</conversation>\n\nNow the next message:\n\n`;
-  }
-
   // A conversation that so far exists only on the computer becomes a chat here the first time it is opened. Its id is the
   // session's id, so it is the same chat from then on, and sending in it carries on the same session.
   async importSession(s) {
@@ -1565,7 +1522,7 @@ export class ChatgqlHub extends DurableObject {
   // Bring a chat up to date with Claude Code's record of it: anything added on the computer since (in the terminal, say)
   // is added here. Best effort, and not more than every few seconds per chat.
   async syncChat(chat, ms = 8000) {
-    if (!chat.session_id || chat.running || !this.historyOn() || (chat.origin === "claude.ai" && !chat.started)) return;
+    if (!chat.session_id || chat.running || !this.historyOn()) return;
     if (Date.now() - (this.lastSync.get(chat.id) || 0) < envNum(this.env.SYNC_MIN_MS, 5000)) return;
     this.lastSync.set(chat.id, Date.now());
     // A chat from before this was possible has no record of where it stands; what is here is taken to be all of it so far.
@@ -1611,8 +1568,7 @@ export class ChatgqlHub extends DurableObject {
       if (!chat) return json({ error: "That chat doesn't exist anymore." }, 404);
       if (chat.running) return json({ error: "Still answering in this chat." }, 409);
     }
-    const allowed = this.site().fable ? MODELS : Object.fromEntries(Object.entries(MODELS).filter(([id]) => id !== "claude-fable-5-1"));
-    const model = allowed[b.model] ? b.model : DEFAULT_MODEL;
+    const model = MODELS[b.model] ? b.model : DEFAULT_MODEL;
     const effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
     const mode = MODES.includes(b.mode) ? b.mode : "code";
     const perm = mode === "code" && PERMS.includes(b.perm) ? b.perm : "auto";
@@ -1621,8 +1577,6 @@ export class ChatgqlHub extends DurableObject {
     const held = await this.creditsBlock(model);
     if (held) return json({ error: held.message, code: held.code, resetsAt: held.resetsAt || null }, 409);
     if (chat) await this.syncChat(chat, 6000);
-    // A chat imported from claude.ai has no Claude Code session yet: the first reply gets the conversation so far to read.
-    const earlier = chat && chat.origin === "claude.ai" && !chat.started ? this.importedContext(chat.id) : "";
     const now = Date.now();
     if (!chat) {
       chat = { id: crypto.randomUUID(), title: titleFrom(text, files), model, effort, session_id: crypto.randomUUID(), started: 0, running: null, created: now, updated: now };
@@ -1636,7 +1590,7 @@ export class ChatgqlHub extends DurableObject {
     const ts = new TransformStream();
     this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], parts: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
-    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: earlier + text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
+    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
     this.armRun(runId, 30000, `${this.siteName()} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
     return new Response(ts.readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
   }
@@ -1716,7 +1670,10 @@ export class ChatgqlHub extends DurableObject {
     const tools = Array.isArray(m.tools) ? m.tools.slice(0, 200) : (r ? r.tools : []);
     const thinking = typeof m.thinking === "string" && m.thinking ? m.thinking : (r ? r.thinking : "");
     const artifacts = this.saveArtifacts(chat.id, m.runId, Array.isArray(m.artifacts) ? m.artifacts : [], text);
-    const meta = { model: (r && r.model) || chat.model, effort: r ? r.effort : chat.effort, mode: r ? r.mode : "code", perm: r ? r.perm : "auto", context: cleanContext(m.context), tools, error: m.error || null, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
+    const model = (r && r.model) || chat.model;
+    // Fable 5.1 turned away by Claude for want of usage credits says so plainly
+    const error = m.error && model === "claude-fable-5-1" && NO_CREDITS_ERROR.test(String(m.error)) ? NO_CREDITS.none : m.error || null;
+    const meta = { model, effort: r ? r.effort : chat.effort, mode: r ? r.mode : "code", perm: r ? r.perm : "auto", context: cleanContext(m.context), tools, error, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
     const parts = this.partsMeta(r, text, meta.thinking);
     if (parts) meta.parts = parts;
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);
