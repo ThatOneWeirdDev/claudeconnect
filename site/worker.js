@@ -32,6 +32,15 @@ const PLANS = {
 };
 const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
 const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
+// The settings that live on the computer, which the site can show and change.
+const COMPUTER_KEYS = ["autostart", "credits"];
+
+function cleanComputer(v) {
+  if (!v || typeof v !== "object") return null;
+  const out = {};
+  for (const k of COMPUTER_KEYS) if (typeof v[k] === "boolean") out[k] = v[k];
+  return Object.keys(out).length ? out : null;
+}
 // A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
 // an open page within about a minute and a half; a page opened after a long gap waits for the answer instead of showing the old one.
 const CHECK_EVERY = 60000;
@@ -576,6 +585,10 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
     if (m.type === "transcript") return this.gotTranscript(m);
+    if (m.type === "computer") {
+      ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
+      return this.gotTranscript(m);
+    }
     const r = this.runs.get(m.runId);
     if (!r) return;
     r.heard = true;
@@ -615,8 +628,9 @@ export class ChatgqlHub extends DurableObject {
 
   async onHello(ws, m) {
     const caps = (Array.isArray(m.caps) ? m.caps : []).filter(c => typeof c === "string").slice(0, 10).map(c => c.slice(0, 20));
-    ws.serializeAttachment({ id: this.agentInfo(ws).id || "", since: Date.now(), version: String(m.agent || "").slice(0, 32), caps, warning: m.warning ? String(m.warning).slice(0, 40) : "" });
+    ws.serializeAttachment({ id: this.agentInfo(ws).id || "", since: Date.now(), version: String(m.agent || "").slice(0, 32), caps, computer: cleanComputer(m.computer), warning: m.warning ? String(m.warning).slice(0, 40) : "" });
     await this.ctx.storage.delete("lastSeen");
+    await this.giveAnswers(ws, m.agent);
     const run = await this.ctx.storage.get("update");
     // An update that looked stuck or failed is still a success if the new version turns up within the hour.
     if (run && (run.kind || "update") === "update" && (run.state === "running" || (run.state === "error" && Date.now() - (run.finishedAt || 0) < 3600000)) && compareVersions(m.agent, run.to) >= 0) await this.finishUpdate(run);
@@ -664,6 +678,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/credits" && method === "GET") return json((await this.ctx.storage.get("credits")) || null);
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
     if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
+    if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/import" && method === "POST") return this.importChats(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
@@ -714,7 +729,7 @@ export class ChatgqlHub extends DurableObject {
     return {
       email: req.headers.get("x-chatgql-user") || "",
       version: appVersion(this.env),
-      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history"), credits: (info.caps || []).includes("credits") } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+      agent: info ? { online: true, since: info.since || null, warning: info.warning || "", version: info.version || "", modes: (info.caps || []).includes("modes"), history: (info.caps || []).includes("history"), credits: info.computer ? info.computer.credits : (info.caps || []).includes("credits"), computer: info.computer || null } : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
       prefs: await this.prefs(),
       credits: (await this.ctx.storage.get("credits")) || null,
@@ -800,6 +815,31 @@ export class ChatgqlHub extends DurableObject {
       return;
     }
     await this.ctx.storage.put("credits", out);
+  }
+
+  // This computer's settings: starting at login and reading the credit balance. They live on the computer, so the change is
+  // sent there and the page gets back what it is now.
+  async setComputer(req) {
+    const b = await req.json().catch(() => null);
+    const values = {};
+    for (const k of COMPUTER_KEYS) if (b && typeof b[k] === "boolean") values[k] = b[k];
+    if (!Object.keys(values).length) return json({ error: "Nothing was changed." }, 400);
+    const ws = this.agent();
+    if (!ws) return json({ error: `${siteName(this.env)} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!(this.agentInfo(ws).caps || []).includes("computer")) return json({ error: `The ${commandName(this.env)} program on your computer is too old for this. Update it first.`, code: "agent_old" }, 409);
+    const r = await this.askAgent({ type: "computer", values }, 10000, "computer");
+    if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
+    return json({ computer: cleanComputer(r.values) });
+  }
+
+  // An update's answers to its new questions are kept here until the version that asked them is running on the computer.
+  async giveAnswers(ws, version) {
+    const a = await this.ctx.storage.get("answers");
+    if (!a || !(this.agentInfo(ws).caps || []).includes("computer") || compareVersions(version, a.version) < 0) return;
+    await this.ctx.storage.delete("answers");
+    try {
+      this.sendAgent(ws, { type: "computer", values: a.values });
+    } catch {}
   }
 
   async prefs() {
@@ -919,6 +959,8 @@ export class ChatgqlHub extends DurableObject {
       latest: latest ? latest.version : null,
       available: !!latest && isNewer(latest.version, current),
       notes: latest ? latest.notes : [],
+      // what the new version asks: questions added after the version this computer runs
+      questions: latest ? (latest.questions || []).filter(q => compareVersions(q.since, (this.agent() && this.agentInfo(this.agent()).version) || current) > 0 && compareVersions(q.since, latest.version) <= 0) : [],
       released: latest ? latest.released : "",
       whatsNew: mine && mine.notes.length ? { version: mine.version, released: mine.released || "", notes: mine.notes, updated: !!logged } : null,
       history: log.filter(e => compareVersions(e.version, current) < 0).slice(0, UPDATE_LOG_KEEP).map(({ version, released, notes }) => ({ version, released: released || "", notes })),
@@ -959,6 +1001,10 @@ export class ChatgqlHub extends DurableObject {
     const info = await this.updateInfo();
     if (!info.available) return json({ error: "You're already up to date.", code: "current" }, 409);
     if (String(b.to || "") !== info.latest) return json({ error: "A different version came out. Look at what's new, then update.", code: "changed" }, 409);
+    // answers to what this update asks: only its own questions, only true or false
+    const values = {};
+    for (const q of info.questions) if (b.answers && typeof b.answers[q.key] === "boolean") values[q.key] = b.answers[q.key];
+    if (Object.keys(values).length) await this.ctx.storage.put("answers", { version: info.latest, values });
     return this.beginJob("update", req, { to: info.latest, need: "update", message: { type: "update", to: info.latest } });
   }
 
@@ -1137,8 +1183,9 @@ export class ChatgqlHub extends DurableObject {
   }
 
   // Ask the computer a question and wait for its answer. Null when it can't answer (offline, an older program, too slow).
-  askAgent(msg, ms = 12000) {
-    if (!this.historyOn()) return Promise.resolve(null);
+  askAgent(msg, ms = 12000, need = "history") {
+    const w = this.agent();
+    if (!w || !(this.agentInfo(w).caps || []).includes(need)) return Promise.resolve(null);
     const ws = this.agent();
     const req = crypto.randomUUID();
     return new Promise(resolve => {

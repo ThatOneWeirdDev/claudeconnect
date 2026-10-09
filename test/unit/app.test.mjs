@@ -96,8 +96,10 @@ test("a finished update has nothing to confirm: the page moves to the new versio
   assert.match(script, /if \(act === "reload"\) return reloadNow\(\)/);
   // after every poll that finds the page behind the site
   assert.match(script, /if \(pageIsStale\(\)\) maybeReload\(/);
-  // the dialog's X is hidden while a job's page is showing
-  assert.match(script, /\$\("setClose"\)\.style\.display = run \|\| UP\.gone \? "none" : ""/);
+  // the update screen can always be closed, and it doesn't open by itself on pages that didn't start it
+  assert.match(script, /\$\("setClose"\)\.style\.display = "";/);
+  assert.doesNotMatch(script, /What's coming/);
+  assert.match(script, /if \(run && run\.state === "running" && UP\.seen !== run\.id\) UP\.seen = run\.id;/);
 });
 
 // The functions are lifted out of the page and run against stand-ins for the parts of the page they touch.

@@ -799,7 +799,7 @@ async function probeLimits() {
   }
 }
 
-// ---- Usage credit balance, only when it's been turned on with `<command> edit` (config.json "credits": true). Claude Code's
+// ---- Usage credit balance, on unless it's been turned off (config.json "credits": false, from the site or `<command> edit`). Claude Code's
 // own sign-in on this computer is used to ask Anthropic, the way Claude Code's /usage does: the extra usage spent this month and
 // its limit, the prepaid balance, and promotional credits. The sign-in is read here and sent only to Anthropic; the site gets
 // the numbers. If the sign-in has expired, the tiny message that reads the plan percentages has Claude Code renew it.
@@ -831,8 +831,33 @@ function claudeSignIn() {
   return { token: o.accessToken, org: UUID.test(String(org)) ? org : "" };
 }
 
+function creditsOn() {
+  return cfg.credits !== false;
+}
+
+// This computer's own settings, which the site shows and can change: starting at login, and reading the credit balance.
+// Answers to an update's new questions arrive the same way, once the new version is running.
+function computerSettings() {
+  return { autostart: existsSync(startupPaths().file), credits: creditsOn() };
+}
+
+function setComputer(m) {
+  const v = m.values && typeof m.values === "object" ? m.values : {};
+  try {
+    if (typeof v.autostart === "boolean" && v.autostart !== existsSync(startupPaths().file)) autostart(v.autostart);
+    if (typeof v.credits === "boolean" && v.credits !== creditsOn()) {
+      cfg.credits = v.credits;
+      saveConfig();
+      if (v.credits) readCredits().catch(() => {});
+    }
+  } catch (e) {
+    log("Couldn't change a setting:", e.message || e);
+  }
+  send({ type: "computer", req: m.req, values: computerSettings() });
+}
+
 async function readCredits() {
-  if (!cfg.credits) return;
+  if (!creditsOn()) return;
   const s = claudeSignIn();
   if (!s || s.expired) return send({ type: "credits", credits: { error: s ? "expired" : "signin" } });
   const headers = { authorization: "Bearer " + s.token, "anthropic-beta": "oauth-2025-04-20", accept: "application/json", "user-agent": `ClaudeConnect/${VERSION}` };
@@ -1106,6 +1131,7 @@ function onMessage(raw) {
   else if (m.type === "admin") startAdmin(m).catch(e => log("Couldn't start that:", e.message || e));
   else if (m.type === "limits_refresh") probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
   else if (m.type === "transcript") handleTranscript(m);
+  else if (m.type === "computer") setComputer(m);
 }
 
 let pingTimer = null;
@@ -1179,7 +1205,7 @@ async function connect() {
     quiet = false;
     backoff = 1000;
     lastPong = Date.now();
-    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(cfg.credits ? ["credits"] : [])], warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
+    sock.send(JSON.stringify({ type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(creditsOn() ? ["credits"] : []), "computer"], computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] }));
     const pending = outbox;
     outbox = [];
     for (const c of pending) sock.send(c);

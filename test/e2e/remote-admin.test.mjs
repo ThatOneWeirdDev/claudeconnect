@@ -29,13 +29,11 @@ async function until(fn, what, ms = 60000) {
   throw new Error(`timed out waiting for ${what}${last instanceof Error ? ": " + last.message : ""}`);
 }
 
-const freePort = () =>
+// A free port, held until it's needed, so another test running alongside can't take it in the meantime.
+const reservePort = () =>
   new Promise(resolve => {
     const srv = net.createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
+    srv.listen(0, "127.0.0.1", () => resolve({ port: srv.address().port, release: () => new Promise(r => srv.close(r)) }));
   });
 
 async function boot(t, { scripts = ["test-site"], kvs = [{ id: "kv-123", title: "test-site-signin" }], env = {} } = {}) {
@@ -129,7 +127,8 @@ test("a deploy that Cloudflare refuses leaves the computer as it was, and says s
 });
 
 test("moving to a new address: the old site stays until the new one is claimed, then it is deleted", async t => {
-  const newPort = await freePort();
+  const held = await reservePort();
+  const newPort = held.port;
   const newOrigin = `http://127.0.0.1:${newPort}`;
   const { site, pc, cf, finished, onCleanup } = await boot(t, { env: { CLAUDECONNECT_SITE_ORIGIN: newOrigin } });
   const oldPid = pc.pid();
@@ -168,6 +167,7 @@ test("moving to a new address: the old site stays until the new one is claimed, 
   const secrets = JSON.parse(readFileSync(join(pc.home, readdirSync(pc.home).find(f => /^secrets-.*\.json$/.test(f))), "utf8"));
   assert.ok(secrets.AGENT_SECRET && secrets.CLAIM_CODE);
   assert.ok(waiting.info.claim.endsWith(secrets.CLAIM_CODE));
+  await held.release();
   const fresh = await startSite({ port: newPort, appVersion: "1.3.0", vars: { AGENT_SECRET: secrets.AGENT_SECRET, CLAIM_CODE: secrets.CLAIM_CODE } });
   onCleanup(() => fresh.stop());
   assert.equal((await fresh.claim()).status, 302);
@@ -181,7 +181,8 @@ test("moving to a new address: the old site stays until the new one is claimed, 
   assert.equal(cfg.command, "TestConnect");
   assert.equal(cfg.displayName, "Test Site");
   assert.equal(JSON.parse(pc.read("site/wrangler.jsonc")).name, "new-site");
-  assert.ok(!existsSync(join(pc.dir, "site-next")) && !existsSync(join(pc.dir, "site-old")), "no leftovers");
+  // the old site's files go right after its storage is deleted
+  await until(() => !existsSync(join(pc.dir, "site-next")) && !existsSync(join(pc.dir, "site-old")), "no leftovers", 10000);
 
   const newState = await until(async () => {
     const st = (await fresh.api("/api/state")).body;

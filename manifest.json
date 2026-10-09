@@ -1,19 +1,32 @@
 {
   "name": "claudeconnect",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "released": "2026-10-08",
   "notes": [
-    "Updating right after a new version comes out works straight away. Before, for a few minutes it could stop with \"installer.mjs didn't match its checksum\", because GitHub handed out an old copy of the release list with the new files. Now everything is downloaded from one exact version."
+    "The update screen can always be closed: it keeps going by itself and the button in the top bar shows how far it's got. It's one progress bar instead of a long list, it no longer pops up on its own on other pages, and \"What's coming\" is gone from it.",
+    "When an update brings a new setting, the update screen asks about it before you press Update now, and the answer is set as soon as the new version is running. Updating from a terminal asks too.",
+    "Everything the edit command can change is in Settings now: starting when you log in and showing your usage credit balance are under General → This computer.",
+    "Your usage credit balance shows on Plan usage by default, with your promotional credits (or that there are none right now). Turn it off in Settings → General.",
+    "Checks on new versions run in parallel, so changes reach you sooner."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "f69d01e0a6536690f6f487d3d16ece7a159d46c8d3b9d0fefe564630c6be0265",
-    "agent/agent.mjs": "8c692a31e10c3eebd79661575802d211fb70a86a7887394f6cc8786834d93dbb",
+    "installer.mjs": "b76b3ff1716e7b573a51d4665ccd5c6320f7b6411a593b6008932ff01b98e70a",
+    "agent/agent.mjs": "61b8d227c40d771dec1bd7acd8be2b73b8256e3372cde921f3e9abf9f67f057f",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
-    "site/worker.js": "871cbcabaa92846f711c4be5f4aad80b6378237929d97381dfcc827c7747eaff",
-    "site/app.html": "4883420ea75e2aaf8aa0a51cd7d4ed2b3667aaa176110acf079458662df82241",
-    "site/version.js": "13cbf80951c6c37d24ef63839932e07960647b39b3975864a58a0554853b9339",
+    "site/worker.js": "7d82eac01e33bf8c3641b602dc447731c93b706de02034cc91ee564c675046ef",
+    "site/app.html": "72f11ac8d19ce996d43d8c3b5481eb12c20b6079174b44e74f271668354c0482",
+    "site/version.js": "8a042367a589983c42664b26f4f457f7c05b89f9c2cca3dfe9e10c3b70091bd9",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
-  }
+  },
+  "questions": [
+    {
+      "key": "credits",
+      "label": "Show your usage credit balance on Plan usage?",
+      "help": "Your computer asks Claude for your balance, promotional credits and this month's spending, with Claude Code's sign-in. The sign-in never leaves your computer.",
+      "default": true,
+      "since": "1.9.0"
+    }
+  ]
 }

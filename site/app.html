@@ -481,6 +481,9 @@ svg{display:block}
 .mt-bar.hot i{background:var(--warn)}
 .mt-bar.full i{background:var(--danger)}
 .mt-sub{margin-top:6px;color:var(--text-3);font-size:13px}
+.prog{margin:2px 0 6px}
+.prog-step{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14.5px;font-weight:500}
+.prog-step small{margin-left:auto;color:var(--text-3);font-weight:400;font-size:13px}
 .credits{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
 .credits p{margin:0 0 14px;color:var(--text-2);font-size:13.5px}
 .bal{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-3);font-size:13.5px}
@@ -1934,14 +1937,16 @@ function balanceHtml() {
   const link = '<a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">claude.ai</a>';
   const on = st.agent && st.agent.credits;
   if (!b || (!b.extra && !b.balance)) {
-    if (!on) return `<p class="fine" style="margin:0">To see your balance and promotional credits here, run <code>${esc(CFG.command)} edit</code> on your computer and answer <b>y</b> to showing your usage credit balance. They're always on ${link} too.</p>`;
+    if (!on) return `<p class="fine" style="margin:0">Your balance and promotional credits show here when <b>Show your usage credit balance</b> is on in Settings → General${st.agent && st.agent.computer ? "" : ` (or run <code>${esc(CFG.command)} edit</code> on your computer)`}. They're always on ${link} too.</p>`;
     const why = b && b.error === "expired" ? "Your Claude sign-in on the computer needs renewing; that happens with your next message." : b && b.error === "signin" ? "Claude Code on your computer isn't signed in with a Claude account." : U.refreshing ? "Reading your balance…" : "Claude didn't give your balance this time.";
     return `<p class="fine" style="margin:0">${esc(why)} It's always on ${link}.</p>`;
   }
   const rows = [];
   const cur = b.balance ? b.balance.currency : "USD";
   if (b.balance) rows.push(["Balance", money(b.balance.amount, cur)]);
-  for (const p of (b.balance && b.balance.promos) || []) rows.push([p.name ? `Promotional · ${p.name}` : "Promotional", money(p.amount, p.currency) + (p.expires ? ` · until ${new Date(p.expires).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "")]);
+  const promos = (b.balance && b.balance.promos) || [];
+  for (const p of promos) rows.push([p.name ? `Promotional · ${p.name}` : "Promotional credits", money(p.amount, p.currency) + (p.expires ? ` · until ${new Date(p.expires).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "")]);
+  if (b.balance && !promos.length) rows.push(["Promotional credits", "None right now"]);
   if (b.extra) rows.push(["Spent this month", b.extra.used === null ? "—" : money(b.extra.used, cur) + (b.extra.limit === null ? (b.extra.enabled ? " · no limit" : "") : ` of ${money(b.extra.limit, cur)}`)]);
   return `<div class="bal">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><p class="fine" style="margin:8px 0 0">From your Claude account${b.error ? ", as last read" : ""} · ${new Date(b.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Top up or change the limit on ${link}.</p>`;
 }
@@ -2078,7 +2083,8 @@ $("setDlg").addEventListener("close", () => { SET.justUpdated = false; });
 function renderSettings() {
   const run = upRun();
   $("setDlg").classList.toggle("compact", !!(run || UP.gone));
-  $("setClose").style.display = run || UP.gone ? "none" : "";
+  // never a trap: whatever is running keeps going if this is closed, and the pill in the top bar opens it again
+  $("setClose").style.display = "";
   if (run || UP.gone) return renderJob();
   const u = UP.data;
   $("setTitle").textContent = "Settings";
@@ -2103,7 +2109,7 @@ function paneHtml() {
   const d = SET.draft;
   const u = UP.data;
   if (SET.tab === "general") {
-    return `${blockedNote()}<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(d.displayName)}" autocomplete="off"><small>Shown at the top of the page and in the browser tab. The command <code>${esc(CFG.command)}</code> stays the same.</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${d.fable}" aria-label="Fable 5.1"></button></div></div>`;
+    return `${blockedNote()}<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(d.displayName)}" autocomplete="off"><small>Shown at the top of the page and in the browser tab. The command <code>${esc(CFG.command)}</code> stays the same.</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${d.fable}" aria-label="Fable 5.1"></button></div></div>${computerHtml()}`;
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
@@ -2126,10 +2132,50 @@ function updatesHtml() {
   if (!u) return '<p class="fine">Loading…</p>';
   if (pageIsStale()) return `<div class="sec"><h3>Updated to ${esc(v(u.current))}</h3>${whatsNewHtml(u, "Patch notes")}<p class="fine">Switching this page to ${esc(v(u.current))}.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div></div>`;
   if (u.available) {
-    return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and this page shows each step as it happens.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
+    return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}${questionsHtml(u)}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and you can close this while it runs.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
   }
   const earlier = (u.history || []).length ? `<details class="earlier"><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
   return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(u.current))}${u.latest && u.latest !== u.current ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
+}
+// What a new version asks, answered here before it's installed. The answers are kept by the site and given to the new version
+// once it's running on the computer.
+const ANSWERS = {};
+function answersNow(u) {
+  const out = {};
+  for (const q of (u && u.questions) || []) out[q.key] = q.key in ANSWERS ? ANSWERS[q.key] : !!q.default;
+  return out;
+}
+function questionsHtml(u) {
+  const qs = (u && u.questions) || [];
+  if (!qs.length) return "";
+  const a = answersNow(u);
+  return `<div class="sec" style="margin-top:16px"><h3>This version asks</h3>${qs.map(q => `<div class="switch"><div class="t"><span>${esc(q.label)}</span>${q.help ? `<small>${esc(q.help)}</small>` : ""}</div><button type="button" class="toggle" role="switch" data-answer="${esc(q.key)}" aria-checked="${a[q.key]}" aria-label="${esc(q.label)}"></button></div>`).join("")}</div>`;
+}
+// This computer's own settings (the same ones `<command> edit` asks about), changed straight away.
+const PC = { busy: "", err: "" };
+const PC_ROWS = [["autostart", () => `Start ${CFG.name} when you log in`, "Keeps it online whenever you're logged in to this computer."], ["credits", () => "Show your usage credit balance", "Plan usage shows your balance, promotional credits and this month's spending. The computer asks Claude for them with Claude Code's sign-in, which never leaves it."]];
+function computerHtml() {
+  const a = S.state && S.state.agent;
+  const c = a && a.online && a.computer;
+  const rows = PC_ROWS.map(([k, label, help]) => `<div class="switch"><div class="t"><span>${esc(label())}</span><small>${esc(help)}</small></div><button type="button" class="toggle" role="switch" data-pc="${k}" aria-checked="${!!(c && c[k])}" aria-label="${esc(label())}"${!c || PC.busy ? " disabled" : ""}></button></div>`).join("");
+  const why = !a || !a.online ? `${esc(CFG.name)} is offline, so these can't be changed right now.` : !c ? `Update ${esc(CFG.name)} to change these here, or run <code>${esc(CFG.command)} edit</code> on your computer.` : "";
+  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${rows}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
+}
+async function setComputer(key, value) {
+  PC.busy = key;
+  PC.err = "";
+  renderSettings();
+  try {
+    const r = await apiJson("/api/computer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ [key]: value }) });
+    if (S.state && S.state.agent) {
+      S.state.agent.computer = r.computer;
+      if (r.computer && "credits" in r.computer) S.state.agent.credits = r.computer.credits;
+    }
+  } catch (e) {
+    PC.err = e.message === "Signed out" ? "" : e.message;
+  }
+  PC.busy = "";
+  renderSettings();
 }
 function notesList(notes) {
   return `<ul class="notes">${(notes || []).map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
@@ -2193,6 +2239,10 @@ $("setBody").addEventListener("click", async e => {
   const copy = e.target.closest("[data-copy-link]");
   if (copy) return copyText(copy.dataset.copyLink, copy);
   if (e.target.closest("#fFable")) { SET.draft.fable = !SET.draft.fable; return renderSettings(); }
+  const pc = e.target.closest("[data-pc]");
+  if (pc) return PC.busy || setComputer(pc.dataset.pc, pc.getAttribute("aria-checked") !== "true");
+  const ans = e.target.closest("[data-answer]");
+  if (ans) { ANSWERS[ans.dataset.answer] = ans.getAttribute("aria-checked") !== "true"; return renderSettings(); }
   const img = e.target.closest("[data-img]");
   if (img) { SET.pickKey = img.dataset.img; $("fImg").click(); return; }
   const reset = e.target.closest("[data-img-reset]");
@@ -2227,7 +2277,7 @@ async function doAct(act) {
   }
   if (act === "update") {
     SET.busy = true; SET.err = ""; renderSettings();
-    try { applyUpdate(await apiJson("/api/update/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ to: UP.data.latest }) })); }
+    try { applyUpdate(await apiJson("/api/update/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ to: UP.data.latest, answers: answersNow(UP.data) }) })); }
     catch (e) { SET.err = e.message === "Signed out" ? "" : e.message; if (e.data && (e.data.code === "changed" || e.data.code === "current")) await pollUpdate(); }
     SET.busy = false;
     return renderSettings();
@@ -2418,11 +2468,19 @@ const UP_ICON = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>'
 };
 // What an update brings, under its checklist. A run from before the site kept the notes with it falls back to the release's.
+// One bar and the step it's on; the whole list is there if you want it.
+function progressHtml(run) {
+  const plan = run.plan || [];
+  const done = plan.filter(({ key }) => stepState(run, key) === "done").length;
+  const cur = plan.find(({ key }) => stepState(run, key) === "active") || plan[Math.min(done, plan.length - 1)];
+  const pct = plan.length ? Math.max(4, Math.round(((done + 0.5) / plan.length) * 100)) : 50;
+  return `<div class="prog"><div class="mt-bar"><i style="width:${pct}%"></i></div><div class="prog-step"><span class="spin"></span><span>${esc(cur ? cur.label : "Working")}</span><small>${Math.min(done + 1, plan.length)} of ${plan.length}</small></div></div><details class="earlier"><summary>All steps</summary>${stepsHtml(run)}</details>`;
+}
 function runNotes(run) {
   if ((run.kind || "update") !== "update") return "";
   const u = UP.data;
   const notes = run.notes && run.notes.length ? run.notes : u && u.latest === run.to ? u.notes : (u && u.whatsNew && u.whatsNew.version === run.to ? u.whatsNew.notes : []);
-  return notes.length ? `<div class="sect" style="margin-top:14px"><h3>${run.state === "done" ? "Patch notes" : "What's coming"}</h3>${notesList(notes)}</div>` : "";
+  return notes.length && run.state === "done" ? `<div class="sect" style="margin-top:14px"><h3>Patch notes</h3>${notesList(notes)}</div>` : "";
 }
 function runTitle(run) {
   return { update: `Updating to v${run.to}`, settings: "Saving your changes", move: "Moving to a new address", delete: "Deleting the site" }[run.kind || "update"] || "Working";
@@ -2451,11 +2509,11 @@ function renderJob() {
   } else if (run.state === "running") {
     title.textContent = runTitle(run);
     sub.textContent = kind === "update" ? `From v${run.from}` : "";
-    html = stepsHtml(run) + runNotes(run);
+    html = progressHtml(run);
     if (kind === "move" && run.step === "access") {
       html += info.site ? `<div class="sec" style="margin-top:14px"><h3>Turn on Cloudflare Access for the new address</h3><p>Nobody can open the new site until you do. This one stays online meanwhile.</p><ol class="howto"><li>Open the <a href="${esc(info.dash || "https://dash.cloudflare.com/")}" target="_blank" rel="noopener noreferrer">Cloudflare dashboard</a>: <b>Workers &amp; Pages</b> &rarr; <b>${esc(info.name || "")}</b> &rarr; <b>Settings</b> &rarr; <b>Domains &amp; Routes</b>.</li><li>On the <b>workers.dev</b> row choose <b>Enable Cloudflare Access</b>, then <b>Manage Cloudflare Access</b> and allow only <b>your own email address</b>.</li><li>Open your <a href="${esc(info.claim || info.site)}" target="_blank" rel="noopener noreferrer">claim link</a> and sign in with that email. That makes the new site yours.</li></ol><div class="wait"><span class="spin"></span><span>Waiting for you to open the new site. This page updates by itself.</span></div><div class="dlg-actions"><a class="btn primary" href="${esc(info.claim || info.site)}" target="_blank" rel="noopener noreferrer">Open the claim link</a><button class="btn ghost" type="button" data-act="cancel">Cancel the move</button></div></div>` : "";
     } else {
-      html += `<p class="fine">${esc(CFG.name)} stays online while this happens, and you can leave this page open or come back to it from any device. It keeps going on its own.${kind === "update" || kind === "settings" ? " Your chats aren't touched." : ""}${UP.failing > 1 ? " Reconnecting to the site…" : ""}</p>${kind === "update" || kind === "settings" ? '<div class="dlg-actions"><button class="btn ghost" type="button" data-act="hide">Hide</button></div>' : ""}`;
+      html += `<p class="fine">You can close this: it carries on by itself, and the button in the top bar shows how far it's got.${UP.failing > 1 ? " Reconnecting to the site…" : ""}</p><div class="dlg-actions"><button class="btn ghost" type="button" data-act="hide">Hide</button></div>`;
     }
   } else if (run.state === "done") {
     if (kind === "settings") {
@@ -2488,7 +2546,8 @@ function renderPill() {
   if (run && run.state === "running") {
     const total = (run.plan || []).length;
     const done = (run.plan || []).filter(({ key }) => stepState(run, key) === "done").length;
-    text = run.kind === "delete" ? "Deleting…" : `${OPEN_LABEL[run.kind || "update"]} ${done}/${total}`; short = `${done}/${total}`; cls += " busy";
+    const at = Math.min(done + 1, total); // the step it's on, as the update screen counts it
+    text = run.kind === "delete" ? "Deleting…" : `${OPEN_LABEL[run.kind || "update"]} ${at}/${total}`; short = `${at}/${total}`; cls += " busy";
   } else if (run && run.state === "error") { text = "Didn't finish"; short = "Failed"; cls += " bad"; }
   else if (run && run.state === "done" && run.kind === "settings") { text = "Reload"; short = "Reload"; }
   else if (run && run.state === "done" && UP.seen === run.id && !pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
@@ -2566,7 +2625,9 @@ async function pollUpdate() {
     UP.gone = run;
     clearTimeout(UP.timer);
     renderPill();
-    if ($("setDlg").open) renderSettings();
+    // the site this page belongs to is gone: say so, whether or not the panel was open
+    if (!$("setDlg").open) $("setDlg").showModal();
+    renderSettings();
     return;
   }
   if ($("setDlg").open && upRun()) renderSettings();
@@ -2579,10 +2640,8 @@ function applyUpdate(u) {
   UP.data = u;
   const run = upRun();
   if (run) UP.lastRun = run;
-  if (run && run.state === "running" && UP.seen !== run.id) {
-    UP.seen = run.id;
-    if (!$("setDlg").open) openSettings();
-  }
+  // Seen running here: the pill shows how it's going. The panel only opens if it was started here (it's open already then).
+  if (run && run.state === "running" && UP.seen !== run.id) UP.seen = run.id;
   if (prev && prev.state === "running" && run && run.state === "done" && !$("setDlg").open) toast(run.kind === "settings" ? "Your changes are live. Reload to see them." : `Updated to v${run.to}. Switching to it…`, 8000);
   // A finished update or change that this page didn't watch is already in it: the page was loaded (or reloaded) after it was
   // done. So there's nothing to say about it anymore, here or on any other device, and it's cleared until the next one. Only

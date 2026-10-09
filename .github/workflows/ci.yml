@@ -1,11 +1,17 @@
 name: CI
 
+# Pull requests, and main after a merge. A push to a pull request's branch only runs once (as the pull request).
 on:
   push:
+    branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,11 +21,26 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Manifest and unit tests
         run: npm test
-      - name: Worker and update end-to-end tests
-        run: npm run test:e2e
       - name: Shipped files changed, so the version must too
         if: github.event_name == 'pull_request'
         run: node scripts/release.mjs --check --against origin/${{ github.base_ref }}
+
+  # The end-to-end tests, split three ways and run side by side.
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Worker and update end-to-end tests (part ${{ matrix.shard }} of 3)
+        run: node --test --test-concurrency=4 --test-shard=${{ matrix.shard }}/3 "test/e2e/*.test.mjs"

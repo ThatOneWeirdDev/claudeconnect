@@ -32,9 +32,17 @@ export function validRef(s) {
   return typeof s === "string" && REF_RE.test(s) && !s.includes("..");
 }
 
+// The computer settings an update may ask about. Matches COMPUTER_KEYS in worker.js.
+export const QUESTION_KEYS = ["autostart", "credits"];
+
 // A release manifest is data from the internet: keep only what the site shows or compares.
 export function cleanManifest(j) {
   if (!j || typeof j !== "object" || !parseVersion(j.version)) return null;
   const notes = (Array.isArray(j.notes) ? j.notes : []).filter(n => typeof n === "string" && n.trim()).slice(0, 12).map(n => n.trim().slice(0, 240));
-  return { version: String(j.version).replace(/^v/, ""), released: typeof j.released === "string" ? j.released.slice(0, 32) : "", notes };
+  // What a new version asks when it's installed: a yes or no for one of the computer's settings, and the version it came in.
+  const questions = (Array.isArray(j.questions) ? j.questions : [])
+    .filter(q => q && typeof q === "object" && QUESTION_KEYS.includes(q.key) && typeof q.label === "string" && q.label.trim() && parseVersion(q.since))
+    .slice(0, 6)
+    .map(q => ({ key: q.key, label: q.label.trim().slice(0, 160), help: typeof q.help === "string" ? q.help.trim().slice(0, 300) : "", default: q.default === true, since: String(q.since).replace(/^v/, "") }));
+  return { version: String(j.version).replace(/^v/, ""), released: typeof j.released === "string" ? j.released.slice(0, 32) : "", notes, questions };
 }

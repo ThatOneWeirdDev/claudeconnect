@@ -25,11 +25,10 @@ async function boot(t, { credits = false, anthropic = null } = {}) {
   const site = await startSite({ appVersion: "1.7.0" });
   await site.claim();
   const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9" });
-  if (credits) {
-    const cfg = JSON.parse(pc.read("config.json"));
-    cfg.credits = true;
-    writeFileSync(join(pc.dir, "config.json"), JSON.stringify(cfg));
-  }
+  // on unless turned off: these tests say which
+  const cfg = JSON.parse(pc.read("config.json"));
+  cfg.credits = credits;
+  writeFileSync(join(pc.dir, "config.json"), JSON.stringify(cfg));
   const env = { ...pc.env, CLAUDECONNECT_ANTHROPIC_API: anthropic || "http://127.0.0.1:9" };
   const { spawn } = await import("node:child_process");
   const agent = spawn(process.execPath, [join(pc.dir, "agent.mjs"), "run"], { env, stdio: "ignore" });
@@ -86,7 +85,7 @@ test("with the balance turned on, the computer reads it from Claude's account wi
   assert.ok(!readFileSync(join(pc.dir, "agent.log"), "utf8").includes("sk-ant"));
 });
 
-test("without it turned on, Claude's sign-in isn't touched; with it on and the sign-in expired, the site is told why", async t => {
+test("turned off, Claude's sign-in isn't touched; with it on and the sign-in expired, the site is told why", async t => {
   const seen = [];
   const api = http.createServer((req, res) => {
     seen.push(req.url);
@@ -108,4 +107,24 @@ test("without it turned on, Claude's sign-in isn't touched; with it on and the s
   const c = await until(async () => (await on.site.api("/api/credits")).body, "a reading");
   assert.equal(c.error, "expired");
   assert.deepEqual(seen, [], "an expired sign-in isn't sent anywhere");
+});
+
+test("the balance is on unless it's been turned off, and the site can turn it off and on", async t => {
+  const { site, pc } = await boot(t, { credits: null });
+  let st = (await site.api("/api/state")).body.agent;
+  assert.equal(st.credits, true, "on for an install that never said");
+  assert.deepEqual(st.computer, { autostart: false, credits: true });
+  const off = await site.post("/api/computer", { credits: false });
+  assert.equal(off.status, 200, off.text);
+  assert.deepEqual(off.body.computer, { autostart: false, credits: false });
+  assert.equal(JSON.parse(pc.read("config.json")).credits, false, "kept on the computer");
+  st = (await site.api("/api/state")).body.agent;
+  assert.equal(st.credits, false);
+  assert.equal((await site.post("/api/computer", { credits: true })).body.computer.credits, true);
+  // starting at login, from the site
+  const auto = await site.post("/api/computer", { autostart: true });
+  assert.equal(auto.body.computer.autostart, true);
+  assert.ok(readFileSync(join(pc.home, ".config", "autostart", "claudeconnect-test-site.desktop"), "utf8").includes("agent.mjs"));
+  assert.equal((await site.post("/api/computer", { autostart: false })).body.computer.autostart, false);
+  assert.equal((await site.post("/api/computer", { nonsense: true })).status, 400);
 });

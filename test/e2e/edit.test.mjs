@@ -55,8 +55,8 @@ test("edit asks about each setting, shows what will change, and saves it in plac
     [/Change the tab icon\?/, "n"],
     [/Show Fable 5\.1 in the model picker\? It's hidden now\. \[y\/N\]/, "y"],
     [/when you log in to this computer\?/, ""],
-    [/usage credit balance/, "y"],
-    [/name: Better Site[\s\S]*Fable 5\.1: shown[\s\S]*usage credit balance: shown[\s\S]*Save these changes\? \[Y\/n\]/, ""]
+    [/Stop showing your usage credit balance on the site\? It's shown now/, "y"],
+    [/name: Better Site[\s\S]*Fable 5\.1: shown[\s\S]*usage credit balance: not shown[\s\S]*Save these changes\? \[Y\/n\]/, ""]
   ]);
   assert.equal(r.asked, 8, r.out);
   assert.equal(r.status, 0, r.out);
@@ -67,7 +67,7 @@ test("edit asks about each setting, shows what will change, and saves it in plac
   assert.equal(deploys[0].vars.SHOW_FABLE, "1");
   assert.equal(deploys[0].vars.COMMAND, "TestConnect", "the command stays the same");
   const cfg = JSON.parse(readFileSync(join(pc.dir, "config.json"), "utf8"));
-  assert.deepEqual([cfg.displayName, cfg.fable, cfg.credits], ["Better Site", true, true]);
+  assert.deepEqual([cfg.displayName, cfg.fable, cfg.credits], ["Better Site", true, false]);
 
   // saying no to everything changes nothing
   const none = await converse(cmd, pc.env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/Fable/, ""], [/log in/, ""], [/usage credit balance/, ""]]);
