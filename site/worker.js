@@ -326,17 +326,72 @@ function brandResponse(kind, img, versioned) {
   return new Response(imageBytes(img), { headers: { "content-type": img.type, "cache-control": cache, "x-content-type-options": "nosniff", "content-security-policy": "sandbox" } });
 }
 
+// A deploy puts the new code in this Worker at once, but the Durable Object can go on running the previous version's code until
+// it restarts. So every request to it says which version sent it, and an older Object restarts itself (ChatgqlHub.fetch), and
+// the request is tried again on the fresh one. Whatever this version newly asks the Object copes with an older one that can't
+// answer.
+async function hubFetch(env, request) {
+  const h = new Headers(request.headers);
+  h.set("x-app-version", appVersion(env));
+  const body = request.method === "GET" || request.method === "HEAD" ? null : await request.arrayBuffer();
+  for (let i = 0; ; i++) {
+    try {
+      return await env.HUB.get(env.HUB.idFromName("main")).fetch(new Request(request.url, { method: request.method, headers: h, body }));
+    } catch (e) {
+      if (i >= 2) throw e;
+      await new Promise(r => setTimeout(r, 200 * (i + 1)));
+    }
+  }
+}
+
+function deployedSettings(env) {
+  return { name: siteName(env), fable: env.SHOW_FABLE === "1", logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
+}
+
+async function siteOf(env, hub) {
+  try {
+    return await hub.siteSettings(appVersion(env));
+  } catch {
+    return deployedSettings(env);
+  }
+}
+
+async function siteImageOf(env, hub, kind) {
+  try {
+    return await hub.siteImage(kind);
+  } catch {
+    return kind === "favicon" ? brandImage("favicon") || brandImage("logo") : brandImage("logo");
+  }
+}
+
+// Instead of Cloudflare's error page: a page that tries again by itself, or for the page's own requests an answer it shows.
+function unavailable(req, env) {
+  if (/^\/(api|agent|a)\//.test(new URL(req.url).pathname) || new URL(req.url).pathname === "/agent") return json({ error: `${siteName(env)} is restarting. Try again in a moment.`, code: "restarting" }, 503, { "retry-after": "2" });
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="2"><title>${escHtml(siteName(env))}</title><style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.6 ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;background:Canvas;color:CanvasText}p{opacity:.7}</style></head><body><main><h1 style="font-size:22px;font-weight:600;margin:0 0 6px">One moment</h1><p style="margin:0">${escHtml(siteName(env))} is switching to its new version. This page reloads by itself.</p></main></body></html>`;
+  return new Response(html, { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": "2" } });
+}
+
 export default {
   async fetch(req, env, ctx) {
+    try {
+      return await handle(req, env, ctx);
+    } catch {
+      return unavailable(req, env);
+    }
+  }
+};
+
+async function handle(req, env, ctx) {
+  {
     const url = new URL(req.url);
     const hub = env.HUB.get(env.HUB.idFromName("main"));
     const icon = url.pathname === "/favicon.svg" || url.pathname === "/favicon" || url.pathname === "/favicon.ico" ? "favicon" : url.pathname === "/logo" ? "logo" : "";
-    if (icon) return brandResponse(icon, await hub.siteImage(icon), url.searchParams.has("v"));
+    if (icon) return brandResponse(icon, await siteImageOf(env, hub, icon), url.searchParams.has("v"));
     const a = await authenticate(req, env, hub, url);
     const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress";
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
-      const site = await hub.siteSettings();
+      const site = await siteOf(env, hub);
       return lockPage(a.state, site.name, site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK, url.hostname, commandName(env));
     }
     if (a.exp > notedExp) {
@@ -354,9 +409,9 @@ export default {
         if (req.method !== "POST") return json({ error: "Expected POST" }, 405);
         const body = await req.text();
         if (body.length > 20000) return json({ error: "Too large" }, 413);
-        return hub.fetch(new Request("https://hub.internal/agent/progress", { method: "POST", headers: h, body }));
+        return hubFetch(env, new Request("https://hub.internal/agent/progress", { method: "POST", headers: h, body }));
       }
-      return hub.fetch(new Request("https://hub.internal/agent", { headers: h }));
+      return hubFetch(env, new Request("https://hub.internal/agent", { headers: h }));
     }
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/a/")) {
       if (req.method !== "GET" && req.method !== "HEAD") {
@@ -366,12 +421,12 @@ export default {
       }
       const h = new Headers(req.headers);
       h.set("x-chatgql-user", a.email);
-      return hub.fetch(new Request(req, { headers: h }));
+      return hubFetch(env, new Request(req, { headers: h }));
     }
-    if (url.pathname === "/" || url.pathname.startsWith("/c/")) return appPage(env, await hub.siteSettings());
+    if (url.pathname === "/" || url.pathname.startsWith("/c/")) return appPage(env, await siteOf(env, hub));
     return new Response("Not found", { status: 404 });
   }
-};
+}
 
 function titleFrom(text, files) {
   const line = String(text || "").split("\n").map(s => s.trim()).find(Boolean) || (files[0] && files[0].name) || "New chat";
@@ -435,7 +490,8 @@ export class ChatgqlHub extends DurableObject {
   }
 
   // What a page or the locked page needs: the images only as whether there are any, and a version for their addresses.
-  siteSettings() {
+  siteSettings(version) {
+    this.restartIfOlder(version);
     const s = this.site();
     return { name: s.name, fable: s.fable, logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
   }
@@ -596,7 +652,13 @@ export class ChatgqlHub extends DurableObject {
     this.runs.delete(runId);
   }
 
+  // Running older code than the Worker that's calling: restart, so the next try runs the deployed version (see hubFetch).
+  restartIfOlder(version) {
+    if (version && isNewer(version, appVersion(this.env)) && typeof this.ctx.abort === "function") this.ctx.abort(`version ${version} is deployed`);
+  }
+
   async fetch(req) {
+    this.restartIfOlder(req.headers.get("x-app-version"));
     const url = new URL(req.url);
     if (url.hostname !== "hub.internal") this.host = url.hostname;
     if (url.pathname === "/agent") return this.acceptAgent(req);

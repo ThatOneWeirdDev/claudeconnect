@@ -1,19 +1,18 @@
 {
   "name": "claudeconnect",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "released": "2026-10-09",
   "notes": [
-    "Settings change the moment you change them. There's no Save button anymore: a switch, a new logo, or a new name (when you press Enter or click away) takes effect straight away, on every device, without redeploying the site.",
-    "Everything the edit command can change is in Settings, and more: under General → This computer you can also choose which of Claude Code's chats the sidebar lists, and the folder Claude Code works in.",
-    "Right after an update, the site no longer says \"Update available\" for the version you just installed."
+    "No more \"Error 1101 Worker threw exception\" right after an update. For a little while after an update, the part of the site that keeps your chats and settings could still be running the old version; pages now load anyway, and that part restarts into the new version as soon as it's used.",
+    "Settings changed in that moment either go through, or say the site is still switching and to try again in a few seconds, instead of silently not saving."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
     "installer.mjs": "b76b3ff1716e7b573a51d4665ccd5c6320f7b6411a593b6008932ff01b98e70a",
     "agent/agent.mjs": "8a84f526b8a48b5f052cd256aa60148039347ab28c4b9fd9574b671ff808dfdd",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
-    "site/worker.js": "2f65396eef131172032a993f803165dda04378593aa0e6a54c643089d45f1b06",
-    "site/app.html": "083c9d53cfc8cf5c269a5aef7e0ceb575f43e47a8212b4e1e187214b6be8002b",
+    "site/worker.js": "dd1a210e6f2aca5282d8c9273569b443ea8e48ed57f31f1c61caf69b6a0f50e8",
+    "site/app.html": "e516ee8757461e43f49a51899ff12239feb1e2d908d60cd3aa20962b37e6da51",
     "site/version.js": "8a042367a589983c42664b26f4f457f7c05b89f9c2cca3dfe9e10c3b70091bd9",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"

@@ -45,6 +45,15 @@ const FRONT = `export default {
 // /api/__storage reads and writes the Object's key-value storage (the update log, for one).
 const MAIN = `import Worker, { ChatgqlHub as Base } from "./worker.js";
 export class ChatgqlHub extends Base {
+  // TEST_OLD_HUB: act like the previous version's Object, which a new deploy's Worker can still be talking to for a while
+  siteSettings(v) {
+    if (this.env.TEST_OLD_HUB) throw new TypeError("The RPC receiver does not implement the method siteSettings.");
+    return super.siteSettings(v);
+  }
+  siteImage(k) {
+    if (this.env.TEST_OLD_HUB) throw new TypeError("The RPC receiver does not implement the method siteImage.");
+    return super.siteImage(k);
+  }
   async fetch(req) {
     if (new URL(req.url).pathname === "/api/__seed") {
       const b = await req.json();
