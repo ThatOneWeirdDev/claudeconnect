@@ -914,12 +914,21 @@ async function readCredits() {
   const u = await get("/api/oauth/usage");
   const e = u && u.extra_usage && typeof u.extra_usage === "object" ? u.extra_usage : null;
   if (e) out.extra = { enabled: e.is_enabled === true, limit: num(e.monthly_limit), used: num(e.used_credits) };
+  // Promotional credit that comes with an amount in dollars, like the Claude Code cloud-session credit (Claude calls that one
+  // iguana_necktie): what it started at, what's used, what's left, and when it runs out. Already dollars, not cents.
+  for (const [key, w] of Object.entries(u && typeof u === "object" ? u : {})) {
+    if (!w || typeof w !== "object" || (num(w.limit_dollars) === null && num(w.remaining_dollars) === null)) continue;
+    const limit = num(w.limit_dollars);
+    const used = num(w.used_dollars);
+    const remaining = num(w.remaining_dollars) !== null ? w.remaining_dollars : limit !== null && used !== null ? limit - used : null;
+    (out.dollars = out.dollars || []).push({ key, limit, used, remaining, expires: Date.parse(w.resets_at) || null });
+  }
   const p = s.org ? await get(`/api/oauth/organizations/${s.org}/prepaid/credits`) : null;
   if (p && num(p.amount) !== null) {
     const promos = (Array.isArray(p.promo_tranches) ? p.promo_tranches : []).filter(t => t && num(t.remaining_amount_minor_units) > 0);
     out.balance = { amount: p.amount, currency: typeof p.currency === "string" ? p.currency : "", promos: promos.slice(0, 10).map(t => ({ amount: t.remaining_amount_minor_units, currency: typeof t.currency === "string" ? t.currency : "", expires: Date.parse(t.expires_at) || null, name: typeof t.name === "string" ? t.name : "" })) };
   }
-  if (!out.extra && !out.balance) out.error = "unavailable";
+  if (!out.extra && !out.balance && !out.dollars) out.error = "unavailable";
   send({ type: "credits", credits: out });
 }
 

@@ -1,18 +1,17 @@
 {
   "name": "claudeconnect",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "released": "2026-10-09",
   "notes": [
-    "No more \"Error 1101 Worker threw exception\" right after an update. For a little while after an update, the part of the site that keeps your chats and settings could still be running the old version; pages now load anyway, and that part restarts into the new version as soon as it's used.",
-    "Settings changed in that moment either go through, or say the site is still switching and to try again in a few seconds, instead of silently not saving."
+    "Plan usage shows the free Claude Code cloud credits (the $100 or $250 promotion): how much is left of it, and until when. Before, it said there were no promotional credits."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
     "installer.mjs": "b76b3ff1716e7b573a51d4665ccd5c6320f7b6411a593b6008932ff01b98e70a",
-    "agent/agent.mjs": "8a84f526b8a48b5f052cd256aa60148039347ab28c4b9fd9574b671ff808dfdd",
+    "agent/agent.mjs": "d7d3176853b6999869fbd1a35563dcda98dda0aaebea949fb1549bfe433438dd",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
-    "site/worker.js": "dd1a210e6f2aca5282d8c9273569b443ea8e48ed57f31f1c61caf69b6a0f50e8",
-    "site/app.html": "e516ee8757461e43f49a51899ff12239feb1e2d908d60cd3aa20962b37e6da51",
+    "site/worker.js": "e2fe798d630ec9fdc39b0a221a2b303c6cba7a7597dd7f0acf8d0afa681e554b",
+    "site/app.html": "1522d1d999417feb342f933d4eef15e479f4ce9f58c56992bfac1ab618888b81",
     "site/version.js": "8a042367a589983c42664b26f4f457f7c05b89f9c2cca3dfe9e10c3b70091bd9",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
