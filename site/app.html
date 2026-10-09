@@ -1932,6 +1932,8 @@ function creditsHtml(l) {
   const on = useCredits();
   return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div>${balanceHtml()}</div>`;
 }
+// What Claude's own names for its promotional credits are, in words. iguana_necktie is the Claude Code cloud-session credit.
+const PROMO_NAMES = { iguana_necktie: "Claude Code cloud credits" };
 function money(minor, currency) {
   try { return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD" }).format(minor / 100); } catch { return (minor / 100).toFixed(2) + " " + (currency || ""); }
 }
@@ -1942,7 +1944,7 @@ function balanceHtml() {
   const b = st.credits;
   const link = '<a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">claude.ai</a>';
   const on = st.agent && st.agent.credits;
-  if (!b || (!b.extra && !b.balance)) {
+  if (!b || (!b.extra && !b.balance && !b.dollars)) {
     if (!on) return `<p class="fine" style="margin:0">Your balance and promotional credits show here when <b>Show your usage credit balance</b> is on in Settings → General${st.agent && st.agent.computer ? "" : ` (or run <code>${esc(CFG.command)} edit</code> on your computer)`}. They're always on ${link} too.</p>`;
     const why = b && b.error === "expired" ? "Your Claude sign-in on the computer needs renewing; that happens with your next message." : b && b.error === "signin" ? "Claude Code on your computer isn't signed in with a Claude account." : U.refreshing ? "Reading your balance…" : "Claude didn't give your balance this time.";
     return `<p class="fine" style="margin:0">${esc(why)} It's always on ${link}.</p>`;
@@ -1950,9 +1952,15 @@ function balanceHtml() {
   const rows = [];
   const cur = b.balance ? b.balance.currency : "USD";
   if (b.balance) rows.push(["Balance", money(b.balance.amount, cur)]);
+  const until = t => (t ? ` · until ${new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "");
   const promos = (b.balance && b.balance.promos) || [];
-  for (const p of promos) rows.push([p.name ? `Promotional · ${p.name}` : "Promotional credits", money(p.amount, p.currency) + (p.expires ? ` · until ${new Date(p.expires).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "")]);
-  if (b.balance && !promos.length) rows.push(["Promotional credits", "None right now"]);
+  for (const p of promos) rows.push([p.name ? `Promotional · ${p.name}` : "Promotional credits", money(p.amount, p.currency) + until(p.expires)]);
+  // promotional credit counted in dollars, like the free credit for Claude Code cloud sessions
+  for (const d of b.dollars || []) {
+    const left = d.remaining !== null ? d.remaining : Math.max(0, (d.limit || 0) - (d.used || 0));
+    rows.push([PROMO_NAMES[d.key] || "Promotional credits", `${money(left, "USD")} left${d.limit !== null ? ` of ${money(d.limit, "USD")}` : ""}${until(d.expires)}`]);
+  }
+  if (!promos.length && !(b.dollars || []).length) rows.push(["Promotional credits", "None right now"]);
   if (b.extra) rows.push(["Spent this month", b.extra.used === null ? "—" : money(b.extra.used, cur) + (b.extra.limit === null ? (b.extra.enabled ? " · no limit" : "") : ` of ${money(b.extra.limit, cur)}`)]);
   return `<div class="bal">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><p class="fine" style="margin:8px 0 0">From your Claude account${b.error ? ", as last read" : ""} · ${new Date(b.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Top up or change the limit on ${link}.</p>`;
 }

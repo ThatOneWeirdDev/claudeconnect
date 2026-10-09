@@ -62,7 +62,8 @@ test("with the balance turned on, the computer reads it from Claude's account wi
   const api = http.createServer((req, res) => {
     seen.push({ url: req.url, auth: req.headers.authorization, beta: req.headers["anthropic-beta"] });
     res.setHeader("content-type", "application/json");
-    if (req.url === "/api/oauth/usage") return res.end(JSON.stringify({ five_hour: { utilization: 40 }, extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 1234, utilization: 24.7 } }));
+    // the shape of a live response: the Claude Code cloud-session promo comes as iguana_necktie, in dollars
+    if (req.url === "/api/oauth/usage") return res.end(JSON.stringify({ five_hour: { utilization: 40 }, seven_day: { utilization: 10, resets_at: "2026-10-12T00:00:00Z" }, extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 1234, utilization: 24.7 }, iguana_necktie: { utilization: 27.6, resets_at: "2026-11-05T07:59:00+00:00", limit_dollars: 100, used_dollars: 27.6, remaining_dollars: 72.4 }, omelette: null }));
     if (req.url === `/api/oauth/organizations/${ORG}/prepaid/credits`) return res.end(JSON.stringify({ amount: 2500, currency: "USD", promo_tranches: [{ remaining_amount_minor_units: 5000, currency: "USD", expires_at: "2026-12-01T00:00:00Z", name: "Welcome credit" }, { remaining_amount_minor_units: 0 }] }));
     res.statusCode = 404;
     res.end("{}");
@@ -79,6 +80,7 @@ test("with the balance turned on, the computer reads it from Claude's account wi
   const c = await until(async () => (await site.api("/api/credits")).body, "the balance");
   assert.deepEqual(c.extra, { enabled: true, limit: 5000, used: 1234 });
   assert.equal(c.balance.amount, 2500);
+  assert.deepEqual(c.dollars, [{ key: "iguana_necktie", limit: 10000, used: 2760, remaining: 7240, expires: Date.parse("2026-11-05T07:59:00+00:00") }], "the free cloud-session credit, $72.40 left of $100");
   assert.deepEqual(c.balance.promos, [{ amount: 5000, currency: "USD", expires: Date.parse("2026-12-01T00:00:00Z"), name: "Welcome credit" }]);
   assert.ok(seen.every(s => s.auth === "Bearer sk-ant-oat-test" && s.beta === "oauth-2025-04-20"));
   assert.ok(!JSON.stringify((await site.api("/api/state")).body).includes("sk-ant"), "the sign-in never reaches the site");

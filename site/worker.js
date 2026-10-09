@@ -956,10 +956,15 @@ export class ChatgqlHub extends DurableObject {
       const promos = (Array.isArray(raw.balance.promos) ? raw.balance.promos.slice(0, 10) : []).filter(x => x && num(x.amount));
       out.balance = { amount: num(raw.balance.amount), currency, promos: promos.map(x => ({ amount: num(x.amount), currency: cur(x.currency) || currency, expires: num(x.expires), name: typeof x.name === "string" ? x.name.replace(/\s+/g, " ").trim().slice(0, 60) : "" })) };
     }
-    if (!out.extra && !out.balance) {
+    // promotional credit counted in dollars (the Claude Code cloud-session credit, say), kept in cents like the rest
+    const cents = v => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 1e9 ? Math.round(v * 100) : null);
+    const promos = (Array.isArray(raw.dollars) ? raw.dollars.slice(0, 6) : []).filter(d => d && typeof d === "object" && typeof d.key === "string" && /^[a-z0-9_]{1,40}$/.test(d.key));
+    const dollars = promos.map(d => ({ key: d.key, limit: cents(d.limit), used: cents(d.used), remaining: cents(d.remaining), expires: num(d.expires) })).filter(d => d.remaining !== null || d.limit !== null);
+    if (dollars.length) out.dollars = dollars;
+    if (!out.extra && !out.balance && !out.dollars) {
       const prev = await this.ctx.storage.get("credits");
       const error = ["expired", "signin", "unavailable"].includes(raw.error) ? raw.error : "unavailable";
-      await this.ctx.storage.put("credits", prev && (prev.extra || prev.balance) ? { ...prev, error, errorAt: out.at } : { at: out.at, error });
+      await this.ctx.storage.put("credits", prev && (prev.extra || prev.balance || prev.dollars) ? { ...prev, error, errorAt: out.at } : { at: out.at, error });
       return;
     }
     await this.ctx.storage.put("credits", out);
