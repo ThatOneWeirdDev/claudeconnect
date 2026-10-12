@@ -1,10 +1,13 @@
 name: CI
 
-# Pull requests, and main after a merge. A push to a pull request's branch only runs once (as the pull request).
+# Pull requests, and main after a merge. A push to a pull request's branch only runs once (as the pull request). The
+# auto-merge job starts the run on main itself after it merges (workflow_dispatch), since its merge can't start one.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -44,3 +47,14 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Worker and update end-to-end tests (part ${{ matrix.shard }} of 3)
         run: node --test --test-concurrency=4 --test-shard=${{ matrix.shard }}/3 "test/e2e/*.test.mjs"
+
+  # A pull request from the owner or from Claude merges itself once everything above has passed (see auto-merge.yml).
+  merge:
+    needs: [unit, e2e]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    uses: ./.github/workflows/auto-merge.yml
+    secrets: inherit
