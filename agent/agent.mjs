@@ -184,7 +184,7 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     ["logs", "show recent activity"],
     ["status", "show whether it's running"],
     ["update", "update to the newest version, keeping your chats and settings"],
-    ["edit", "change the name, logo, tab icon and other settings"],
+    ["edit", "change any setting: the name, look, theme, this computer's settings, usage credits, the address, or delete the site"],
     ["claim", "print a fresh link to make the site yours (after turning Cloudflare Access on or off)"],
     ["version", "show the installed version"]
   ];
@@ -251,6 +251,8 @@ if (cmd === "edit") {
     console.log(`The settings program isn't on this computer. Run ${COMMAND} update once, then try again.`);
     process.exit(1);
   }
+  // Ctrl+C is the settings program's to handle (it cancels a move), so this waits for it rather than ending first
+  process.on("SIGINT", () => {});
   const r = spawnSync(process.execPath, [installer, "--edit"], { stdio: "inherit" });
   process.exit(r.status === null ? 1 : r.status);
 }
@@ -907,10 +909,9 @@ function setComputer(m) {
   send({ type: "computer", req: m.req, values: computerSettings(), error });
 }
 
-// The site's name, Fable and images, as changed in Settings. Kept here for the next update's deploy and for `<command> edit`.
+// The site's name and images, as changed in Settings. Kept here for the next update's deploy and for `<command> edit`.
 function saveSite(m) {
   if (typeof m.displayName === "string" && m.displayName.trim()) cfg.displayName = m.displayName.trim().slice(0, 40);
-  if (typeof m.fable === "boolean") cfg.fable = m.fable;
   saveConfig();
   const brand = m.brand && typeof m.brand === "object" ? m.brand : null;
   const file = join(HERE, "site", "brand.js");

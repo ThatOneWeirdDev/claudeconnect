@@ -115,10 +115,10 @@ test("the page is told whether the computer can do plain chat and permission mod
 test("there is no setting for what the AI calls itself, and an old page that still sends one is ignored", async t => {
   const { s, agent } = await ready(t);
   assert.equal((await s.post("/api/admin/settings", { aiName: "Buddy" })).status, 400, "nothing else changed, so there is nothing to do");
-  const r = await s.post("/api/admin/settings", { aiName: "Buddy", fable: true });
+  const r = await s.post("/api/admin/settings", { aiName: "Buddy", displayName: "Other Site" });
   assert.equal(r.status, 200);
   const msg = await agent.next(m => m.type === "admin");
-  assert.deepEqual(msg.payload, { fable: true }, "the name isn't passed on");
+  assert.deepEqual(msg.payload, { displayName: "Other Site" }, "the name isn't passed on");
   const html = await (await s.asOwner("/")).text();
   assert.doesNotMatch(html, /"ai"\s*:/, "the page isn't given an AI name");
 });

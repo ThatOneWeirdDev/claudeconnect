@@ -639,7 +639,7 @@ svg{display:block}
 (() => {
 const EFF = ["low", "medium", "high", "xhigh", "max"];
 const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
-const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", fable: false, version: "0.0.0" }, __CFG__);
+const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
 // the built-in logo, the same as the site's own (DEFAULT_MARK in worker.js)
 const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="m-bg" width="64" height="64" rx="16"/><circle class="m-fg" cx="29" cy="29" r="12.5" fill="none" stroke-width="6.5"/><path class="m-fg" d="M41.5 29v22" stroke-width="6.5" stroke-linecap="round"/><path class="m-fg" d="M36 45h11" stroke-width="5" stroke-linecap="round"/></svg>`;
@@ -649,8 +649,6 @@ const ALL_MODELS = [
   { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work.", efforts: EFF, def: "medium" },
   { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks.", efforts: [], def: null }
 ];
-// Fable shows only when it's turned on in Settings, which can change while the page is open
-function models() { return ALL_MODELS.filter(m => m.id !== "claude-fable-5-1" || CFG.fable); }
 const MAX_BYTES = 15 * 1024 * 1024;
 const $ = id => document.getElementById(id);
 const store = {
@@ -682,7 +680,7 @@ const S = {
   query: ""
 };
 const UP = { data: null, timer: null, failing: 0, checking: false, seen: "", dismissing: false, lastRun: null, gone: null, reloadTimer: null };
-if (!models().find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
+if (!ALL_MODELS.find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
 if (!MODE_NAME[S.mode]) S.mode = "code";
 if (!PERM_MODES.find(x => x.id === S.perm)) S.perm = "auto";
 const I = {
@@ -700,7 +698,6 @@ const I = {
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
-  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1-4.2A8 8 0 1 1 20 12z"/></svg>',
   gauge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 18a8.5 8.5 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13.5" r="1"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
@@ -969,7 +966,7 @@ function renderCtx() {
 
 function noteHtml() { return switchNote() ? `<div class="pick-note">${I.info}<span>${esc(switchNote())}</span></div>` : ""; }
 function popModel() {
-  return models().map(x => `<button class="pm${x.id === S.model ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}${x.credits && !useCredits() ? ", which are off here" : ""}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
+  return ALL_MODELS.map(x => `<button class="pm${x.id === S.model ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}${x.credits && !useCredits() ? ", which are off here" : x.credits && noCredits() ? ". You have none!" : ""}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
 }
 function popEffort() {
   const m = modelOf(S.model);
@@ -1054,7 +1051,9 @@ function pick(change) {
 $("modelMenu").addEventListener("click", e => {
   e.stopPropagation();
   const b = e.target.closest("[data-model]");
-  if (b) pick(() => { S.model = b.dataset.model; store.set("model", S.model); });
+  if (!b) return;
+  pick(() => { S.model = b.dataset.model; store.set("model", S.model); });
+  if (modelOf(S.model).credits && useCredits() && noCredits()) toast(noCredits().message, 8000);
 });
 $("effortMenu").addEventListener("click", e => {
   e.stopPropagation();
@@ -1103,11 +1102,12 @@ async function loadState() {
     return;
   }
   applySite(S.state.site);
+  syncTheme(S.state.prefs);
   if (S.state.update) applyUpdate(S.state.update);
   renderChrome();
 }
 
-// one list, newest first, like ChatGPT's. Under the title: the project folder of a chat from Claude Code, or claude.ai.
+// one list, newest first, like ChatGPT's. Under the title: the project folder of a chat from Claude Code.
 function renderHistory() {
   const h = $("history");
   const q = S.query.trim().toLowerCase();
@@ -1118,8 +1118,8 @@ function renderHistory() {
   }
   let html = "";
   for (const c of list) {
-    const sub = c.origin === "claude.ai" ? "claude.ai" : c.folder || "";
-    const tip = c.origin === "claude.ai" ? "From claude.ai" : `Started in ${c.folder}`;
+    const sub = c.folder || "";
+    const tip = `Started in ${c.folder}`;
     html += `<div class="item${c.id === S.chatId ? " on" : ""}" data-id="${c.id}"><a href="/c/${c.id}" data-open="${c.id}"${sub ? ` class="sub" title="${esc(tip)}"` : ""}>${sub ? `<span class="tt"><span>${esc(c.title || "New chat")}</span><small>${esc(sub)}</small></span>` : `<span>${esc(c.title || "New chat")}</span>`}${c.running ? '<i class="live" title="Answering"></i>' : ""}</a><button class="more" type="button" data-more="${c.id}" aria-label="Chat options" aria-expanded="false">${I.dots}</button></div>`;
   }
   h.innerHTML = html;
@@ -1302,7 +1302,7 @@ function botEl(m) {
   if (rest.length) html += `<div class="arts">${rest.map(artCard).join("")}</div>`;
   if (meta.error) html += `<div class="note ${meta.error === "Stopped." ? "soft" : "err"}">${meta.error === "Stopped." ? "You stopped this reply." : esc(meta.error)}</div>`;
   if (meta.denials) html += `<div class="note soft">Safety checks blocked ${meta.denials === 1 ? "an action" : meta.denials + " actions"} during this reply.</div>`;
-  const lbl = meta.origin === "claude.ai" ? "From claude.ai" : runLabel(meta.model || S.model, meta.effort);
+  const lbl = runLabel(meta.model || S.model, meta.effort);
   html += `<div class="foot">${m.content ? `<button type="button" data-copy-msg title="Copy" aria-label="Copy reply">${I.copy}</button>` : ""}<span class="lbl">${esc(lbl)}</span></div>`;
   el.innerHTML = html;
   el._raw = m.content || "";
@@ -1425,7 +1425,7 @@ async function openChat(id, push) {
   S.chat = j.chat;
   if (push) history.pushState({ id }, "", `/c/${id}`);
   document.title = (j.chat.title || "Chat") + " · " + CFG.name;
-  if (j.chat.model && models().find(m => m.id === j.chat.model)) {
+  if (j.chat.model && ALL_MODELS.find(m => m.id === j.chat.model)) {
     S.model = j.chat.model;
     if (j.chat.effort) S.efforts[S.model] = j.chat.effort;
   }
@@ -1630,7 +1630,7 @@ async function send() {
     const j = await res.json().catch(() => ({}));
     S.busy = false;
     restore((j.error || `Something went wrong (${res.status}).`) + (j.resetsAt ? ` It resets ${relTime(j.resetsAt)}.` : ""));
-    if (j.code === "offline" || j.code === "credits_off") loadState();
+    if (j.code === "offline" || j.code === "credits_off" || j.code === "no_credits") loadState();
     updateSend();
     return;
   }
@@ -1849,7 +1849,22 @@ function applyTheme() {
     b.setAttribute("aria-pressed", String(on));
   });
 }
-function setTheme(t) { store.set("theme", t); applyTheme(); }
+// The theme is kept on the site, so it's the same on every device and `<command> edit` can change it. This browser keeps a copy
+// to start with. A site from before that has none yet, and takes this browser's.
+let themeAt = 0;
+function setTheme(t) {
+  store.set("theme", t);
+  applyTheme();
+  themeAt = Date.now();
+  if (S.state && S.state.prefs) S.state.prefs.theme = t;
+  apiJson("/api/prefs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ theme: t }) }).catch(() => {});
+}
+function syncTheme(prefs) {
+  if (!prefs || Date.now() - themeAt < 8000) return;
+  const mine = store.get("theme", "system");
+  if (!prefs.theme) { if (mine !== "system") setTheme(mine); return; }
+  if (prefs.theme !== mine) { store.set("theme", prefs.theme); applyTheme(); if ($("setDlg").open && SET.tab === "appearance") renderSettings(); }
+}
 darkMq.addEventListener("change", applyTheme);
 
 function relTime(sec) {
@@ -1928,6 +1943,8 @@ const CREDIT_WHY = {
 };
 const U = { refreshing: false, saving: false, resetting: "" };
 function useCredits() { return !(S.state && S.state.prefs && S.state.prefs.useCredits === false); }
+// No usage credits on the account, as Claude Code and the balance last said. Fable 5.1 only runs on them.
+function noCredits() { return (S.state && S.state.noCredits) || null; }
 function creditsHtml(l) {
   const c = l && l.credits;
   const [label, text] = c ? CREDIT_STATE[c.state] || CREDIT_STATE.off : ["Not reported yet", "Claude Code says whether usage credits are on with the replies to your messages."];
@@ -2118,7 +2135,7 @@ function renderLimitNote() {
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SET = { tab: "general", name: undefined, saving: "", saved: "", address: "", confirm: "", err: "", busy: false, justUpdated: false };
-const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["chats", "Chats", I.chat], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
+const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
 
 // Every setting here takes effect when it's changed: no Save button. Only a name being typed is held, until Enter or leaving
 // the field.
@@ -2175,7 +2192,7 @@ function paneHtml() {
   const u = UP.data;
   if (SET.tab === "general") {
     const status = SET.saving === "name" ? "Saving…" : SET.saved === "name" ? "Saved" : "";
-    return `<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(SET.name === undefined ? CFG.name : SET.name)}" autocomplete="off" enterkeyhint="done"><small>Shown at the top of the page and in the browser tab. Saved when you press Enter or click away. The command <code>${esc(CFG.command)}</code> stays the same.${status ? ` <b class="ok-text">${status}</b>` : ""}</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div><div class="switch"><div class="t"><span>Fable 5.1 in the model picker</span><small>Turn this on if you have usage credits for Fable 5.1. It only shows up in the model picker if you do.</small></div><button type="button" class="toggle" role="switch" id="fFable" aria-checked="${!!CFG.fable}" aria-label="Fable 5.1"></button></div>${SET.err && SET.tab === "general" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div>${computerHtml()}`;
+    return `<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(SET.name === undefined ? CFG.name : SET.name)}" autocomplete="off" enterkeyhint="done"><small>Shown at the top of the page and in the browser tab. Saved when you press Enter or click away. The command <code>${esc(CFG.command)}</code> stays the same.${status ? ` <b class="ok-text">${status}</b>` : ""}</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div>${SET.err && SET.tab === "general" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div>${computerHtml()}`;
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
@@ -2187,7 +2204,6 @@ function paneHtml() {
     return `${blockedNote()}<div class="sec"><h3>Current address</h3><div class="kv"><span>${esc(location.origin)}</span><button type="button" class="btn ghost" data-copy-link="${esc(location.origin)}">${I.copy}<span>Copy</span></button></div></div><div class="sec"><h3>Change the address</h3><p>This is the name in the web address. You'll get a new link; the old one stops working.</p><div class="field"><div class="input-row"><input id="fAddr" value="${esc(SET.address)}" placeholder="${esc(h.name)}" maxlength="63" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="New address"><span>${esc(h.suffix)}</span></div>${bad ? '<div class="err-text">Use lowercase letters, numbers and dashes, starting and ending with a letter or number.</div>' : ""}${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><ul class="warn-list"><li>The new site is set up first. This one keeps working while you turn on Cloudflare Access for the new address.</li><li>Once the new site is working, this one is deleted.</li><li>Chats stay with the old site, so they're deleted with it. Your files are kept.</li></ul><button class="btn primary" type="button" data-act="move"${!SET.address || bad || (UP.data && UP.data.blockedAdmin) ? " disabled" : ""}>Set up the new address</button></div>`;
   }
   if (SET.tab === "updates") return updatesHtml();
-  if (SET.tab === "chats") return importHtml();
   const ok = SET.confirm === CFG.name;
   return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the folder Claude works in are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
 }
@@ -2266,13 +2282,12 @@ function whatsNewHtml(u, head) {
 // There's nothing to save anymore: every change applies by itself.
 function renderFoot() { $("setFoot").hidden = true; }
 
-// The site's name, Fable and images as they are now. Changing them takes effect at once, on every device, with no redeploy.
-function siteNow() { return (S.state && S.state.site) || { name: CFG.name, fable: !!CFG.fable, logo: !!document.querySelector("#brand img"), favicon: false, v: "0" }; }
+// The site's name and images as they are now. Changing them takes effect at once, on every device, with no redeploy.
+function siteNow() { return (S.state && S.state.site) || { name: CFG.name, logo: !!document.querySelector("#brand img"), favicon: false, v: "0" }; }
 function applySite(site) {
   if (!site) return;
   if (S.state) S.state.site = site;
   CFG.name = site.name;
-  CFG.fable = !!site.fable;
   document.title = S.chat && S.chat.title ? `${S.chat.title} · ${CFG.name}` : CFG.name;
   $("topTitle").textContent = CFG.name;
   $("brand").setAttribute("aria-label", CFG.name);
@@ -2281,7 +2296,6 @@ function applySite(site) {
   if (mark && mark.outerHTML !== want) mark.outerHTML = want;
   const icon = document.querySelector('link[rel="icon"]');
   if (icon) icon.href = `/favicon?v=${site.v}`;
-  if (!models().find(m => m.id === S.model)) { S.model = DEFAULT_MODEL; renderBar(); }
 }
 async function saveSite(what, body) {
   SET.saving = what;
@@ -2333,7 +2347,6 @@ $("setBody").addEventListener("change", e => {
   if (e.target.id === "fName") saveName();
   if (e.target.id === "fWs") setComputer("workspace", e.target.value.trim());
   if (e.target.id === "fImg" && SET.pickKey) { readImage(e.target.files[0], SET.pickKey); e.target.value = ""; }
-  if (e.target.id === "fImport" && e.target.files[0]) importExport(e.target.files[0]);
 });
 $("setBody").addEventListener("click", async e => {
   const tab = e.target.closest("[data-tab-set]");
@@ -2342,7 +2355,6 @@ $("setBody").addEventListener("click", async e => {
   if (th) return setTheme(th.dataset.themeSet);
   const copy = e.target.closest("[data-copy-link]");
   if (copy) return copyText(copy.dataset.copyLink, copy);
-  if (e.target.closest("#fFable")) return SET.saving || saveSite("fable", { fable: !CFG.fable });
   const pc = e.target.closest("[data-pc]");
   if (pc) return setComputer(pc.dataset.pc, pc.dataset.value !== undefined ? pc.dataset.value : pc.getAttribute("aria-checked") !== "true");
   const ans = e.target.closest("[data-answer]");
@@ -2397,140 +2409,10 @@ async function doAct(act) {
     return renderSettings();
   }
   if (act === "reload") return reloadNow();
-  if (act === "import") return IMP.busy || $("fImport").click();
   if (act === "hide") return closeSettings();
 }
 $("setClose").onclick = closeSettings;
 $("setDlg").addEventListener("click", e => { if (e.target === $("setDlg")) closeSettings(); });
-
-/* ---------- chats from claude.ai, from its data export ---------- */
-// claude.ai keeps its chats on its own servers and has no way for another site to read them, so they come from the export
-// claude.ai emails (a .zip with conversations.json in it). It's read here in the browser, and the conversations are sent to
-// the site in batches; nothing goes anywhere else. Importing the same export again only adds what's new.
-const IMP = { busy: false, phase: "", done: 0, total: 0, added: 0, updated: 0, skipped: 0, err: "", finished: false };
-const IMPORT_BATCH = 3000000;
-function importHtml() {
-  let state = "";
-  if (IMP.busy) state = `<div class="wait"><span class="spin"></span><span>${IMP.phase === "read" ? "Reading the export…" : `Bringing over ${IMP.done} of ${IMP.total} chats…`}</span></div>`;
-  else if (IMP.err) state = `<div class="note err">${esc(IMP.err)}</div>`;
-  else if (IMP.finished) state = `<div class="note soft">${IMP.added || IMP.updated ? `Done: ${IMP.added} chat${IMP.added === 1 ? "" : "s"} added${IMP.updated ? `, ${IMP.updated} brought up to date` : ""}. They're in the sidebar.` : "Nothing new in that export."}${IMP.skipped ? ` ${IMP.skipped} left out: empty, or deleted here before.` : ""}</div>`;
-  return `<div class="sec"><h3>Your chats from claude.ai</h3><p>claude.ai keeps its chats on its own servers and doesn't let other sites read them, even with your sign-in, so they come over in claude.ai's data export. They're listed in the sidebar with your other chats, and you can carry on in any of them: the first reply reads the conversation so far.</p><ol class="howto"><li>On <a href="https://claude.ai/settings/data-privacy-controls" target="_blank" rel="noopener noreferrer">claude.ai</a>, open <b>Settings</b> &rarr; <b>Privacy</b> and choose <b>Export data</b>.</li><li>claude.ai emails you a link. Download the <b>.zip</b> file it gives you.</li><li>Choose that file here. A newer export later adds only what's new.</li></ol>${state}<div class="dlg-actions"><button class="btn primary" type="button" data-act="import"${IMP.busy ? " disabled" : ""}>${IMP.busy ? "Importing…" : "Choose the export…"}</button></div><input type="file" id="fImport" accept=".zip,.json,application/zip,application/json" hidden><p class="fine" style="margin-top:14px">The file is opened in this browser. Only the conversations in it are sent, to ${esc(CFG.name)} and nowhere else. Projects and files you uploaded to claude.ai aren't in the export; their names are kept with the messages.</p></div>`;
-}
-function renderImport() { if ($("setDlg").open && SET.tab === "chats" && !upRun()) renderSettings(); }
-
-// One file out of a .zip. Enough of the format for an export: stored or deflated entries, and the zip64 fields a big one needs.
-async function unzipEntry(buf, want) {
-  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const bad = new Error("That .zip file couldn't be read.");
-  let end = -1;
-  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { end = i; break; }
-  if (end < 0) throw bad;
-  let count = dv.getUint16(end + 10, true);
-  let p = dv.getUint32(end + 16, true);
-  if ((count === 0xffff || p === 0xffffffff) && end >= 20 && dv.getUint32(end - 20, true) === 0x07064b50) {
-    const z = Number(dv.getBigUint64(end - 12, true));
-    if (z + 56 <= buf.length && dv.getUint32(z, true) === 0x06064b50) { count = Number(dv.getBigUint64(z + 32, true)); p = Number(dv.getBigUint64(z + 48, true)); }
-  }
-  const td = new TextDecoder();
-  for (let n = 0; n < count && p + 46 <= buf.length && dv.getUint32(p, true) === 0x02014b50; n++) {
-    const method = dv.getUint16(p + 10, true);
-    let size = dv.getUint32(p + 20, true);
-    const plain = dv.getUint32(p + 24, true);
-    const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
-    let at = dv.getUint32(p + 42, true);
-    const name = td.decode(buf.subarray(p + 46, p + 46 + nl));
-    if (want(name)) {
-      for (let e = p + 46 + nl; e + 4 <= p + 46 + nl + xl; e += 4 + dv.getUint16(e + 2, true)) {
-        if (dv.getUint16(e, true) !== 1) continue;
-        let q = e + 4;
-        if (plain === 0xffffffff) q += 8;
-        if (size === 0xffffffff) { size = Number(dv.getBigUint64(q, true)); q += 8; }
-        if (at === 0xffffffff) at = Number(dv.getBigUint64(q, true));
-        break;
-      }
-      if (at + 30 > buf.length || dv.getUint32(at, true) !== 0x04034b50) throw bad;
-      const start = at + 30 + dv.getUint16(at + 26, true) + dv.getUint16(at + 28, true);
-      const data = buf.subarray(start, start + size);
-      if (method === 0) return td.decode(data);
-      if (method !== 8) throw new Error("That .zip file is packed in a way this page can't open. Unzip it and choose conversations.json instead.");
-      if (!window.DecompressionStream) throw new Error("This browser can't open .zip files. Unzip it and choose conversations.json instead.");
-      return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
-    }
-    p += 46 + nl + xl + cl;
-  }
-  return null;
-}
-async function readExport(file) {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const text = buf[0] === 0x50 && buf[1] === 0x4b ? await unzipEntry(buf, n => /(^|\/)conversations\.json$/i.test(n)) : new TextDecoder().decode(buf);
-  if (text === null) throw new Error("There's no conversations.json in that file. Choose the .zip from claude.ai's export email.");
-  let data;
-  try { data = JSON.parse(text); } catch { data = null; }
-  if (!Array.isArray(data)) throw new Error("That doesn't look like a claude.ai export. Choose the .zip from claude.ai's export email, or the conversations.json in it.");
-  return data;
-}
-// A claude.ai conversation as the site keeps it: its text, thinking, the names of attached files, and code it wrote.
-function fromExport(c) {
-  if (!c || typeof c !== "object" || typeof c.uuid !== "string") return null;
-  const str = v => (typeof v === "string" ? v : "");
-  const messages = [];
-  for (const m of Array.isArray(c.chat_messages) ? c.chat_messages : []) {
-    if (!m || (m.sender !== "human" && m.sender !== "assistant")) continue;
-    const blocks = Array.isArray(m.content) ? m.content.filter(b => b && typeof b === "object") : [];
-    let text = blocks.filter(b => b.type === "text").map(b => str(b.text)).filter(Boolean).join("\n\n");
-    for (const b of blocks) {
-      const art = b.type === "tool_use" && b.input && typeof b.input === "object" ? b.input : null;
-      if (art && typeof art.content === "string" && art.content) text += `${text ? "\n\n" : ""}**${str(art.title) || "Artifact"}**\n\n\`\`\`${str(art.language).replace(/[^\w+#.-]/g, "")}\n${art.content}\n\`\`\``;
-    }
-    if (!text) text = str(m.text);
-    const names = new Set();
-    const files = [...(Array.isArray(m.attachments) ? m.attachments : []), ...(Array.isArray(m.files) ? m.files : [])].filter(f => f && str(f.file_name) && !names.has(f.file_name) && names.add(f.file_name)).map(f => ({ name: f.file_name, size: Number(f.file_size) || 0 }));
-    const thinking = blocks.filter(b => b.type === "thinking").map(b => str(b.thinking)).filter(Boolean).join("\n\n");
-    if (!text && !files.length) continue;
-    messages.push({ id: str(m.uuid), role: m.sender === "human" ? "user" : "assistant", content: text.slice(0, 120000), thinking: thinking.slice(0, 20000), files, created: Date.parse(m.created_at) || 0 });
-  }
-  if (!messages.length) return null;
-  return { id: c.uuid, title: str(c.name).trim(), created: Date.parse(c.created_at) || 0, updated: Date.parse(c.updated_at) || 0, messages: messages.slice(-2000) };
-}
-async function importExport(file) {
-  if (IMP.busy) return;
-  Object.assign(IMP, { busy: true, phase: "read", done: 0, total: 0, added: 0, updated: 0, skipped: 0, err: "", finished: false });
-  renderImport();
-  try {
-    const raw = await readExport(file);
-    const convs = raw.map(fromExport).filter(Boolean);
-    Object.assign(IMP, { phase: "send", total: convs.length, skipped: raw.length - convs.length });
-    renderImport();
-    let batch = [];
-    let size = 0;
-    const flush = async () => {
-      if (!batch.length) return;
-      const r = await apiJson("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conversations: batch }) });
-      IMP.added += r.added || 0;
-      IMP.updated += r.updated || 0;
-      IMP.skipped += r.skipped || 0;
-      IMP.done += batch.length;
-      batch = [];
-      size = 0;
-      renderImport();
-    };
-    for (const c of convs) {
-      let n = JSON.stringify(c).length;
-      // a very long conversation keeps its newest part
-      while (n > IMPORT_BATCH && c.messages.length > 1) { c.messages = c.messages.slice(Math.ceil(c.messages.length / 4)); n = JSON.stringify(c).length; }
-      if (batch.length && (size + n > IMPORT_BATCH || batch.length >= 100)) await flush();
-      batch.push(c);
-      size += n;
-    }
-    await flush();
-    IMP.finished = true;
-  } catch (e) {
-    IMP.err = e.message === "Signed out" ? "" : e.message || "That couldn't be imported.";
-  }
-  IMP.busy = false;
-  renderImport();
-  loadChats();
-}
 
 /* ---------- whatever is running: the checklist ---------- */
 function upRun() { return UP.data && UP.data.run ? UP.data.run : null; }

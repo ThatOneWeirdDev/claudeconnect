@@ -275,87 +275,26 @@ test("Plan usage reads the latest as soon as it opens, and has no Refresh button
   assert.doesNotMatch(script, /status === "rejected"/);
 });
 
-// a .zip with the given files, deflated or stored, as Node's zlib makes them
-async function zip(files, { store = false } = {}) {
-  const { deflateRawSync, crc32 } = await import("node:zlib");
-  const parts = [];
-  const central = [];
-  let at = 0;
-  for (const [name, text] of Object.entries(files)) {
-    const raw = Buffer.from(text);
-    const data = store ? raw : deflateRawSync(raw);
-    const n = Buffer.from(name);
-    const head = Buffer.alloc(30);
-    head.writeUInt32LE(0x04034b50, 0);
-    head.writeUInt16LE(20, 4);
-    head.writeUInt16LE(store ? 0 : 8, 8);
-    head.writeUInt32LE(crc32(raw), 14);
-    head.writeUInt32LE(data.length, 18);
-    head.writeUInt32LE(raw.length, 22);
-    head.writeUInt16LE(n.length, 26);
-    const c = Buffer.alloc(46);
-    c.writeUInt32LE(0x02014b50, 0);
-    c.writeUInt16LE(20, 4);
-    c.writeUInt16LE(20, 6);
-    c.writeUInt16LE(store ? 0 : 8, 10);
-    c.writeUInt32LE(crc32(raw), 16);
-    c.writeUInt32LE(data.length, 20);
-    c.writeUInt32LE(raw.length, 24);
-    c.writeUInt16LE(n.length, 28);
-    c.writeUInt32LE(at, 42);
-    central.push(Buffer.concat([c, n]));
-    parts.push(head, n, data);
-    at += 30 + n.length + data.length;
-  }
-  const cd = Buffer.concat(central);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(central.length, 8);
-  end.writeUInt16LE(central.length, 10);
-  end.writeUInt32LE(cd.length, 12);
-  end.writeUInt32LE(at, 16);
-  return new Uint8Array(Buffer.concat([...parts, cd, end]));
-}
-
-test("claude.ai's export is read in the browser: conversations.json out of the .zip, whether deflated or stored", async () => {
-  const ctx = { TextDecoder, Response, Blob, DecompressionStream, window: { DecompressionStream }, Error, Number };
-  vm.runInNewContext(lift("unzipEntry") + "this.unzipEntry = unzipEntry;", ctx);
-  const want = n => /(^|\/)conversations\.json$/i.test(n);
-  const json = JSON.stringify([{ uuid: "x", name: "é ✓" }]);
-  for (const store of [false, true]) {
-    const z = await zip({ "users.json": "[]", "data-2026/conversations.json": json, "projects.json": "[]" }, { store });
-    assert.equal(await ctx.unzipEntry(z, want), json, store ? "stored" : "deflated");
-  }
-  assert.equal(await ctx.unzipEntry(await zip({ "users.json": "[]" }), want), null, "no conversations.json");
-  await assert.rejects(ctx.unzipEntry(new Uint8Array([0x50, 0x4b, 1, 2, 3]), want), /couldn't be read/);
+test("bringing chats over from claude.ai's export is gone, and chats brought over before are cleared", () => {
+  assert.doesNotMatch(html, /fImport|importExport|unzipEntry|fromExport|Your chats from claude\.ai|data-act="import"|\["chats", "Chats"|From claude\.ai/);
+  const worker = readFileSync(join(ROOT, "site", "worker.js"), "utf8");
+  assert.doesNotMatch(worker, /\/api\/import|importChats|importedContext|IMPORT_/);
+  assert.match(worker, /this\.sql\.exec\("DELETE FROM chats WHERE origin = 'claude\.ai'"\);/);
 });
 
-test("a claude.ai conversation keeps its text, thinking, attached file names and the code it wrote, and nothing else", () => {
-  const ctx = {};
-  vm.runInNewContext(lift("fromExport") + "this.fromExport = fromExport;", ctx);
-  const c = ctx.fromExport({
-    uuid: "1f6c2a3b-4d5e-4f70-8192-a3b4c5d6e7f1",
-    name: " Lisbon ",
-    created_at: "2025-03-01T09:00:00Z",
-    updated_at: "2025-03-01T10:00:00Z",
-    chat_messages: [
-      { uuid: "m1", sender: "human", text: "old text field", content: [{ type: "text", text: "Plan a trip" }], attachments: [{ file_name: "a.pdf", file_size: 10 }], files: [{ file_name: "a.pdf" }, { file_name: "b.png" }], created_at: "2025-03-01T09:00:00Z" },
-      { uuid: "m2", sender: "assistant", content: [{ type: "thinking", thinking: "hmm" }, { type: "text", text: "Here:" }, { type: "tool_use", name: "artifacts", input: { title: "Plan", language: "markdown", content: "# Day 1" } }, { type: "tool_result", content: [] }], created_at: "2025-03-01T09:01:00Z" },
-      { uuid: "m3", sender: "human", text: "only text", created_at: "bad" },
-      { uuid: "m4", sender: "system", text: "no" },
-      { uuid: "m5", sender: "assistant", content: [] }
-    ]
-  });
-  assert.equal(c.title, "Lisbon");
-  assert.equal(c.updated, Date.parse("2025-03-01T10:00:00Z"));
-  assert.deepEqual(JSON.parse(JSON.stringify(c.messages.map(m => [m.role, m.content, m.files.map(f => f.name), m.thinking]))), [
-    ["user", "Plan a trip", ["a.pdf", "b.png"], ""],
-    ["assistant", "Here:\n\n**Plan**\n\n```markdown\n# Day 1\n```", [], "hmm"],
-    ["user", "only text", [], ""]
-  ]);
-  assert.equal(c.messages[2].created, 0);
-  assert.equal(ctx.fromExport({ uuid: "x", chat_messages: [] }), null, "an empty conversation isn't brought over");
-  assert.equal(ctx.fromExport({ name: "no id" }), null);
+test("Fable 5.1 is always in the model picker, marked as using usage credits, and says when there are none", () => {
+  assert.doesNotMatch(html, /CFG\.fable|fFable|SHOW_FABLE|Fable 5\.1 in the model picker/);
+  const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
+  const ctx = { EFF: [], TICK: "", S: { model: "claude-opus-5-5", state: { prefs: {}, noCredits: null } } };
+  vm.runInNewContext(`const ALL_MODELS = ${models}; function noteHtml() { return ""; }` + /function useCredits\(\) \{.*\}\n/.exec(script)[0] + /function noCredits\(\) \{.*\}\n/.exec(script)[0] + lift("popModel") + "this.popModel = popModel;", ctx);
+  assert.match(ctx.popModel(), /<b>Fable 5\.1<\/b>[\s\S]*?<span class="tag">Uses usage credits<\/span>/);
+  ctx.S.state.noCredits = { why: "none", message: "You have no usage credits!" };
+  assert.match(ctx.popModel(), /<span class="tag">Uses usage credits\. You have none!<\/span>/);
+  ctx.S.state.prefs.useCredits = false;
+  assert.match(ctx.popModel(), /<span class="tag">Uses usage credits, which are off here<\/span>/);
+  // picking it with none says so, and a message turned away for it brings the page up to date
+  assert.match(script, /if \(modelOf\(S\.model\)\.credits && useCredits\(\) && noCredits\(\)\) toast\(noCredits\(\)\.message, 8000\);/);
+  assert.match(script, /j\.code === "no_credits"\) loadState\(\);/);
 });
 
 test("only a newer site makes the page out of date, and once Reload was pressed for a version the notice stays away", () => {
@@ -401,7 +340,7 @@ test("right after an update the page doesn't offer it again, and settings have n
   assert.equal(ctx.updateAvailable(null), false);
   assert.doesNotMatch(script, /Save changes|data-act="save"|data-act="discard"|You have unsaved changes/);
   // changes go to the site as they're made
-  assert.match(script, /if \(e\.target\.closest\("#fFable"\)\) return SET\.saving \|\| saveSite\("fable", \{ fable: !CFG\.fable \}\);/);
+  assert.match(script, /function setTheme\(t\) \{[\s\S]*?apiJson\("\/api\/prefs", \{ method: "POST", headers: \{ "content-type": "application\/json" \}, body: JSON\.stringify\(\{ theme: t \}\) \}\)/);
   assert.match(script, /r\.onload = \(\) => saveSite\(key, /);
 });
 
