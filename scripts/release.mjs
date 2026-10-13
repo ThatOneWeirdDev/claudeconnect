@@ -16,7 +16,7 @@ import { parseVersion, compareVersions } from "../site/version.js";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Everything that ships to a user's computer or Cloudflare account. brand.js is not here: setup writes it per install.
-export const FILES = ["ClaudeConnect.mjs", "installer.mjs", "setup.mjs", "setup.html", "agent/agent.mjs", "agent/sessions.mjs", "agent/app.mjs", "agent/app-os.mjs", "agent/app-mac.js", "agent/app-mac-bar.js", "agent/app-win.ps1", "agent/app-win-bar.ps1", "agent/app-cdp.mjs", "agent/permit.mjs", "site/worker.js", "site/app.html", "site/version.js", "site/names.js", "site/image.js"];
+export const FILES = ["ClaudeConnect.mjs", "installer.mjs", "setup.mjs", "setup.html", "agent/agent.mjs", "agent/sessions.mjs", "agent/limits.mjs", "agent/files.mjs", "agent/trash.mjs", "agent/permit.mjs", "site/worker.js", "site/app.html", "site/version.js", "site/names.js", "site/image.js"];
 
 const sha = path => createHash("sha256").update(readFileSync(join(ROOT, path))).digest("hex");
 const readJson = path => JSON.parse(readFileSync(join(ROOT, path), "utf8"));

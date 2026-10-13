@@ -104,7 +104,7 @@ test("changes need a computer that is online, able to do it, and not busy", asyn
   const tooOld = await s.post("/api/admin/delete", { confirm: "Test Site" });
   assert.equal(tooOld.status, 409);
   assert.equal(tooOld.body.code, "agent_old");
-  assert.match(tooOld.body.error, /TestConnect update/);
+  assert.match(tooOld.body.error, /TestSite update/);
   old.close();
   await sleep(100);
 

@@ -3,8 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startSite, connectAgent } from "../helpers/site.mjs";
-import { openPage } from "../helpers/browser.mjs";
-import { findChromium } from "../helpers/fake-claude-app.mjs";
+import { openPage, findChromium } from "../helpers/browser.mjs";
 
 const CHROME = await findChromium();
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -102,7 +102,7 @@ test("updating from the site: the site stays up, progress is shown, the computer
   assert.equal(d.vars.UPDATE_REF, "main");
   assert.equal(d.vars.SITE_NAME, "Test Site");
   assert.equal(d.vars.AI_NAME, undefined, "there is no AI name any more");
-  assert.equal(d.vars.COMMAND, "TestConnect");
+  assert.equal(d.vars.COMMAND, "TestSite");
   assert.equal(d.vars.SHOW_FABLE, undefined, "there is no setting for showing Fable 5.1");
   assert.match(pc.npxLog(), /auth token/);
 
@@ -119,7 +119,7 @@ test("updating from the site: the site stays up, progress is shown, the computer
   assert.equal(cfg.secret, pc.config.secret, "the agent's key is unchanged");
   assert.equal(cfg.site, pc.config.site);
   assert.equal(cfg.token, pc.config.token);
-  assert.equal(cfg.command, "TestConnect");
+  assert.equal(cfg.command, "TestSite");
   assert.equal(pc.read("site/brand.js"), 'export default {"logo":null,"favicon":null};\n', "the logo and icon are left alone");
 
   // the restart: a different process, running the new version, connected to the site
@@ -152,7 +152,7 @@ test("if the site can't be deployed, nothing on the computer is touched and the 
   assert.equal(run.step, "site");
   assert.equal(run.steps.site, "error");
   assert.match(run.message, /Cloudflare didn't accept the new version/);
-  assert.match(run.message, /TestConnect update/);
+  assert.match(run.message, /TestSite update/);
 
   // the running agent was never stopped, its files and version are as they were
   assert.equal(pc.pid(), oldPid);

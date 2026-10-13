@@ -4,7 +4,6 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { findChromium } from "./fake-claude-app.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -86,54 +85,21 @@ export async function openPage(url, { width = 1280, height = 800, dark = false }
   return { send, evaluate, until, goto, close };
 }
 
-// Attaches to a page in a Chromium that's already running with its debugging port (the stand-in Claude app, say), as a second
-// connection next to the agent's. Gives back the same send and evaluate, and a way to click like a person: at a spot on screen.
-export async function attachTo(port, match = () => true) {
-  let target = null;
-  for (let i = 0; i < 100 && !target; i++) {
-    const list = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json()).catch(() => []);
-    target = list.find(t => t.type === "page" && match(t));
-    if (!target) await sleep(100);
-  }
-  if (!target) throw new Error("no page on port " + port);
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((res, rej) => {
-    ws.onopen = res;
-    ws.onerror = rej;
-  });
-  let id = 0;
-  const waiting = new Map();
-  ws.onmessage = ev => {
-    const m = JSON.parse(ev.data);
-    if (m.id && waiting.has(m.id)) {
-      const w = waiting.get(m.id);
-      waiting.delete(m.id);
-      m.error ? w.reject(new Error(m.error.message)) : w.resolve(m.result);
+// A Chromium to run, from CHROME_PATH, the one Playwright keeps, or the system's.
+export async function findChromium() {
+  const { existsSync, readdirSync } = await import("node:fs");
+  const { spawnSync } = await import("node:child_process");
+  if (process.env.CHROME_PATH && existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+  try {
+    for (const d of readdirSync("/opt/pw-browsers").filter(n => /^chromium-\d+$/.test(n)).sort().reverse()) {
+      const p = `/opt/pw-browsers/${d}/chrome-linux/chrome`;
+      if (existsSync(p)) return p;
     }
-  };
-  const send = (method, params = {}) =>
-    new Promise((resolve, reject) => {
-      const n = ++id;
-      waiting.set(n, { resolve, reject });
-      ws.send(JSON.stringify({ id: n, method, params }));
-    });
-  // the on-screen box of the first element (in any shadow root, closed ones too) whose text is `text`
-  const boxOf = async text => {
-    const { root } = await send("DOM.getDocument", { depth: -1, pierce: true });
-    let hit = null;
-    const walk = n => {
-      if (hit || !n) return;
-      if (n.nodeType === 1 && (n.children || []).some(c => c.nodeType === 3 && c.nodeValue.trim() === text)) hit = n;
-      for (const c of [...(n.children || []), ...(n.shadowRoots || [])]) walk(c);
-    };
-    walk(root);
-    if (!hit) return null;
-    const { model } = await send("DOM.getBoxModel", { nodeId: hit.nodeId });
-    const q = model.border;
-    return { x: (q[0] + q[4]) / 2, y: (q[1] + q[5]) / 2 };
-  };
-  const clickAt = async ({ x, y }) => {
-    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x, y, button: type === "mouseMoved" ? "none" : "left", clickCount: 1 });
-  };
-  return { send, boxOf, clickAt, close: () => ws.close() };
+  } catch {}
+  for (const n of ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]) {
+    const r = spawnSync("which", [n], { encoding: "utf8" });
+    const p = String(r.stdout || "").trim();
+    if (r.status === 0 && p) return p;
+  }
+  return "";
 }

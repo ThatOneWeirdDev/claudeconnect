@@ -233,7 +233,7 @@ function findClaude() {
   return null;
 }
 
-// Claude Code, installed and signed in with a Claude plan: setup, and `edit` when you switch to paying for Claude.
+// Claude Code, installed and signed in with a Claude plan (Pro, Max, Team or Enterprise).
 async function setUpClaudeCode(name = "") {
   note(`${name || "Your site"} answers with your plan through Anthropic's command-line tool, from claude.ai/install.`);
   let claude = findClaude();
@@ -253,87 +253,6 @@ async function setUpClaudeCode(name = "") {
   }
   note("Signed in with your plan.");
   return claude;
-}
-
-// The free plan needs the Claude desktop app, signed in: the program on this computer opens it when a message comes in and
-// types the message there, through the system's accessibility features, the way a screen reader would. claude.ai in a
-// browser won't do: its human check never passes in a window something else drives. Asked until it's installed (or put off);
-// with nobody to ask, it's said, and messages wait until the app is there. There's no Claude app on Linux.
-async function checkClaudeApp(name = "") {
-  step("Checking the desktop app");
-  note(`On the free plan, ${name || "your site"} works through the desktop app on this computer: each message is typed into it, and the reply read back as it's written.`);
-  // where the release keeps it: next to this file in a download, flattened into the install folder afterwards
-  const helpers = await import(existsSync(join(HERE, "agent", "app.mjs")) ? "./agent/app.mjs" : "./app.mjs").catch(() => null);
-  if (helpers && !helpers.APP_SUPPORTED) fail("The free plan works through the desktop app, which runs on macOS and Windows, not here. On this computer, use a paid plan: run this again and answer yes when it asks whether you have a paid plan.");
-  for (let first = true; ; first = false) {
-    const app = helpers ? helpers.claudeAppPath() : "";
-    if (app) {
-      note("The desktop app is installed. Make sure you're signed in to it.");
-      break;
-    }
-    if (!interactive()) return note("Install the desktop app from https://claude.ai/download and sign in to it. Messages wait until it's there.");
-    if (first && !UI) openUrl("https://claude.ai/download");
-    const a = await ask("  Install the desktop app from https://claude.ai/download and sign in to it, then press Enter to check again (s to skip for now, q to stop): ", "", {
-      kind: "continue",
-      title: first ? "Install the desktop app" : "The desktop app isn't there yet",
-      help: "The free plan works through the desktop app from claude.ai, on this computer and signed in to your account. Download it, install it, open it and sign in, then come back here.",
-      button: "I've installed it, check again",
-      skip: "Skip for now",
-      link: "https://claude.ai/download",
-      linkLabel: "Download the desktop app"
-    });
-    if (/^q/i.test(String(a || ""))) fail("The free plan needs the desktop app. Install it from https://claude.ai/download, then run the setup again.");
-    if (/^s/i.test(String(a || ""))) {
-      note("Messages wait until the desktop app is installed and signed in.");
-      break;
-    }
-  }
-  if (interactive()) {
-    // said once, before anything is done with the app: this is automation of a Claude account
-    note(`The free plan works the desktop app for you: it types into it and presses its buttons, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai or its desktop app through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk; with a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`);
-    const ok = await ask("  Use the desktop app this way? [Y/n] ", "y", {
-      title: "Before the desktop app is used for you",
-      help: `The free plan types your messages into the desktop app on this computer and presses its buttons, the way an automation tool would, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai or its desktop app through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk. With a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`,
-      yes: "I understand, use the desktop app",
-      no: "Stop here"
-    });
-    if (!/^y/i.test(String(ok || ""))) fail(`Nothing was set up for the free plan. With a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead: run this again and answer yes when it asks whether you have a paid plan.`);
-  }
-  if (process.platform === "darwin" || process.env.CLAUDECONNECT_APP_DRIVER === "os") await macAccessibility();
-}
-
-// On a Mac, using another app's buttons and text boxes needs your permission: System Settings → Privacy & Security →
-// Accessibility. macOS asks for whoever started the program: the terminal app it was set up from, and node itself when it
-// starts by itself at log in. Both are switched on there; the check here can only see the first.
-function macTrust(prompt) {
-  const file = process.env.CLAUDECONNECT_APP_HELPER || (existsSync(join(HERE, "agent", "app-mac.js")) ? join(HERE, "agent", "app-mac.js") : join(HERE, "app-mac.js"));
-  const [cmd, args] = /\.mjs$/.test(file) ? [process.execPath, [file]] : ["/usr/bin/osascript", ["-l", "JavaScript", file]];
-  const r = spawnSync(cmd, args, { input: JSON.stringify({ id: 1, cmd: "trust", prompt, open: prompt }) + "\n", encoding: "utf8", timeout: 30000 });
-  for (const line of String(r.stdout || "").split("\n")) {
-    try {
-      const j = JSON.parse(line);
-      if (j.id === 1) return j.ok ? !!j.trusted : null;
-    } catch {}
-  }
-  return null;
-}
-async function macAccessibility() {
-  const terminal = { Apple_Terminal: "Terminal", "iTerm.app": "iTerm", vscode: "Visual Studio Code", ghostty: "Ghostty", WarpTerminal: "Warp" }[process.env.TERM_PROGRAM] || "the terminal app you ran this in";
-  const which = `${terminal}, and node (${process.execPath}): if node isn't in the list, press + and pick it (Command-Shift-G, then paste that path)`;
-  for (let first = true; ; first = false) {
-    const ok = macTrust(first);
-    if (ok === null) return note("Couldn't check the Mac's Accessibility permission. If messages say so later, switch it on in System Settings → Privacy & Security → Accessibility.");
-    if (ok) return note(`Allowed to use the desktop app (System Settings → Privacy & Security → Accessibility). Make sure node is switched on there too, for when it starts by itself: ${process.execPath}`);
-    if (!interactive()) return note(`Allow it to use the desktop app: System Settings → Privacy & Security → Accessibility, then switch on ${which}.`);
-    const a = await ask(`  Allow it to use the desktop app: in System Settings → Privacy & Security → Accessibility, switch on ${which}. Then press Enter to check again (s to skip for now): `, "", {
-      kind: "continue",
-      title: first ? "Allow it to use the desktop app" : "It isn't allowed yet",
-      help: `macOS asks before one program uses another's buttons and text boxes. System Settings is open at Privacy & Security → Accessibility: switch on ${which}.`,
-      button: "I've switched it on, check again",
-      skip: "Skip for now"
-    });
-    if (/^s/i.test(String(a || ""))) return note("Messages wait until it's allowed to use the desktop app.");
-  }
 }
 
 function signedIn(cmd) {
@@ -437,8 +356,17 @@ function pathCommands(extraDirs) {
   return seen;
 }
 
+// The command is the site's name with only letters, digits, dashes and underscores: "My Site" runs as MySite.
+function commandFor(displayName) {
+  return String(displayName || "").replace(/[^A-Za-z0-9_-]/g, "").replace(/^[-_]+/, "").slice(0, 60) || "ClaudeConnect";
+}
+// The text in the browser tab, when it isn't the site's name ("" is the name).
+function cleanTab(v) {
+  return typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().replace(/\s+/g, " ").slice(0, 60) : "";
+}
+
 function pickCommand(displayName, extraDirs) {
-  const base = displayName.replace(/[^A-Za-z0-9_-]/g, "").replace(/^[-_]+/, "") || "ClaudeConnect";
+  const base = commandFor(displayName);
   const cmds = pathCommands(extraDirs);
   const norm = s => (FOLD_CASE ? s.toLowerCase() : s);
   const reserved = new Set(RESERVED.map(norm));
@@ -606,7 +534,7 @@ function wranglerConfig(o) {
     durable_objects: { bindings: [{ name: "HUB", class_name: "ChatgqlHub" }] },
     migrations: [{ tag: "v1", new_sqlite_classes: ["ChatgqlHub"] }],
     kv_namespaces: [{ binding: "TOKENS", id: o.kvId }],
-    vars: { SITE_NAME: o.displayName, COMMAND: o.command, APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug },
+    vars: { SITE_NAME: o.displayName, COMMAND: o.command, APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug, ...(o.tab ? { TAB_TITLE: o.tab } : {}) },
     observability: { enabled: true }
   };
 }
@@ -729,7 +657,7 @@ async function remoteUpdate(manifest) {
     await report("site", "active");
     signIn(old);
     installSite(manifest);
-    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", version: manifest.version, repo: REPO, ref: REF }), null, 2));
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", tab: old.tabTitle, version: manifest.version, repo: REPO, ref: REF }), null, 2));
     deploy(SITE, old, "the new version");
     // "Updated" has to mean updated: this step lasts until the site really answers as the new version, front and back
     await siteServes(old, manifest.version);
@@ -854,6 +782,10 @@ async function remoteSettings(old, job) {
     await report("site", "active");
     signIn(old);
     const displayName = cleanSiteName(job.displayName) || old.displayName || "ClaudeConnect";
+    const tab = "tab" in job ? cleanTab(job.tab) : old.tabTitle || "";
+    // the command is the name: the program here renames it when it restarts, below (unless another program has that name)
+    const want = commandFor(displayName);
+    const command = want === old.command || !pickCommand(displayName, old.shim ? [dirname(old.shim)] : []).renamed ? want : old.command || "ClaudeConnect";
     const brand = readBrand();
     for (const k of ["logo", "favicon"]) {
       if (!(k in job)) continue;
@@ -867,13 +799,15 @@ async function remoteSettings(old, job) {
     }
     writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify(brand) + ";\n");
     const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
-    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, command: old.command || "ClaudeConnect", version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, command, tab, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
     deploy(SITE, old, "the changes");
     await report("site", "done");
     at = "computer";
     await report("computer", "active");
     const cfg = readJson(CONFIG) || old;
     cfg.displayName = displayName;
+    if (tab) cfg.tabTitle = tab;
+    else delete cfg.tabTitle;
     delete cfg.aiName; // older installs saved a name for the AI; Claude runs with its own default instructions now
     delete cfg.fable; // there is no Fable 5.1 setting any more: it shows whenever there are usage credits
     writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
@@ -884,9 +818,10 @@ async function remoteSettings(old, job) {
     await report("restart", "done");
     at = "online";
     await report("online", "active");
-    if (!online) fail(`The changes are in, but ${displayName} hasn't reconnected yet. Run ${old.command || "ClaudeConnect"} logs on your computer to see why.`);
+    if (!online) fail(`The changes are in, but ${displayName} hasn't reconnected yet. Run ${(readJson(CONFIG) || old).command || "ClaudeConnect"} logs on your computer to see why.`);
     await report("online", "done");
-    console.log("Settings changed.");
+    const now = (readJson(CONFIG) || old).command;
+    console.log(now && now !== old.command ? `Settings changed. The command is ${now} now, to match the name.` : "Settings changed.");
   } catch (e) {
     const msg = failure(e);
     console.error(msg);
@@ -938,7 +873,7 @@ async function remoteMove(old, job) {
     const secret = crypto.randomBytes(32).toString("base64url");
     const claim = crypto.randomBytes(18).toString("base64url");
     const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
-    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", tab: old.tabTitle, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
     touched = true;
     deploy(next, old, "the new site");
     const tmp = join(DIR, `secrets-${crypto.randomBytes(6).toString("hex")}.json`);
@@ -1132,6 +1067,10 @@ async function editSettings() {
     const img = await askImage("Tab icon", "the current one", "the logo", "--favicon", brand.favicon);
     if (JSON.stringify(img) !== JSON.stringify(brand.favicon)) job.favicon = img;
   }
+  if (await yes(`Change the tab title, the text next to the tab icon? Now: ${old.tabTitle ? old.tabTitle : "the name"}.`)) {
+    const t = cleanTab(String(await ask("  New tab title (leave it empty to use the name): ", "")));
+    if (t !== (old.tabTitle || "")) job.tab = t;
+  }
   const site = await sitePrefs(old);
   if (!site) note(`${name} couldn't be reached, so its theme and whether it uses usage credits can't be changed right now.`);
   if (site && (await yes(`Change the theme? Now: ${THEME_NAMES[site.theme] || "whatever each browser last picked"}.`))) {
@@ -1149,9 +1088,6 @@ async function editSettings() {
   // This computer
   const auto = autostartOn();
   if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
-  // whether you pay for Claude: Claude Code answers, or the Claude app on this computer does
-  const plan = old.plan === "free" ? "free" : "paid";
-  if (await yes(plan === "paid" ? `Switch to the free plan? Now it's the paid plan; on the free plan ${name} works through the desktop app on this computer.` : `Do you have a paid plan now (Pro, Max, Team or Enterprise)? Now it's the free plan, so ${name} works through the desktop app.`)) local.plan = plan === "paid" ? "free" : "paid";
   const ws = old.workspace || join(HOME, name);
   if (await yes(`Change the working folder, where ${name} works and files you attach go? Now: ${tilde(ws)}.`)) {
     for (;;) {
@@ -1172,7 +1108,7 @@ async function editSettings() {
   }
 
   // Plan usage
-  if (site && (local.plan || plan) === "paid") {
+  if (site) {
     const on = site.useCredits !== false;
     if (await yes(`${on ? "Stop using" : "Use"} usage credits from the site? They're ${on ? "used" : "not used"} now. ${on ? "Turned off, new messages wait while you're at a plan limit, and Fable 5.1, which only runs on them, is paused." : "Turned on, replies carry on past a plan limit, paid from your credits, and Fable 5.1 can be used."}`)) prefs.useCredits = !on;
   }
@@ -1214,12 +1150,12 @@ async function editSettings() {
   }
 
   const changes = [
-    job.displayName && `name: ${job.displayName}`,
+    job.displayName && `name: ${job.displayName}${commandFor(job.displayName) !== old.command ? ` (the command becomes ${commandFor(job.displayName)})` : ""}`,
     "logo" in job && `logo: ${job.logo ? "new" : "built-in"}`,
     "favicon" in job && `tab icon: ${job.favicon ? "new" : "the logo"}`,
+    "tab" in job && `tab title: ${job.tab || "the name"}`,
     prefs.theme && `theme: ${THEME_NAMES[prefs.theme]}`,
     "autostart" in local && `start at login: ${local.autostart ? "yes" : "no"}`,
-    local.plan && `plan: ${local.plan === "paid" ? "paid" : "free (through the desktop app)"}`,
     local.workspace && `working folder: ${tilde(local.workspace)}`,
     "useCredits" in prefs && `usage credits from the site: ${prefs.useCredits ? "used" : "not used"}`,
     address && `address: ${address} (a new link; the old one stops working)`
@@ -1244,20 +1180,7 @@ async function editSettings() {
       failed = true;
     }
   }
-  // Claude Code has to be there, and signed in, before it can answer
-  if (local.plan === "paid") {
-    try {
-      JOB = true;
-      await setUpClaudeCode(job.displayName || name);
-    } catch (e) {
-      console.log(`  ${failure(e)}`);
-      delete local.plan;
-      failed = true;
-    } finally {
-      JOB = false;
-    }
-  } else if (local.plan === "free") await checkClaudeApp(job.displayName || name);
-  const cfgChange = Object.fromEntries(["plan", "workspace"].filter(k => k in local).map(k => [k, local[k]]));
+  const cfgChange = Object.fromEntries(["workspace"].filter(k => k in local).map(k => [k, local[k]]));
   if (Object.keys(cfgChange).length) {
     // written while the program here is stopped, so it can't save its own copy over this
     const write = () => {
@@ -1351,23 +1274,9 @@ if (!prior.accountId) {
 const known = prior.displayName || "ClaudeConnect";
 if (guiWanted()) await startWindow(known, payload.version);
 
-// Whether you pay for Claude. Claude Code needs a paid plan; without one, replies come from the Claude app on this computer,
-// typed into it. Asked once, when there's nothing set up yet; after that it's in Settings and `<command> edit`.
-let plan = flag("--free") ? "free" : flag("--paid") ? "paid" : prior.plan === "free" ? "free" : "paid";
-if (!prior.accountId && !flag("--free") && !flag("--paid")) {
-  step("Your plan");
-  plan = /^y/i.test(await ask("  Do you have a paid plan on claude.ai (Pro, Max, Team or Enterprise)? [Y/n] ", "y", {
-    title: "Do you have a paid plan?",
-    help: "With Pro, Max, Team or Enterprise on claude.ai, your site answers with your plan, from this computer. Without one, it works through the desktop app from claude.ai/download, which needs to be installed and signed in.",
-    yes: "Yes, I have a paid plan",
-    no: "No, I use it for free"
-  })) ? "paid" : "free";
-}
-let claude = null;
-if (plan === "paid") {
-  step("Setting up the paid plan");
-  claude = await setUpClaudeCode();
-} else await checkClaudeApp();
+// It answers with your Claude plan (Pro, Max, Team or Enterprise), through Claude Code on this computer.
+step("Setting up the command-line tool");
+const claude = await setUpClaudeCode();
 
 step("Checking your Cloudflare sign-in");
 note("Your site runs on your own Cloudflare account. The free plan is enough.");
@@ -1509,7 +1418,7 @@ stopLocal();
 removeShims([prior.command, "chatgql"], [prior.shim]);
 installSite(payload);
 writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify({ logo, favicon }) + ";\n");
-writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, version: payload.version, repo: REPO, ref: REF }), null, 2));
+writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, tab: same ? prior.tabTitle : "", version: payload.version, repo: REPO, ref: REF }), null, 2));
 if ((await runLive(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE })).status !== 0) fail(UI ? "Cloudflare didn't accept the site. Details, below, says why." : "Cloudflare didn't accept the site. The messages above say why.");
 const secret = same && prior.secret ? prior.secret : crypto.randomBytes(32).toString("base64url");
 const claim = crypto.randomBytes(18).toString("base64url");
@@ -1533,10 +1442,9 @@ mkdirSync(workspace, { recursive: true });
 mkdirSync(binDir, { recursive: true });
 const agentPath = join(DIR, "agent.mjs");
 const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
-const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF, plan };
+const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
+if (same && prior.tabTitle) cfg.tabTitle = prior.tabTitle;
 if (same && prior.id) cfg.id = prior.id;
-if (same && prior.appPort) cfg.appPort = prior.appPort;
-if (same && prior.appRefused) cfg.appRefused = prior.appRefused;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;
   cfg.tokenExp = prior.tokenExp;

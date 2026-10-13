@@ -48,31 +48,9 @@ jobs:
       - name: Worker and update end-to-end tests (part ${{ matrix.shard }} of 3)
         run: node --test --test-concurrency=4 --test-shard=${{ matrix.shard }}/3 "test/e2e/*.test.mjs"
 
-  # The free plan's helpers, on the systems they're for: JavaScript for Automation on a Mac, Windows PowerShell 5.1 on Windows.
-  helpers:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: The helper starts and answers
-        run: node --test --test-name-pattern="the helper that works" test/platform/helpers.test.mjs
-      # the real driver on a real Chromium page, through Accessibility or UI Automation (skipped on a Mac without the permission)
-      - name: The driver works a page through the system's accessibility
-        run: node --test test/platform/driver.test.mjs
-      # a CI machine may have no desktop to show the bar on
-      - name: The Stop bar shows and goes
-        continue-on-error: true
-        run: node --test --test-name-pattern="the Stop bar" test/platform/helpers.test.mjs
-
   # A pull request from the owner or from Claude merges itself once everything above has passed (see auto-merge.yml).
   merge:
-    needs: [unit, e2e, helpers]
+    needs: [unit, e2e]
     if: github.event_name == 'pull_request'
     permissions:
       contents: write

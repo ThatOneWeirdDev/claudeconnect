@@ -59,7 +59,7 @@ const reservePort = () =>
   });
 
 // Everything up to the address question, left as it is.
-const KEEP = () => [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/theme/, ""], [/log in/, ""], [/Switch to the free plan\?/, ""], [/working folder,/, ""], [/usage credits from the site/, ""]];
+const KEEP = () => [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/tab title/, ""], [/theme/, ""], [/log in/, ""], [/working folder,/, ""], [/usage credits from the site/, ""]];
 
 // A site, a computer using it, and a stand-in for Cloudflare's API, for the address and delete.
 async function withCloudflare(t, env = {}) {
@@ -100,11 +100,12 @@ test("edit asks about every setting the site's Settings has, shows what will cha
     [/New name:/, "Better Site"],
     [/Change the logo\? Now: the built-in one\. \[y\/N\]/, ""],
     [/Change the tab icon\? Now: the logo\. \[y\/N\]/, "n"],
+    [/Change the tab title, the text next to the tab icon\? Now: the name\. \[y\/N\]/, "y"],
+    [/New tab title \(leave it empty to use the name\):/, "Better tab"],
     [/Change the theme\? Now: Dark\. \[y\/N\]/, "y"],
     [/System, light or dark\?/, "purple"],
     [/Type system, light or dark\.[\s\S]*System, light or dark\?/, "light"],
     [/when you log in to this computer\?/, ""],
-    [/Switch to the free plan\? Now it's the paid plan; on the free plan Test Site works through the desktop app on this computer\. \[y\/N\]/, ""],
     [/Change the working folder, where Test Site works and files you attach go\? Now: ~\/ws\. \[y\/N\]/, "y"],
     [/New folder \(a full path, like ~\/Projects\):/, "relative/path"],
     [/Use a full path[\s\S]*New folder/, "~/projects"],
@@ -113,7 +114,7 @@ test("edit asks about every setting the site's Settings has, shows what will cha
     [/Delete Test Site\? This removes the site and every chat in it/, ""],
     [/name: Better Site[\s\S]*theme: Light[\s\S]*working folder: ~\/projects[\s\S]*usage credits from the site: not used[\s\S]*Save these changes\? \[Y\/n\]/, ""]
   ]);
-  assert.equal(r.asked, 16, r.out);
+  assert.equal(r.asked, 17, r.out);
   assert.doesNotMatch(r.out, /usage credit balance|which of Claude Code's chats/, "neither is a setting anymore");
   assert.equal(r.status, 0, r.out);
   assert.doesNotMatch(r.out, /Fable 5\.1 in the model picker/, "Fable 5.1 shows whenever there are usage credits, so there's nothing to ask");
@@ -122,54 +123,27 @@ test("edit asks about every setting the site's Settings has, shows what will cha
   assert.equal(deploys.length, 1);
   assert.equal(deploys[0].vars.SITE_NAME, "Better Site");
   assert.equal(deploys[0].vars.SHOW_FABLE, undefined);
-  assert.equal(deploys[0].vars.COMMAND, "TestConnect", "the command stays the same");
+  assert.equal(deploys[0].vars.COMMAND, "BetterSite", "the command is the name");
+  assert.equal(deploys[0].vars.TAB_TITLE, "Better tab");
+  assert.match(r.out, /name: Better Site \(the command becomes BetterSite\)[\s\S]*tab title: Better tab/);
+  assert.match(r.out, /The command is BetterSite now, to match the name\./);
   const cfg = JSON.parse(readFileSync(join(pc.dir, "config.json"), "utf8"));
-  assert.deepEqual([cfg.displayName, cfg.workspace, cfg.fable, cfg.plan || "paid"], ["Better Site", join(pc.home, "projects"), undefined, "paid"]);
+  assert.deepEqual([cfg.displayName, cfg.workspace, cfg.fable, cfg.plan || "paid", cfg.tabTitle, cfg.command], ["Better Site", join(pc.home, "projects"), undefined, "paid", "Better tab", "BetterSite"]);
+  assert.ok(existsSync(join(pc.home, "bin", "BetterSite")) && !existsSync(join(pc.home, "bin", "TestSite")), "the command is renamed with the site");
   assert.ok(existsSync(join(pc.home, "projects", "uploads")), "the new working folder is made");
   // the theme and usage credits are kept on the site, for every device
   const prefs = (await site.api("/api/state")).body.prefs;
   assert.deepEqual([prefs.theme, prefs.useCredits], ["light", false]);
   for (let i = 0; i < 100 && !(await site.api("/api/state")).body.agent.online; i++) await sleep(150);
   const computer = (await site.api("/api/state")).body.agent.computer;
-  assert.deepEqual([computer.workspace, computer.plan], [join(pc.home, "projects"), "paid"], "the program here runs with them");
+  assert.deepEqual([computer.workspace, computer.plan], [join(pc.home, "projects"), undefined], "the program here runs with them");
 
   // saying no to everything changes nothing
-  const none = await converse(cmd, pc.env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/theme/, ""], [/log in/, ""], [/Switch to the free plan\?/, ""], [/working folder,/, ""], [/usage credits from the site/, ""], [/address/, ""], [/Delete/, ""]]);
+  const none = await converse(cmd, pc.env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/tab title/, ""], [/theme/, ""], [/log in/, ""], [/working folder,/, ""], [/usage credits from the site/, ""], [/address/, ""], [/Delete/, ""]]);
   assert.equal(none.status, 0, none.out);
   assert.equal(none.asked, 10, none.out);
   assert.match(none.out, /Nothing changed\./);
   assert.equal(pc.deploys().length, 1);
-});
-
-test("edit can switch to the free plan: the program here restarts on the Claude app, and the paid-only question goes", { skip: !hasScript && "needs `script`" }, async t => {
-  const site = await startSite({ appVersion: "2.0.0" });
-  await site.claim();
-  const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9", oldVersion: "2.0.0" });
-  const agent = pc.startAgent();
-  t.after(async () => {
-    agent.kill("SIGKILL");
-    pc.cleanup();
-    await site.stop();
-  });
-  for (let i = 0; i < 100 && !(await site.api("/api/state")).body.agent.online; i++) await sleep(150);
-  const cmd = `"${process.execPath}" "${join(pc.dir, "agent.mjs")}" edit`;
-  // (the stand-in driver: the free plan needs the Claude app, which there's none of on Linux)
-  const env = { ...pc.env, CLAUDECONNECT_CLAUDE_APP: "", CLAUDECONNECT_BROWSER: "", CLAUDECONNECT_APP_DRIVER: "cdp" };
-  const r = await converse(cmd, env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/theme/, ""], [/log in/, ""], [/Switch to the free plan\?/, "y"], [/working folder,/, ""], [/address/, ""], [/Delete/, ""], [/plan: free \(through the desktop app\)[\s\S]*Save these changes\? \[Y\/n\]/, ""], [/check again \(s to skip for now, q to stop\)/, "s"], [/Use the desktop app this way\? \[Y\/n\]/, ""]]);
-  assert.equal(r.status, 0, r.out);
-  assert.equal(r.asked, 12, r.out);
-  assert.doesNotMatch(r.out, /usage credits from the site\?/, "the free plan has no usage credits");
-  assert.match(r.out, /Install the desktop app from https:\/\/claude\.ai\/download/);
-  assert.match(r.out, /your claude\.ai account could be limited or closed/, "the risk is said before the app is used");
-  assert.equal(JSON.parse(readFileSync(join(pc.dir, "config.json"), "utf8")).plan, "free");
-  let st = null;
-  for (let i = 0; i < 100; i++) {
-    st = (await site.api("/api/state")).body.agent;
-    if (st.online && st.plan === "free") break;
-    await sleep(150);
-  }
-  assert.equal(st.plan, "free", "the program here runs on the Claude app now");
-  assert.equal(st.history, false, "no Claude Code chats to list");
 });
 
 test("edit can move the site to a new address: the old one stays until the new one is claimed", { skip: !hasScript && "needs `script`" }, async t => {

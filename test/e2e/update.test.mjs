@@ -75,6 +75,45 @@ test("an unpublished or broken release doesn't break the site", async t => {
   assert.equal(u.error, "");
 });
 
+test("when GitHub turns the site away, the release is still heard of: from GitHub's API, or from the computer", async t => {
+  const s = await ready({ release: { ...RELEASE, version: "1.1.0" } });
+  t.after(() => s.stop());
+  assert.equal((await s.api("/api/update")).body.available, false);
+
+  // raw.githubusercontent.com is turning Cloudflare's servers away; GitHub's API answers
+  s.releaseStatus = 429;
+  s.apiRelease = RELEASE;
+  let u = (await s.post("/api/update/check")).body;
+  assert.equal(u.latest, "1.2.0");
+  assert.equal(u.available, true);
+  assert.equal(u.error, "");
+  assert.ok(s.fetched.some(f => f.startsWith("https://api.test/repos/ThatOneWeirdDev/claudeconnect/contents/manifest.json?ref=main")));
+
+  // neither answers: the computer read a newer one itself, and that's what the site goes by
+  s.apiRelease = null;
+  const agent = await connectAgent(s, { agent: "1.1.0" });
+  t.after(() => agent.close());
+  agent.send({ type: "release", repo: "someone/else", ref: "main", release: { ...RELEASE, version: "9.0.0" } });
+  agent.send({ type: "release", repo: "ThatOneWeirdDev/claudeconnect", ref: "main", release: { ...RELEASE, version: "1.1.5" } });
+  agent.send({ type: "release", repo: "ThatOneWeirdDev/claudeconnect", ref: "main", release: { ...RELEASE, version: "1.3.0", notes: ["From the computer"] } });
+  await sleep(300);
+  u = (await s.api("/api/update")).body;
+  assert.equal(u.latest, "1.3.0", "the newest, and only for the place the site updates from");
+  assert.deepEqual(u.notes, ["From the computer"]);
+  assert.equal((await s.api("/api/state")).body.update.available, true);
+});
+
+test("a release published since the last look shows at the next look a minute on, without waiting for a background check", async t => {
+  const s = await ready({ release: { ...RELEASE, version: "1.1.0" }, vars: { UPDATE_CHECK_MS: "300" } });
+  t.after(() => s.stop());
+  assert.equal((await s.api("/api/state")).body.update.available, false);
+  s.release = RELEASE;
+  await sleep(400);
+  const u = (await s.api("/api/state")).body.update;
+  assert.equal(u.latest, "1.2.0");
+  assert.equal(u.available, true);
+});
+
 test("release notes are plain text from the internet, trimmed and capped", async t => {
   const s = await ready({ release: { ...RELEASE, notes: ["<img src=x onerror=alert(1)>", ...Array.from({ length: 30 }, (_, i) => "n" + i)] } });
   t.after(() => s.stop());
@@ -93,7 +132,7 @@ test("updating is blocked with a reason until the computer is online and able", 
 
   const old = await connectAgent(s, { agent: "1.1.0", caps: undefined });
   assert.equal((await s.api("/api/update")).body.blocked.code, "agent_old");
-  assert.match((await s.api("/api/update")).body.blocked.message, /TestConnect update/);
+  assert.match((await s.api("/api/update")).body.blocked.message, /TestSite update/);
   old.close();
   await sleep(100);
 

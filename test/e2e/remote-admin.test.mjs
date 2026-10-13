@@ -82,14 +82,18 @@ test("changing settings from the site redeploys in place, restarts the agent and
   assert.equal(deploys[0].name, "test-site", "same Worker, same address");
   assert.equal(deploys[0].account_id, "acct-123");
   assert.equal(deploys[0].kv_namespaces[0].id, "kv-123");
-  assert.deepEqual(deploys[0].vars, { SITE_NAME: "Renamed", COMMAND: "TestConnect", APP_VERSION: "1.3.0", UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "test-site" });
+  assert.deepEqual(deploys[0].vars, { SITE_NAME: "Renamed", COMMAND: "Renamed", APP_VERSION: "1.3.0", UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "test-site" });
   assert.deepEqual(cf.deleted, [], "nothing was deleted");
   assert.equal(cf.created.length, 0, "no new site");
   assert.match(pc.read("site/brand.js"), new RegExp(PNG.slice(0, 40)));
   assert.match(pc.read("site/brand.js"), /"image\/png"/);
 
   const cfg = cfgOf(pc);
-  assert.deepEqual([cfg.displayName, cfg.fable, cfg.command, cfg.name, cfg.site], ["Renamed", undefined, "TestConnect", "test-site", pc.config.site], "an older install's Fable setting is dropped");
+  assert.deepEqual([cfg.displayName, cfg.fable, cfg.command, cfg.name, cfg.site], ["Renamed", undefined, "Renamed", "test-site", pc.config.site], "an older install's Fable setting is dropped");
+  // the command is the name: renamed by the program here when it restarted
+  assert.equal(cfg.shim, join(pc.home, "bin", "Renamed"));
+  assert.ok(existsSync(join(pc.home, "bin", "Renamed")) && !existsSync(join(pc.home, "bin", "TestSite")), "the new command, and not the old one");
+  assert.match(readFileSync(join(pc.home, "bin", "Renamed"), "utf8"), /agent\.mjs/);
   assert.equal(cfg.aiName, undefined, "the name an older install saved for the AI is dropped");
   assert.notEqual(pc.pid(), oldPid);
   assert.equal(pc.alive(oldPid), false);
@@ -178,7 +182,7 @@ test("moving to a new address: the old site stays until the new one is claimed, 
   assert.deepEqual(cf.deleted.sort(), ["/accounts/acct-123/storage/kv/namespaces/kv-123", "/accounts/acct-123/workers/scripts/test-site"], "the old worker and its storage, and nothing else");
   const cfg = cfgOf(pc);
   assert.deepEqual([cfg.name, cfg.site, cfg.kvId, cfg.secret, cfg.token], ["new-site", newOrigin, "kv-new", secrets.AGENT_SECRET, fresh.jwt]);
-  assert.equal(cfg.command, "TestConnect");
+  assert.equal(cfg.command, "TestSite");
   assert.equal(cfg.displayName, "Test Site");
   assert.equal(JSON.parse(pc.read("site/wrangler.jsonc")).name, "new-site");
   // the old site's files go right after its storage is deleted
