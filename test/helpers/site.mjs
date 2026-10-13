@@ -89,7 +89,7 @@ export async function startSite(opts = {}) {
   const access = makeAccess();
   const jwt = access.sign();
   // Tests change `release` and `releaseStatus` on the object startSite returns, so this one object is both what they hold and what the mock reads.
-  const site = { release: opts.release || null, releaseStatus: 200, fetched: [], dir, access, jwt, agentSecret: (opts.vars && opts.vars.AGENT_SECRET) || AGENT_SECRET, claimCode: (opts.vars && opts.vars.CLAIM_CODE) || CLAIM_CODE };
+  const site = { release: opts.release || null, releaseStatus: 200, apiRelease: null, fetched: [], dir, access, jwt, agentSecret: (opts.vars && opts.vars.AGENT_SECRET) || AGENT_SECRET, claimCode: (opts.vars && opts.vars.CLAIM_CODE) || CLAIM_CODE };
   const mf = new Miniflare({
     host: "127.0.0.1",
     port: opts.port || 0,
@@ -107,11 +107,12 @@ export async function startSite(opts = {}) {
         kvNamespaces: ["TOKENS"],
         bindings: {
           SITE_NAME: "Test Site",
-          COMMAND: "TestConnect",
+          COMMAND: "TestSite",
           APP_VERSION: opts.appVersion || "1.1.0",
           UPDATE_REPO: "ThatOneWeirdDev/claudeconnect",
           UPDATE_REF: "main",
           UPDATE_RAW: "https://raw.test",
+          UPDATE_API: "https://api.test",
           AGENT_SECRET,
           CLAIM_CODE,
           ...(opts.vars || {})
@@ -123,6 +124,11 @@ export async function startSite(opts = {}) {
             site.fetched.push(request.url);
             if (site.releaseStatus !== 200) return new Response("nope", { status: site.releaseStatus });
             return site.release ? Response.json(site.release) : new Response("not found", { status: 404 });
+          }
+          // GitHub's API, where the site looks when raw.githubusercontent.com won't answer: `site.apiRelease`
+          if (url.origin === "https://api.test" && url.pathname.endsWith("/contents/manifest.json")) {
+            site.fetched.push(request.url);
+            return site.apiRelease ? Response.json(site.apiRelease) : new Response("not found", { status: 404 });
           }
           return new Response("blocked in test: " + request.url, { status: 599 });
         }

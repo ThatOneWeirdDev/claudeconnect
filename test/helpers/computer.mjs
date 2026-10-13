@@ -59,6 +59,14 @@ process.stdin.on("data", d => (prompt += d)).on("end", () => {
     })();
     return;
   }
+  if (/write a file/.test(prompt)) {
+    // writes a picture into the folder it runs in, the way the Write tool does
+    const f = path.join(process.cwd(), "art", "chart.svg");
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>');
+    out({ type: "assistant", message: { id: "m0", content: [{ type: "tool_use", id: "toolu_w", name: "Write", input: { file_path: f, content: "<svg/>" } }] } });
+    out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_w", content: "File created" }] } });
+  }
   if (/interleave/.test(prompt)) {
     // thinking, text, thinking, text in one reply, streamed the way Claude Code streams it
     const ev = e => out({ type: "stream_event", event: e });
@@ -158,11 +166,11 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   for (const f of readdirSync(join(ROOT, "site"))) copyFileSync(join(ROOT, "site", f), join(dir, "site", f));
   writeFileSync(join(dir, "site", "brand.js"), 'export default {"logo":null,"favicon":null};\n');
   // the command the installer made on the user's PATH: a tiny script that runs the agent
-  const shim = join(bin, "TestConnect");
+  const shim = join(bin, "TestSite");
   writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(dir, "agent.mjs")}" "$@"\n`);
   chmodSync(shim, 0o755);
   const config = {
-    name: "test-site", displayName: "Test Site", command: "TestConnect", fable: false, // fable: as installs before 1.12.0 saved it
+    name: "test-site", displayName: "Test Site", command: "TestSite", fable: false, // fable: as installs before 1.12.0 saved it
     accountId: "acct-123", kvId: "kv-123", site: site.origin, secret: AGENT_SECRET, workspace: join(home, "ws"),
     permissionMode: "auto", shim, version: oldVersion, repo: "ThatOneWeirdDev/claudeconnect", ref: "main",
     token: site.jwt, tokenExp: Math.floor(Date.now() / 1000) + 86400 * 30, claudePath: join(bin, "claude"), id: "agent-real"

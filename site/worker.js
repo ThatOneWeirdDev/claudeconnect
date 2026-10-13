@@ -12,8 +12,7 @@ const ISS_RE = /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/;
 // "ultracode" is xhigh effort plus Claude Code's multi-agent workflows for the reply (`--effort ultracode`). A Claude Code
 // too old to know it ignores it and uses its default effort.
 const ALL_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultracode"];
-// Every message runs as Claude Code ("code") on a paid plan, or in the Claude app ("app") on the free plan. In Claude Code, the
-// permission mode says how freely it acts: "auto" is whatever the computer is set to (normally auto), "plan" only plans, and
+// Every message runs as Claude Code ("code"). Its permission mode says how freely it acts: "auto" is whatever the computer is set to (normally auto), "plan" only plans, and
 // "default" asks on the site before anything that needs permission (only when the computer can ask, cap "ask").
 const PERMS = ["auto", "acceptEdits", "plan", "default"];
 const MODELS = {
@@ -34,12 +33,11 @@ const PLANS = {
 };
 const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
 const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
-// The settings that live on the computer, which the site can show and change: starting at login, the folder Claude Code works
-// in, and whether you pay for Claude ("paid": Claude Code answers; "free": the Claude app does). The computer also says which
-// Claude plan it's signed in with, and an older one says what it reads (credits, history), which nobody can change anymore.
+// The settings that live on the computer, which the site can show and change: starting at login and the folder Claude Code
+// works in. The computer also says which Claude plan it's signed in with, and an older one says what it reads (credits,
+// history), which nobody can change anymore.
 const COMPUTER_KEYS = ["autostart", "credits"];
 const HISTORY_SCOPES = ["all", "workspace", "off"];
-const PLAN_KINDS = ["paid", "free"];
 
 function cleanComputer(v) {
   if (!v || typeof v !== "object") return null;
@@ -47,34 +45,17 @@ function cleanComputer(v) {
   for (const k of COMPUTER_KEYS) if (typeof v[k] === "boolean") out[k] = v[k];
   if (HISTORY_SCOPES.includes(v.history)) out.history = v.history;
   if (typeof v.workspace === "string" && v.workspace.trim() && v.workspace.length <= 400 && !/[\0\r\n]/.test(v.workspace)) out.workspace = v.workspace;
-  if (PLAN_KINDS.includes(v.plan)) out.plan = v.plan;
   if (typeof v.subscription === "string" && /^[a-z_]{1,20}$/.test(v.subscription)) out.subscription = v.subscription;
   return Object.keys(out).length ? out : null;
 }
 
-// What the computer says about the Claude app on the free plan: whether it's connected (older computers could also use a browser window in its
-// place), the models in its model menu, and whether extended thinking is on there.
-const APP_MODEL_ID = /^claude-[a-z0-9-]{1,40}$/;
-function cleanApp(v) {
-  if (!v || typeof v !== "object") return null;
-  const str = (x, n) => (typeof x === "string" ? x.replace(/\s+/g, " ").trim().slice(0, n) : "");
-  const models = (Array.isArray(v.models) ? v.models.slice(0, 12) : []).filter(x => x && typeof x.id === "string" && APP_MODEL_ID.test(x.id) && str(x.name, 40)).map(x => ({ id: x.id, name: str(x.name, 40), desc: str(x.desc, 120), locked: x.locked === true }));
-  // paused: Stop was pressed on the app's window, and it's left alone until it's allowed again (POST /api/app/resume)
-  return { kind: ["app", "browser"].includes(v.kind) ? v.kind : "", found: ["app", "browser"].includes(v.found) ? v.found : "", models, thinking: typeof v.thinking === "boolean" ? v.thinking : null, model: str(v.model, 40), paused: v.paused === true, at: Date.now() };
-}
-
-// A question for the person, from the computer while a reply runs: Claude Code asking permission ("permission"), or a window
-// in the Claude app waiting for an answer, as a picture ("screen"). Text only goes to the page through esc(), the picture only
-// as a JPEG or PNG data URL.
+// A question for the person, from the computer while a reply runs: Claude Code asking permission. Text only goes to the page
+// through esc().
 function cleanRemote(m) {
   if (!m || typeof m !== "object" || typeof m.id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(m.id)) return null;
   const str = (x, n) => (typeof x === "string" ? x.slice(0, n) : "");
-  const num = (x, max) => (Number.isFinite(x) ? Math.max(0, Math.min(max, Math.round(x))) : 0);
   if (m.kind === "permission") return { id: m.id, kind: "permission", tool: str(m.tool, 80), title: str(m.title, 200) || "Asking for permission", detail: str(m.detail, 6000), at: Date.now() };
-  if (m.kind !== "screen") return null;
-  const image = typeof m.image === "string" && m.image.length <= 3000000 && /^[A-Za-z0-9+/=]+$/.test(m.image) ? m.image : "";
-  const buttons = (Array.isArray(m.buttons) ? m.buttons.slice(0, 12) : []).filter(b => b && typeof b.label === "string" && b.label.trim()).map(b => ({ label: b.label.trim().slice(0, 60), x: num(b.x, 10000), y: num(b.y, 10000), w: num(b.w, 10000), h: num(b.h, 10000) }));
-  return { id: m.id, kind: "screen", title: str(m.title, 200) || "The desktop app is asking", text: str(m.text, 1000), image, w: num(m.w, 10000), h: num(m.h, 10000), buttons, at: Date.now() };
+  return null;
 }
 // A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
 // an open page within about a minute and a half; a page opened after a long gap waits for the answer instead of showing the old one.
@@ -112,6 +93,15 @@ function siteName(env) {
 function commandName(env) {
   return String(env.COMMAND || "ClaudeConnect").slice(0, 60);
 }
+// The text in the browser tab, when it isn't the site's name ("" is the name).
+function tabTitle(env) {
+  return cleanTab(env.TAB_TITLE);
+}
+function cleanTab(v) {
+  return typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().replace(/\s+/g, " ").slice(0, 60) : "";
+}
+// The command on the computer is the site's name: what the computer says it is.
+const COMMAND_RE = /^[A-Za-z0-9_-]{1,60}$/;
 
 // How much of the model's context window the chat fills after a reply. Anything that isn't a plain pair of counts is dropped.
 function cleanContext(c) {
@@ -166,6 +156,46 @@ function mimeOf(name) {
   const ext = (String(name).match(/\.([A-Za-z0-9]+)$/) || [])[1];
   return (ext && MIME[ext.toLowerCase()]) || "application/octet-stream";
 }
+
+// The file browser's files, by what they are: shown as themselves only when a browser shows that kind of file safely. Anything
+// else that's text is sent as plain text (a web page too, so nothing in it runs), and the rest as bytes to download.
+const FILE_MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon", apng: "image/apng", svg: "image/svg+xml", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac", weba: "audio/webm", mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mov: "video/quicktime", ogv: "video/ogg", pdf: "application/pdf" };
+const FS_KINDS = ["folder", "image", "audio", "video", "pdf", "text", "file"];
+// A file is read from the computer a piece at a time, each piece one message (under the 400 000 characters one can be, once
+// it's base64). A song or a video is asked for in parts as it plays, so one answer to a range is at most FS_RANGE_MAX.
+const FS_PIECE = 288000;
+const FS_RANGE_MAX = 4 * 1024 * 1024;
+
+function fileMime(name, kind) {
+  const ext = (String(name).match(/\.([A-Za-z0-9]+)$/) || [])[1];
+  return (ext && FILE_MIME[ext.toLowerCase()]) || (kind === "text" ? "text/plain; charset=utf-8" : "application/octet-stream");
+}
+
+// A path in the working folder as the page sends it: names joined by "/", "" for the folder itself. Null for anything that
+// tries to leave it. The computer checks again, links included.
+function cleanFsPath(v) {
+  if (v === undefined || v === null) return "";
+  const s = String(v);
+  if (s.length > 4096 || s.includes("\0")) return null;
+  const parts = s.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (parts.some(x => x === "." || x === "..")) return null;
+  return parts.join("/");
+}
+
+// "bytes=0-", "bytes=100-199" or "bytes=-500"; null for none, or for a kind this doesn't answer (several ranges at once).
+function parseRange(h) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(h || "").trim());
+  if (!m || (!m[1] && !m[2])) return null;
+  if (!m[1]) return { suffix: Number(m[2]) };
+  return { start: Number(m[1]), ...(m[2] ? { end: Number(m[2]) } : {}) };
+}
+
+// What the computer said went wrong, as an answer to the page.
+function fsError(r) {
+  const status = { outside: 403, unreadable: 403, missing: 404, not_folder: 400, not_file: 400, root: 400, trash_failed: 500 }[r.code] || 500;
+  return json({ error: typeof r.error === "string" && r.error ? r.error.slice(0, 300) : "That couldn't be done on your computer.", code: FS_CODES.includes(r.code) ? r.code : "failed" }, status);
+}
+const FS_CODES = ["outside", "unreadable", "missing", "not_folder", "not_file", "root", "trash_failed"];
 
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0D0D0D"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
 
@@ -344,8 +374,8 @@ const PAGE_HEADERS = {
 // `site` is the site's name and images as they are now (see siteSettings in the Durable Object).
 function appPage(env, site) {
   const mark = site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK;
-  const cfg = JSON.stringify({ name: site.name, command: commandName(env), version: appVersion(env) }).replace(/</g, "\\u003c");
-  const html = APP_HTML.split("__SITE_NAME__").join(escHtml(site.name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg).split('href="/favicon"').join(`href="/favicon?v=${site.v}"`);
+  const cfg = JSON.stringify({ name: site.name, tab: site.tab || "", command: site.command || commandName(env), version: appVersion(env) }).replace(/</g, "\\u003c");
+  const html = APP_HTML.split("__TAB_TITLE__").join(escHtml(site.tab || site.name)).split("__SITE_NAME__").join(escHtml(site.name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg).split('href="/favicon"').join(`href="/favicon?v=${site.v}"`);
   return new Response(html, { headers: PAGE_HEADERS });
 }
 
@@ -378,7 +408,7 @@ async function hubFetch(env, request) {
 }
 
 function deployedSettings(env) {
-  return { name: siteName(env), logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
+  return { name: siteName(env), tab: tabTitle(env), command: commandName(env), logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
 }
 
 async function siteOf(env, hub) {
@@ -439,7 +469,7 @@ async function handle(req, env, ctx) {
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
       const site = await siteOf(env, hub);
-      return lockPage(a.state, site.name, site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK, url.hostname, commandName(env));
+      return lockPage(a.state, site.name, site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK, url.hostname, site.command || commandName(env));
     }
     if (a.exp > notedExp) {
       notedExp = a.exp;
@@ -494,8 +524,10 @@ export class ChatgqlHub extends DurableObject {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.siteRec = {};
+    this.cmd = "";
     ctx.blockConcurrencyWhile(async () => {
       this.siteRec = (await ctx.storage.get("site")) || {};
+      this.cmd = (await ctx.storage.get("command")) || "";
     });
     this.sql.exec("CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, title TEXT, model TEXT, effort TEXT, session_id TEXT, started INTEGER DEFAULT 0, running TEXT, created INTEGER, updated INTEGER)");
     this.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, chat_id TEXT, role TEXT, content TEXT, meta TEXT, created INTEGER)");
@@ -530,7 +562,7 @@ export class ChatgqlHub extends DurableObject {
   // here and take effect straight away, with no redeploy. Each change remembers the deployed value it replaced, and holds only
   // while that is still what's deployed: a later deploy with a different value (from `<command> edit`, say) wins.
   deployedSite() {
-    return { name: siteName(this.env), logo: fingerprint(brandImage("logo")), favicon: fingerprint(brandImage("favicon")) };
+    return { name: siteName(this.env), tab: tabTitle(this.env), logo: fingerprint(brandImage("logo")), favicon: fingerprint(brandImage("favicon")) };
   }
 
   site() {
@@ -539,6 +571,7 @@ export class ChatgqlHub extends DurableObject {
     const held = k => r[k] && r[k].over === d[k];
     return {
       name: held("name") ? r.name.value : d.name,
+      tab: held("tab") ? r.tab.value : d.tab,
       logo: held("logo") ? r.logo.value : brandImage("logo"),
       favicon: held("favicon") ? r.favicon.value : brandImage("favicon")
     };
@@ -548,11 +581,22 @@ export class ChatgqlHub extends DurableObject {
     return this.site().name;
   }
 
+  async noteCommand(c) {
+    if (typeof c !== "string" || !COMMAND_RE.test(c) || c === this.cmd) return;
+    this.cmd = c;
+    await this.ctx.storage.put("command", c);
+  }
+
+  // The command on the computer, as it last said; it follows the site's name.
+  commandName() {
+    return this.cmd || commandName(this.env);
+  }
+
   // What a page or the locked page needs: the images only as whether there are any, and a version for their addresses.
   siteSettings(version) {
     this.restartIfOlder(version);
     const s = this.site();
-    return { name: s.name, logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
+    return { name: s.name, tab: s.tab || "", command: this.commandName(), logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
   }
 
   // The tab icon falls back to the logo.
@@ -571,6 +615,10 @@ export class ChatgqlHub extends DurableObject {
       if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
       rec.name = { value: n, over: d.name };
     }
+    if ("tab" in b) {
+      if (b.tab !== null && typeof b.tab !== "string") return json({ error: "That tab title couldn't be read." }, 400);
+      rec.tab = { value: cleanTab(b.tab || ""), over: d.tab };
+    }
     for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
       if (!(key in b)) continue;
       if (b[key] === null) {
@@ -588,7 +636,7 @@ export class ChatgqlHub extends DurableObject {
     const now = this.site();
     if (ws) {
       try {
-        this.sendAgent(ws, { type: "site", displayName: now.name, brand: { logo: now.logo, favicon: now.favicon } });
+        this.sendAgent(ws, { type: "site", displayName: now.name, tab: now.tab, brand: { logo: now.logo, favicon: now.favicon } });
       } catch {}
     }
     return json(this.siteSettings());
@@ -792,10 +840,11 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "done") return this.completeRun(m);
     if (m.type === "update_ack") return this.updateAck(m);
     if (m.type === "limits") return this.setLimits(m.limits);
+    if (m.type === "release") return this.noteRelease(m);
+    if (m.type === "command") return this.noteCommand(m.command);
     if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
-    if (m.type === "app") return this.ctx.storage.put("app", cleanApp(m.app));
-    if (m.type === "transcript" || m.type === "reset_result") return this.gotTranscript(m);
+    if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result") return this.gotTranscript(m);
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
       return this.gotTranscript(m);
@@ -803,7 +852,7 @@ export class ChatgqlHub extends DurableObject {
     const r = this.runs.get(m.runId);
     if (!r) return;
     r.heard = true;
-    this.armRun(m.runId, 100000, `Lost the connection before the reply finished. Check that ${commandName(this.env)} is still running.`);
+    this.armRun(m.runId, 100000, `Lost the connection before the reply finished. Check that ${this.commandName()} is still running.`);
     if (m.type === "delta") {
       r.text += m.text || "";
       this.part(r, "text").text += m.text || "";
@@ -829,12 +878,6 @@ export class ChatgqlHub extends DurableObject {
       this.part(r, "think").ms = Math.max(0, ms - (r.thinkingMs || 0));
       r.thinkingMs = ms;
       this.push(m.runId, { type: "thinking_done", ms: r.thinkingMs });
-    } else if (m.type === "replace") {
-      // the Claude app's reply read again from the page, where something earlier on changed (a list or a table filling in)
-      const text = typeof m.text === "string" ? m.text : "";
-      r.text = text;
-      r.parts = [...r.parts.filter(p => p.type !== "text"), { type: "text", text }];
-      this.push(m.runId, { type: "replace", text });
     } else if (m.type === "remote") {
       const q = cleanRemote(m);
       if (q) {
@@ -859,13 +902,24 @@ export class ChatgqlHub extends DurableObject {
     // when this connection opened: a reply sent on it after that is the computer's, even if it isn't in the list below yet
     const opened = this.agentInfo(ws).since || Date.now();
     ws.serializeAttachment({ id: this.agentInfo(ws).id || "", since: Date.now(), version: String(m.agent || "").slice(0, 32), caps, computer, warning: m.warning ? String(m.warning).slice(0, 40) : "" });
+    await this.noteCommand(m.command);
+    // Renamed in Settings while the computer was away: it catches up, and renames its command to match. Only a name set here
+    // is sent, never the deployed one, which the computer itself deployed (`<command> edit` renames there first). Only to a
+    // program that renames its command; an older one would only write its config again.
+    const held = this.siteRec.name;
+    if (caps.includes("files") && typeof m.site === "string" && held && held.over === this.deployedSite().name && held.value !== m.site) {
+      const now = this.site();
+      try {
+        this.sendAgent(ws, { type: "site", displayName: now.name, tab: now.tab, brand: { logo: now.logo, favicon: now.favicon } });
+      } catch {}
+    }
     await this.ctx.storage.delete("lastSeen");
-    const plan = computer && computer.plan === "free" ? "free" : "paid";
-    // A different plan from before: what was read for the other one (its limits, credits and resets, the app's models) is
-    // about another account or another way of answering, and doesn't apply anymore.
-    const before = await this.ctx.storage.get("plan");
-    if (before && before !== plan) await this.ctx.storage.delete(["limits", "credits", "app", "limitsAsk"]);
-    await this.ctx.storage.put("plan", plan);
+    // An older site kept which way replies came from, and what the desktop app said (the free plan, gone now): what was read
+    // for it doesn't apply anymore.
+    if (await this.ctx.storage.get("plan")) {
+      if ((await this.ctx.storage.get("plan")) === "free") await this.ctx.storage.delete(["limits", "credits", "limitsAsk"]);
+      await this.ctx.storage.delete(["plan", "app"]);
+    }
     await this.giveAnswers(ws, m.agent);
     const run = await this.ctx.storage.get("update");
     // An update that looked stuck or failed is still a success if the new version turns up within the hour.
@@ -918,8 +972,6 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/remote" && method === "POST") return this.answerRemote(req);
-    if (p === "/api/app/refresh" && method === "POST") return this.refreshApp();
-    if (p === "/api/app/resume" && method === "POST") return this.resumeApp();
     if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
@@ -934,6 +986,9 @@ export class ChatgqlHub extends DurableObject {
       if (run && run.state !== "running") await this.ctx.storage.delete("update");
       return json(await this.updateInfo());
     }
+    if (p === "/api/files" && method === "GET") return this.listFiles(url);
+    if (p === "/api/files/raw" && (method === "GET" || method === "HEAD")) return this.serveFile(req, url);
+    if (p === "/api/files/trash" && method === "POST") return this.trashFile(req);
     if (p === "/api/chats" && method === "GET") return json({ chats: this.chatList() });
     const cm = p.match(/^\/api\/chats\/([A-Za-z0-9-]{8,64})$/);
     if (cm && method === "GET") return this.getChat(cm[1]);
@@ -966,19 +1021,10 @@ export class ChatgqlHub extends DurableObject {
   }
 
   // Whether you pay for Claude: what the computer says, or said last time it was online.
-  async plan() {
-    const ws = this.agent();
-    const c = ws ? this.agentInfo(ws).computer : null;
-    if (c && c.plan) return c.plan;
-    return (await this.ctx.storage.get("plan")) || "paid";
-  }
-
   async state(req) {
     const ws = this.agent();
     const info = ws ? this.agentInfo(ws) : null;
     const caps = info ? info.caps || [] : [];
-    const plan = await this.plan();
-    const paid = plan === "paid";
     return {
       email: req.headers.get("x-chatgql-user") || "",
       version: appVersion(this.env),
@@ -988,21 +1034,21 @@ export class ChatgqlHub extends DurableObject {
             since: info.since || null,
             warning: info.warning || "",
             version: info.version || "",
-            plan,
             // how freely Claude Code acts, and whether it can ask you here first
-            modes: paid && caps.includes("modes"),
-            ask: paid && caps.includes("ask"),
-            ultracode: paid && caps.includes("ultracode"),
+            modes: caps.includes("modes"),
+            ask: caps.includes("ask"),
+            ultracode: caps.includes("ultracode"),
             remote: caps.includes("remote"),
-            history: paid && caps.includes("history"),
-            credits: paid && (info.computer && typeof info.computer.credits === "boolean" ? info.computer.credits : caps.includes("credits")),
+            history: caps.includes("history"),
+            credits: info.computer && typeof info.computer.credits === "boolean" ? info.computer.credits : caps.includes("credits"),
+            // the file browser: what's in the working folder
+            files: caps.includes("files"),
             subscription: (info.computer && info.computer.subscription) || "",
-            computer: info.computer || null,
-            app: paid ? null : (await this.ctx.storage.get("app")) || null
+            computer: info.computer || null
           }
-        : { online: false, plan, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
+        : { online: false, lastSeen: (await this.ctx.storage.get("lastSeen")) || null },
       limits: await this.limitsView(),
-      fable: paid ? await this.fable() : { available: false, why: "free" },
+      fable: await this.fable(),
       prefs: await this.prefs(),
       site: this.siteSettings(),
       credits: (await this.ctx.storage.get("credits")) || null,
@@ -1021,8 +1067,8 @@ export class ChatgqlHub extends DurableObject {
       windows[key] = { pct: Math.max(0, Math.min(999, Math.round(w.pct))), resetsAt: Math.round(w.resetsAt) };
     }
     if (!Object.keys(windows).length) {
-      // No percentages: the Claude app's own notice on the free plan, which only says you're out, and until when (or, after a
-      // reply goes through, that you aren't anymore). The percentages read before stay as they were.
+      // No percentages: only that you're out, and until when (or, after a reply goes through, that you aren't anymore). The
+      // percentages read before stay as they were.
       const prev = await this.ctx.storage.get("limits");
       if (raw.status === "rejected" && Number.isFinite(raw.resetsAt)) await this.ctx.storage.put("limits", { ...(prev || {}), at: Date.now(), windows: (prev && prev.windows) || {}, status: "rejected", resetsAt: Math.round(raw.resetsAt), notice: true });
       else if (raw.status === "allowed" && prev && prev.status === "rejected") await this.ctx.storage.put("limits", { ...prev, at: Date.now(), status: "allowed", resetsAt: null });
@@ -1135,9 +1181,9 @@ export class ChatgqlHub extends DurableObject {
     delete values.subscription;
     if (!Object.keys(values).length) return json({ error: "Nothing was changed." }, 400);
     const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
     const caps = this.agentInfo(ws).caps || [];
-    if (!caps.includes("computer") || ("plan" in values && !caps.includes("plan"))) return json({ error: `The ${commandName(this.env)} program on your computer is too old for this. Update it first.`, code: "agent_old" }, 409);
+    if (!caps.includes("computer")) return json({ error: `The ${this.commandName()} program on your computer is too old for this. Update it first.`, code: "agent_old" }, 409);
     const r = await this.askAgent({ type: "computer", values }, 10000, "computer");
     if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
     if (r.error) return json({ error: String(r.error).slice(0, 200), computer: cleanComputer(r.values) }, 400);
@@ -1162,7 +1208,7 @@ export class ChatgqlHub extends DurableObject {
     const grant = b && typeof b.grant === "string" && /^[a-z0-9_-]{1,40}$/.test(b.grant) ? b.grant : null;
     if (!program || !grant) return json({ error: "That reset couldn't be read." }, 400);
     const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
     if (!(this.agentInfo(ws).caps || []).includes("resets")) return json({ error: `Update ${this.siteName()} to use resets from here.`, code: "agent_old" }, 409);
     const r = await this.askAgent({ type: "reset_claim", program, grant }, 30000, "resets");
     if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
@@ -1239,7 +1285,7 @@ export class ChatgqlHub extends DurableObject {
     const r = chat && chat.running ? this.runs.get(chat.running) : null;
     if (!r || !r.remote || r.remote.id !== b.id) return json({ error: "That isn't waiting for an answer anymore.", code: "gone" }, 409);
     const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
     const msg = { type: "remote_answer", runId: chat.running, id: r.remote.id };
     if (r.remote.kind === "permission") {
       if (b.answer !== "allow" && b.answer !== "deny") return json({ error: "Allow it or not?" }, 400);
@@ -1249,63 +1295,6 @@ export class ChatgqlHub extends DurableObject {
     else return json({ error: "Click the window, or one of its buttons." }, 400);
     try {
       this.sendAgent(ws, msg);
-    } catch {
-      return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
-    }
-    return json({ ok: true });
-  }
-
-  // A chat that began with Claude Code (before a switch to the free plan) has no conversation in the Claude app: its earlier
-  // messages go along with the next one, so the app's reply isn't missing them. The computer only uses them when it starts a new
-  // conversation in the app for this chat. The latest ones, up to about 6000 characters.
-  earlierContext(chatId, exceptId) {
-    const rows = this.sql.exec("SELECT id, role, content, meta FROM messages WHERE chat_id = ? ORDER BY created", chatId).toArray().filter(r => r.id !== exceptId);
-    const modeOf = r => {
-      try {
-        return JSON.parse(r.meta || "{}").mode || "code";
-      } catch {
-        return "code";
-      }
-    };
-    if (!rows.some(r => modeOf(r) !== "app")) return "";
-    const parts = [];
-    let size = 0;
-    for (const r of [...rows].reverse()) {
-      const text = String(r.content || "").trim();
-      if (!text) continue;
-      const line = `${r.role === "user" ? "Me" : "You"}: ${text.length > 2000 ? text.slice(0, 2000) + " …" : text}`;
-      if (size + line.length > 6000) break;
-      parts.unshift(line);
-      size += line.length;
-    }
-    return parts.join("\n\n");
-  }
-
-  // On the free plan, after Stop was pressed on the Claude app's window: let the computer use the app again.
-  async resumeApp() {
-    const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
-    if (!(this.agentInfo(ws).caps || []).includes("app")) return json({ error: "Your computer is on the paid plan, so there's no desktop app to use.", code: "not_app" }, 409);
-    const app = await this.ctx.storage.get("app");
-    if (app) await this.ctx.storage.put("app", { ...app, paused: false });
-    try {
-      this.sendAgent(ws, { type: "app_resume" });
-    } catch {
-      return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
-    }
-    return json({ ok: true });
-  }
-
-  // On the free plan: have the computer read the Claude app's model menu (opening the app if it has to). The answer arrives
-  // as the app's details in the page's state.
-  async refreshApp() {
-    const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
-    if (!(this.agentInfo(ws).caps || []).includes("app")) return json({ error: "Your computer is on the paid plan, so there's no desktop app to use.", code: "not_app" }, 409);
-    if (Date.now() - (this.appAsked || 0) < 15000) return json({ ok: true, wait: true });
-    this.appAsked = Date.now();
-    try {
-      this.sendAgent(ws, { type: "app_refresh" });
     } catch {
       return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
     }
@@ -1333,7 +1322,22 @@ export class ChatgqlHub extends DurableObject {
     const repo = validRepo(this.env.UPDATE_REPO) ? this.env.UPDATE_REPO : DEFAULT_REPO;
     const ref = validRef(this.env.UPDATE_REF) ? this.env.UPDATE_REF : "main";
     const raw = String(this.env.UPDATE_RAW || "https://raw.githubusercontent.com").replace(/\/+$/, "");
-    return { repo, ref, raw, label: `${repo}@${ref}` };
+    // GitHub's API, the second place to look (none when a test points the site somewhere else)
+    const api = this.env.UPDATE_API !== undefined ? String(this.env.UPDATE_API).replace(/\/+$/, "") : this.env.UPDATE_RAW ? "" : "https://api.github.com";
+    return { repo, ref, raw, api, label: `${repo}@${ref}` };
+  }
+
+  // The newest release as the computer read it, for the same place the site reads from. Newer than what the site has: it's
+  // what the site goes by.
+  async noteRelease(m) {
+    const src = this.updateSource();
+    if (`${m.repo}@${m.ref}` !== src.label) return;
+    const release = cleanManifest(m.release);
+    if (!release) return;
+    const c = this.latest || (await this.ctx.storage.get("latest")) || null;
+    if (c && c.source === src.label && c.release && !isNewer(release.version, c.release.version)) return;
+    this.latest = { at: Date.now(), source: src.label, release, error: "" };
+    await this.ctx.storage.put("latest", this.latest);
   }
 
   async checkLatest() {
@@ -1342,17 +1346,26 @@ export class ChatgqlHub extends DurableObject {
       const src = this.updateSource();
       const prev = this.latest || (await this.ctx.storage.get("latest")) || null;
       const entry = { at: Date.now(), source: src.label, release: prev && prev.source === src.label ? prev.release : null, error: "" };
-      try {
-        // raw.githubusercontent.com serves each file from a cache that can be five minutes behind; a new query string gets past it
-        const r = await fetch(`${src.raw}/${src.repo}/${src.ref}/manifest.json?cb=${Date.now().toString(36)}`, { headers: { "user-agent": "ClaudeConnect-site", accept: "application/json", "cache-control": "no-cache" }, signal: AbortSignal.timeout(6000) });
-        if (!r.ok) throw new Error(r.status === 404 ? "No release has been published at that address yet." : `GitHub answered ${r.status}.`);
-        const text = await r.text();
-        if (text.length > 100000) throw new Error("The release information was too large.");
-        const release = cleanManifest(JSON.parse(text));
-        if (!release) throw new Error("The release information couldn't be read.");
-        entry.release = release;
-      } catch (e) {
-        entry.error = String((e && e.message) || e).slice(0, 160);
+      // raw.githubusercontent.com serves each file from a cache that can be five minutes behind (a new query string gets past
+      // it), and from Cloudflare's shared servers it can also turn requests away for a while: then GitHub's API is asked.
+      const from = [
+        { url: `${src.raw}/${src.repo}/${src.ref}/manifest.json?cb=${Date.now().toString(36)}`, accept: "application/json" },
+        ...(src.api ? [{ url: `${src.api}/repos/${src.repo}/contents/manifest.json?ref=${encodeURIComponent(src.ref)}`, accept: "application/vnd.github.raw+json" }] : [])
+      ];
+      for (const f of from) {
+        try {
+          const r = await fetch(f.url, { headers: { "user-agent": "ClaudeConnect-site", accept: f.accept, "cache-control": "no-cache" }, signal: AbortSignal.timeout(5000) });
+          if (!r.ok) throw new Error(r.status === 404 ? "No release has been published at that address yet." : `GitHub answered ${r.status}.`);
+          const text = await r.text();
+          if (text.length > 100000) throw new Error("The release information was too large.");
+          const release = cleanManifest(JSON.parse(text));
+          if (!release) throw new Error("The release information couldn't be read.");
+          entry.release = release;
+          entry.error = "";
+          break;
+        } catch (e) {
+          entry.error = entry.error || String((e && e.message) || e).slice(0, 160);
+        }
       }
       this.latest = entry;
       await this.ctx.storage.put("latest", entry);
@@ -1369,7 +1382,7 @@ export class ChatgqlHub extends DurableObject {
       const now = Date.now();
       const unanswered = !run.acked && now - run.startedAt > (Number(this.env.UPDATE_ACK_MS) || ACK_WITHIN);
       if (unanswered || now - run.updatedAt > (Number(this.env.UPDATE_QUIET_MS) || QUIET_LIMIT)) {
-        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${this.siteName()} on your computer didn't pick up the request. Make sure ${commandName(this.env)} is running, then try again.` : `It stopped reporting progress. Check your computer, or run ${commandName(this.env)} update there.` };
+        run = { ...run, state: "error", finishedAt: now, message: unanswered ? `${this.siteName()} on your computer didn't pick up the request. Make sure ${this.commandName()} is running, then try again.` : `It stopped reporting progress. Check your computer, or run ${this.commandName()} update there.` };
         await this.ctx.storage.put("update", run);
       }
     }
@@ -1380,8 +1393,8 @@ export class ChatgqlHub extends DurableObject {
   updateBlock(run, need = "update") {
     const ws = this.agent();
     if (run && run.state === "running") return { code: "running", message: "Something is already in progress." };
-    if (!ws) return { code: "offline", message: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.` };
-    if (!(this.agentInfo(ws).caps || []).includes(need)) return { code: "agent_old", message: `The ${commandName(this.env)} program on your computer is too old for this. Run ${commandName(this.env)} update there once, and it can be done from this page after that.` };
+    if (!ws) return { code: "offline", message: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.` };
+    if (!(this.agentInfo(ws).caps || []).includes(need)) return { code: "agent_old", message: `The ${this.commandName()} program on your computer is too old for this. Run ${this.commandName()} update there once, and it can be done from this page after that.` };
     if (this.one("SELECT 1 AS x FROM chats WHERE running IS NOT NULL")) return { code: "busy", message: "A reply is still being written. Wait for it to finish, or stop it, then try again." };
     return null;
   }
@@ -1391,8 +1404,8 @@ export class ChatgqlHub extends DurableObject {
     let c = this.latest || (await this.ctx.storage.get("latest")) || null;
     if (c && c.source !== src.label) c = null;
     const age = c ? Date.now() - c.at : Infinity;
-    if (force || !c || age > envNum(this.env.UPDATE_WAIT_MS, CHECK_WAIT)) c = await this.checkLatest();
-    else if (age > (c.error ? envNum(this.env.UPDATE_RETRY_MS, CHECK_RETRY) : envNum(this.env.UPDATE_CHECK_MS, CHECK_EVERY))) this.checkLatest().catch(() => {});
+    // asked again once a minute, and waited for: work left running after the answer isn't sure to finish on Cloudflare
+    if (force || !c || age > envNum(this.env.UPDATE_WAIT_MS, CHECK_WAIT) || age > (c.error ? envNum(this.env.UPDATE_RETRY_MS, CHECK_RETRY) : envNum(this.env.UPDATE_CHECK_MS, CHECK_EVERY))) c = await this.checkLatest();
     this.latest = c;
     const current = appVersion(this.env);
     const latest = c && c.release ? c.release : null;
@@ -1469,6 +1482,10 @@ export class ChatgqlHub extends DurableObject {
       const n = cleanSiteName(b.displayName);
       if (!n) return json({ error: "Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number." }, 400);
       if (n !== this.siteName()) change.displayName = n;
+    }
+    if ("tab" in b) {
+      const t = cleanTab(b.tab || "");
+      if (t !== this.site().tab) change.tab = t;
     }
     for (const [key, label] of [["logo", "The logo"], ["favicon", "The tab icon"]]) {
       if (!(key in b)) continue;
@@ -1592,7 +1609,6 @@ export class ChatgqlHub extends DurableObject {
     const lastSent = [...messages].reverse().find(x => x.role === "user");
     chat.mode = (lastSent && lastSent.meta.mode) || "code";
     chat.perm = (lastSent && lastSent.meta.perm) || "auto";
-    chat.thinking = lastSent && typeof lastSent.meta.thinking === "boolean" ? lastSent.meta.thinking : null;
     let partial = null;
     if (chat.running) {
       const r = this.runs.get(chat.running);
@@ -1697,7 +1713,7 @@ export class ChatgqlHub extends DurableObject {
   // A conversation that so far exists only on the computer becomes a chat here the first time it is opened. Its id is the
   // session's id, so it is the same chat from then on, and sending in it carries on the same session.
   async importSession(s) {
-    if (!this.historyOn()) return { error: `${this.siteName()} can't reach your computer right now, and this chat is only there. Run ${commandName(this.env)} to bring it back online.`, code: "offline", status: 503 };
+    if (!this.historyOn()) return { error: `${this.siteName()} can't reach your computer right now, and this chat is only there. Run ${this.commandName()} to bring it back online.`, code: "offline", status: 503 };
     const r = await this.askAgent({ type: "transcript", sessionId: s.id, from: 0 });
     if (!r) return { error: "Your computer didn't answer in time. Try again in a moment.", code: "slow", status: 504 };
     if (!r.ok) return { error: r.error === "missing" ? "That chat isn't on your computer anymore." : "That chat can't be opened from here.", code: "gone", status: 404 };
@@ -1760,35 +1776,18 @@ export class ChatgqlHub extends DurableObject {
       if (chat.running) return json({ error: "Still answering in this chat." }, 409);
     }
     const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline right now. Run ${commandName(this.env)} to bring it back online, then send again.`, code: "offline" }, 503);
+    if (!ws) return json({ error: `${this.siteName()} is offline right now. Run ${this.commandName()} to bring it back online, then send again.`, code: "offline" }, 503);
     const info = this.agentInfo(ws);
     const caps = info.caps || [];
-    // Paid: Claude Code, with its models, effort and permission mode. Free: the Claude app, with the models in its own menu
-    // ("app-default" leaves the app on whatever it has picked) and extended thinking on or off.
-    const free = !!(info.computer && info.computer.plan === "free");
-    let model, effort, mode, perm, thinking;
-    if (free) {
-      const app = (await this.ctx.storage.get("app")) || { models: [] };
-      model = (app.models || []).some(x => x.id === b.model && !x.locked) ? b.model : "app-default";
-      effort = null;
-      mode = "app";
-      perm = "auto";
-      // only when the app's own switch has been read: otherwise the site's guess would turn off what you set in the app
-      thinking = typeof b.think === "boolean" && typeof app.thinking === "boolean" ? b.think : null;
-      // out of free messages, as the app said: nothing is typed into it until they're back
-      const l = await this.limitsView();
-      if (l && l.limited) return json({ error: "You're out of free messages for now, so this wasn't sent. They come back when your limit resets: Plan usage says when.", code: "limit", resetsAt: l.resetsAt || null }, 409);
-    } else {
-      model = MODELS[b.model] ? b.model : DEFAULT_MODEL;
-      effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
-      // a computer whose Claude Code doesn't know ultracode gets the effort it stands on
-      if (effort === "ultracode" && !caps.includes("ultracode")) effort = "xhigh";
-      mode = "code";
-      perm = PERMS.includes(b.perm) && (b.perm !== "default" || caps.includes("ask")) ? b.perm : "auto";
-      thinking = null;
-      const held = await this.creditsBlock(model);
-      if (held) return json({ error: held.message, code: held.code, resetsAt: held.resetsAt || null }, 409);
-    }
+    // Claude Code, with its models, effort and permission mode
+    const model = MODELS[b.model] ? b.model : DEFAULT_MODEL;
+    let effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
+    // a computer whose Claude Code doesn't know ultracode gets the effort it stands on
+    if (effort === "ultracode" && !caps.includes("ultracode")) effort = "xhigh";
+    const mode = "code";
+    const perm = PERMS.includes(b.perm) && (b.perm !== "default" || caps.includes("ask")) ? b.perm : "auto";
+    const held = await this.creditsBlock(model);
+    if (held) return json({ error: held.message, code: held.code, resetsAt: held.resetsAt || null }, 409);
     if (chat) await this.syncChat(chat, 6000);
     const now = Date.now();
     if (!chat) {
@@ -1797,14 +1796,14 @@ export class ChatgqlHub extends DurableObject {
     }
     const runId = crypto.randomUUID();
     const fileMeta = files.map(f => ({ name: f.name.slice(0, 200), size: Math.floor(f.data.length * 0.75), type: String(f.type || "") }));
-    const userMsg = { id: "u-" + runId, role: "user", content: text, meta: { files: fileMeta, model, effort, mode, perm, ...(thinking === null ? {} : { thinking }) }, created: now };
+    const userMsg = { id: "u-" + runId, role: "user", content: text, meta: { files: fileMeta, model, effort, mode, perm }, created: now };
     this.sql.exec("INSERT INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'user', ?, ?, ?)", userMsg.id, chat.id, text, JSON.stringify(userMsg.meta), now);
     this.sql.exec("UPDATE chats SET running = ?, model = ?, effort = ?, updated = ? WHERE id = ?", runId, model, effort, now, chat.id);
     const ts = new TransformStream();
     this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], parts: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null, remote: null, at: Date.now() });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
-    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, ...(thinking === null ? {} : { thinking }), ...(free ? { context: this.earlierContext(chat.id, userMsg.id) } : {}), files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
-    this.armRun(runId, 30000, `${this.siteName()} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
+    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
+    this.armRun(runId, 30000, `${this.siteName()} didn't respond. Make sure ${this.commandName()} is running, then send again.`);
     return new Response(ts.readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
   }
 
@@ -1826,15 +1825,18 @@ export class ChatgqlHub extends DurableObject {
     };
     for (const f of files) {
       if (!f || typeof f.name !== "string") continue;
+      // where it is in the working folder, for the file browser
+      const path = typeof f.path === "string" ? cleanFsPath(f.path) : null;
+      const at = path ? { path } : {};
       if (f.tooBig && out.length < 16) {
         const name = f.name.slice(0, 120);
         const mime = mimeOf(name);
-        out.push({ id: null, name, mime, size: Number(f.size) || 0, kind: kindOf(mime, name), tooBig: true });
+        out.push({ id: null, name, mime, size: Number(f.size) || 0, kind: kindOf(mime, name), tooBig: true, ...at });
         continue;
       }
       if (typeof f.data !== "string") continue;
       try {
-        add(f.name.slice(0, 120), b64urlBytes(f.data));
+        add(f.name.slice(0, 120), b64urlBytes(f.data), at);
       } catch {}
     }
     const re = /```([A-Za-z]*)[^\n]*\n([\s\S]*?)```/g;
@@ -1854,6 +1856,117 @@ export class ChatgqlHub extends DurableObject {
       add(`${base}${pages > 1 && !title ? " " + pages : ""}.${isSvg ? "svg" : "html"}`, enc.encode(body), { inline: trimmed.length + ":" + trimmed.slice(0, 60) });
     }
     return out;
+  }
+
+  // The file browser: what's in the working folder on the computer, read and moved to the Trash only by the program there,
+  // which refuses anything outside it. Nothing is kept here.
+  filesBlocked() {
+    const ws = this.agent();
+    if (!ws) return json({ error: `${this.siteName()} is offline, so the files on your computer can't be shown. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
+    if (!(this.agentInfo(ws).caps || []).includes("files")) return json({ error: `Update ${this.siteName()} on your computer to see its files here.`, code: "agent_old" }, 409);
+    return null;
+  }
+
+  async listFiles(url) {
+    const no = this.filesBlocked();
+    if (no) return no;
+    const path = cleanFsPath(url.searchParams.get("path"));
+    if (path === null) return json({ error: "That isn't in the working folder.", code: "outside" }, 403);
+    const r = await this.askAgent({ type: "fs_list", path }, 20000, "files");
+    if (!r) return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
+    if (!r.ok) return fsError(r);
+    const entries = (Array.isArray(r.entries) ? r.entries.slice(0, 5000) : [])
+      .filter(e => e && typeof e.name === "string" && e.name && e.name.length <= 1024 && !/[/\0]/.test(e.name) && e.name !== "." && e.name !== "..")
+      .map(e => ({ name: e.name, dir: !!e.dir, size: Math.max(0, Math.round(Number(e.size)) || 0), mtime: Math.max(0, Math.round(Number(e.mtime)) || 0), kind: FS_KINDS.includes(e.kind) ? e.kind : "file", ...(e.link ? { link: true } : {}), ...(e.broken ? { broken: true } : {}) }));
+    return json({ path, root: typeof r.root === "string" ? r.root.slice(0, 1024) : "", total: Math.max(entries.length, Math.round(Number(r.total)) || 0), cut: !!r.cut, entries });
+  }
+
+  readPiece(path, offset, length) {
+    return this.askAgent({ type: "fs_read", path, offset, length }, 30000, "files");
+  }
+
+  // A file's bytes, a piece at a time as they're sent on, so a big one never sits here whole. Ranges are answered, which is
+  // how a browser plays a song or video and jumps around in it.
+  async serveFile(req, url) {
+    const no = this.filesBlocked();
+    if (no) return no;
+    const path = cleanFsPath(url.searchParams.get("path"));
+    if (path === null) return json({ error: "That isn't in the working folder.", code: "outside" }, 403);
+    if (!path) return json({ error: "That's a folder.", code: "not_file" }, 400);
+    const download = url.searchParams.has("download");
+    const range = parseRange(req.headers.get("range"));
+    const suffix = !!range && range.suffix !== undefined;
+    const first = await this.readPiece(path, range && !suffix ? range.start : 0, suffix ? 0 : FS_PIECE);
+    if (!first) return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
+    if (!first.ok) return fsError(first);
+    const size = Math.max(0, Math.round(Number(first.size)) || 0);
+    const name = typeof first.name === "string" && first.name ? first.name.slice(0, 255) : path.split("/").pop();
+    let start = 0;
+    let end = size - 1;
+    if (range) {
+      start = suffix ? Math.max(0, size - range.suffix) : range.start;
+      end = range.end !== undefined ? Math.min(range.end, size - 1) : size - 1;
+      if (start >= size || start > end) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}`, "cache-control": "no-store" } });
+      end = Math.min(end, start + FS_RANGE_MAX - 1);
+    }
+    const length = Math.max(0, end - start + 1);
+    const type = fileMime(name, first.kind);
+    const headers = {
+      "content-type": type,
+      "content-length": String(length),
+      "accept-ranges": "bytes",
+      "cache-control": "private, no-cache",
+      "x-content-type-options": "nosniff",
+      // a PDF shows in the browser's own viewer, which a sandbox would stop; nothing else here may run anything
+      "content-security-policy": type === "application/pdf" && !download ? "frame-ancestors 'self'" : "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'",
+      "content-disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(name)}`,
+      ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {})
+    };
+    const status = range ? 206 : 200;
+    if (req.method === "HEAD" || !length) return new Response(null, { status, headers });
+    let pos = start;
+    let ready = suffix ? null : b64urlBytes(String(first.data || ""));
+    const stream = new ReadableStream({
+      pull: async controller => {
+        try {
+          let bytes = ready;
+          ready = null;
+          if (!bytes) {
+            const r = await this.readPiece(path, pos, Math.min(FS_PIECE, end - pos + 1));
+            if (!r || !r.ok) throw new Error((r && r.error) || "Lost your computer while sending the file.");
+            bytes = b64urlBytes(String(r.data || ""));
+          }
+          if (!bytes.length) throw new Error("The file got shorter while it was being sent.");
+          bytes = bytes.subarray(0, end - pos + 1);
+          controller.enqueue(bytes);
+          pos += bytes.length;
+          if (pos > end) controller.close();
+        } catch (e) {
+          controller.error(e);
+        }
+      }
+    });
+    let body = stream;
+    // with its length known up front, a download shows how far along it is
+    if (typeof FixedLengthStream === "function") {
+      const fixed = new FixedLengthStream(length);
+      stream.pipeTo(fixed.writable).catch(() => {});
+      body = fixed.readable;
+    }
+    return new Response(body, { status, headers });
+  }
+
+  async trashFile(req) {
+    const no = this.filesBlocked();
+    if (no) return no;
+    const b = await req.json().catch(() => ({}));
+    const path = cleanFsPath(b.path);
+    if (path === null) return json({ error: "That isn't in the working folder.", code: "outside" }, 403);
+    if (!path) return json({ error: "The working folder itself can't be moved to the Trash.", code: "root" }, 400);
+    const r = await this.askAgent({ type: "fs_trash", path }, 120000, "files");
+    if (!r) return json({ error: "Couldn't reach your computer, so nothing was moved. Try again in a moment.", code: "offline" }, 503);
+    if (!r.ok) return fsError(r);
+    return json({ ok: true, where: r.where === "Recycle Bin" ? "Recycle Bin" : "Trash" });
   }
 
   serveArtifact(id, download) {
@@ -1887,8 +2000,6 @@ export class ChatgqlHub extends DurableObject {
     // Fable 5.1 turned away by Claude for want of usage credits says so plainly
     const error = m.error && model === "claude-fable-5-1" && NO_CREDITS_ERROR.test(String(m.error)) ? NO_CREDITS.none : m.error || null;
     const meta = { model, effort: r ? r.effort : chat.effort, mode: r ? r.mode : "code", perm: r ? r.perm : "auto", context: cleanContext(m.context), tools, error, denials: m.denials || 0, ms: m.ms || null, thinking: thinking.slice(0, 300000), thinkingMs: m.thinkingMs || (r && r.thinkingMs) || null, artifacts };
-    // the model the Claude app answered with, by its own name
-    if (typeof m.modelName === "string" && m.modelName.trim()) meta.modelName = m.modelName.replace(/\s+/g, " ").trim().slice(0, 40);
     const parts = this.partsMeta(r, text, meta.thinking);
     if (parts) meta.parts = parts;
     this.sql.exec("INSERT OR IGNORE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, 'assistant', ?, ?, ?)", "a-" + m.runId, chat.id, text, JSON.stringify(meta), now);

@@ -41,9 +41,8 @@ test("the model switcher is at the top, like ChatGPT's: the model and its effort
   assert.doesNotMatch(html, /id="effortBtn"|id="effortMenu"|class="stairs"|pickerBtn|picker-btn|renderPickerBtn|id="topTitle"/);
   assert.match(script, /put\("modelName", m\.name\)/);
   assert.match(script, /put\("effortName", EFF_LABEL\[e\]\)/);
-  // a model with no effort setting has nothing after its name; the free plan has no effort at all
+  // a model with no effort setting has nothing after its name
   assert.match(script, /\$\("effortName"\)\.hidden = !effortsOf\(m\)\.length/);
-  assert.match(lift("renderBar"), /if \(freePlan\(\)\) \{[\s\S]*?\$\("effortName"\)\.hidden = true;/);
   // Claude Code gives every model every effort now, Haiku 5.5 included; Ultracode only when the computer's Claude Code knows it
   assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF", "medium"]]);
   assert.match(script, /const EFF = \["low", "medium", "high", "xhigh", "max", "ultracode"\];/);
@@ -55,7 +54,7 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
   const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
-  const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, plan: "paid", ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
+  const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
   vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
   let menu = ctx.popEffort();
   assert.match(menu, /^<hr><div class="mh">Effort<\/div>/, "under the models, after a line");
@@ -76,21 +75,20 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
 
 test("the message box is one row like ChatGPT's: + on the left, the permission pill, ring and send on the right; no mode switch and no record button", () => {
   const lead = /<div class="c-lead">([\s\S]*?)<\/div>/.exec(html)[1];
-  assert.ok(lead.indexOf('id="attachBtn"') >= 0 && lead.indexOf('id="attachBtn"') < lead.indexOf('id="thinkBtn"'), "+, then the free plan's Thinking pill");
+  assert.ok(lead.indexOf('id="attachBtn"') >= 0, "+ on the left");
+  assert.doesNotMatch(html, /id="thinkBtn"/, "the free plan's Thinking pill went with it");
   const trail = /<div class="c-trail">([\s\S]*?)<\/form>/.exec(html)[1];
   const at = id => trail.indexOf(`id="${id}"`);
   assert.ok(at("permBtn") >= 0 && at("permBtn") < at("ctxBtn") && at("ctxBtn") < at("sendBtn"), "the permission pill, the context ring, then send");
   assert.match(html, /<textarea id="input" rows="1" placeholder="Ask anything"/);
   assert.match(html, /\.composer\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;grid-template-areas:"lead main trail";[^}]*min-height:56px;padding:10px;border-radius:28px/);
   assert.match(html, /\.composer\.tall\{grid-template-areas:"chips chips chips" "main main main" "lead \. trail"/);
-  // the free plan's extended thinking is a pill of its own, not the reasoning block's class (which pushed it out of line)
-  assert.match(html, /<button type="button" class="c-pill" id="thinkBtn" aria-pressed="false" hidden>/);
   assert.match(html, /\.msg \.think\{/);
-  // everything runs as Claude Code (or, on the free plan, in the Claude app): there's nothing to switch between
+  // everything runs as Claude Code: there's nothing to switch between
   assert.doesNotMatch(html, /data-mode=|id="modes"|MODE_NAME|modeNow|Plain chat with Claude/);
   assert.doesNotMatch(html, /record|dictat|microphone|id="mic/i);
   // what is sent says which permission mode it is, and no mode
-  assert.match(script, /JSON\.stringify\(\{ chatId: S\.chatId, text, model, effort, perm: permNow\(\), \.\.\.\(free \? \{ think: !!S\.think \} : \{\}\)/);
+  assert.match(script, /JSON\.stringify\(\{ chatId: S\.chatId, text, model, effort, perm: permNow\(\), files:/);
   // the permission modes are ones Claude Code can run on its own, and "Ask first", which asks on this page
   assert.deepEqual([...script.matchAll(/\{ id: "(auto|default|acceptEdits|plan)", name:/g)].map(m => m[1]), ["auto", "default", "acceptEdits", "plan"]);
   assert.match(script, /\{ id: "default", name: "Ask first",[^\n]*ask: true \}/);
@@ -172,10 +170,6 @@ test("the page calls its assistant by the site's name, never Claude", () => {
   // links to claude.ai keep saying where to go
   const shown = ui.replace(/claude\.ai|ClaudeConnect|claude-[a-z0-9-]+|claude auth login/g, "");
   assert.deepEqual(shown.split("\n").filter(l => /Claude/.test(l)).map(l => l.trim().slice(0, 80)), []);
-  // a model the Claude app hasn't named yet shows as the site, the way ChatGPT's switcher says "ChatGPT"
-  assert.match(lift("appModelName"), /\|\| CFG\.name;/);
-  // locked models in the free plan's menu say what they need without the product's name
-  assert.match(lift("popModel"), /Needs a paid plan/);
 });
 
 test("the top bar has the model switcher, the update button and the chat's ⋯; the sidebar has ChatGPT's shortcuts", () => {
@@ -419,7 +413,7 @@ test("Plan usage reads the latest as soon as it opens, and has no Refresh button
   assert.match(lift("openUsage"), /renderUsage\(\);\n  refreshUsage\(\);/);
   assert.doesNotMatch(script, /data-usage="refresh"|data-usage=refresh|I\.retry \+ "Refresh"/);
   // "You've hit a limit" only from the site's own reckoning, which knows about usage credits and resets
-  assert.match(script, /if \(l\.limited\) html \+= `<div class="note err">You've hit \$\{free \? "your free plan's" : "a"\} limit/);
+  assert.match(script, /if \(l\.limited\) html \+= `<div class="note err">You've hit a limit/);
   assert.doesNotMatch(script, /status === "rejected"/);
 });
 
@@ -435,20 +429,20 @@ function picker(state, extra = {}) {
   const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
-  const ctx = { TICK: "", I: { info: "", lock: "" }, APP_DEFAULT: "app-default", APP: { loading: false }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", appModel: "app-default", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "freePlan", "fableOk", "paidModels", "appInfo", "appModels", "appModelNow", "appModelName", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
+  const ctx = { TICK: "", I: { info: "", lock: "" }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
   return ctx;
 }
 
 test("Fable 5.1 is only in the model picker when there are usage credits to spend, with no setting for it", () => {
   assert.doesNotMatch(html, /CFG\.fable|fFable|SHOW_FABLE|Fable 5\.1 in the model picker/);
-  let p = picker({ agent: { online: true, plan: "paid" }, fable: { available: true } });
+  let p = picker({ agent: { online: true }, fable: { available: true } });
   assert.match(p.popModel(), /<b>Fable 5\.1<\/b>[\s\S]*?<span class="tag">Uses usage credits<\/span>/);
   assert.equal(p.modelNow(), "claude-fable-5-1");
   // the models, then the picked model's efforts, as one menu
   assert.match(p.popModel(), /^<div class="mh">Model<\/div>[\s\S]*data-model="claude-haiku-5-5"[\s\S]*<div class="mh">Effort<\/div>[\s\S]*data-effort="max"/);
   for (const why of ["out", "off", "none", "site", "unknown"]) {
-    p = picker({ agent: { online: true, plan: "paid" }, fable: { available: false, why } });
+    p = picker({ agent: { online: true }, fable: { available: false, why } });
     assert.doesNotMatch(p.popModel(), /Fable/, why);
     assert.equal(p.modelNow(), "claude-opus-5-5", "picked before, it falls back while there are none");
   }
@@ -456,29 +450,11 @@ test("Fable 5.1 is only in the model picker when there are usage credits to spen
   assert.match(script, /j\.code === "no_credits"\) loadState\(\);/);
 });
 
-test("on the free plan the model picker lists the Claude app's own models, and nothing that needs a paid plan can be picked", () => {
-  const app = { models: [{ id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Smart", locked: false }, { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Upgrade to Pro", locked: true }], thinking: false, model: "Sonnet 5.5" };
-  const p = picker({ agent: { online: true, plan: "free", app }, fable: { available: true } }, { appModel: "claude-opus-5-5" });
-  const menu = p.popModel();
-  assert.doesNotMatch(menu, /Fable|Haiku/, "Claude Code's models aren't these");
-  assert.doesNotMatch(menu, /data-effort|Effort/, "and the free plan has no effort");
-  assert.match(menu, /data-model="app-default"[\s\S]*now Sonnet 5\.5/);
-  assert.match(menu, /data-model="claude-opus-5-5" type="button" role="menuitemradio" aria-checked="false" disabled aria-disabled="true"><span class="tx"><b>Opus 5\.5<\/b>[\s\S]*?<span class="tag">Needs a paid plan<\/span>/);
-  assert.equal(p.modelNow(), "app-default", "a locked model picked before isn't sent");
-  p.S.appModel = "claude-sonnet-5-5";
-  assert.equal(p.modelNow(), "claude-sonnet-5-5");
-  // before the app has said what it has, the picker says where they come from, and asks the computer to read them
-  const empty = picker({ agent: { online: true, plan: "free", app: null }, fable: {} });
-  assert.match(empty.popModel(), /The desktop app's models show here once it has opened on your computer/);
-  assert.match(lift("openPop"), /if \(name === "model"\) refreshAppModels\(\);/);
-  assert.match(lift("refreshAppModels"), /apiJson\("\/api\/app\/refresh"/);
-});
-
-test("the context ring isn't there in an empty message box, only in a chat with a reading, and never on the free plan", () => {
+test("the context ring isn't there in an empty message box, only in a chat with a reading", () => {
   const els = {};
   const $ = id => (els[id] = els[id] || { hidden: false, className: "", title: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
-  const ctx = { $, CIRC: 56.549, popOpen: null, closePop: () => {}, S: { chatId: null, ctx: null, state: { agent: { plan: "paid" } } } };
-  vm.runInNewContext(["agentNow", "freePlan", "ctxPct", "renderCtx"].map(lift).join("") + "this.renderCtx = renderCtx;", ctx);
+  const ctx = { $, CIRC: 56.549, popOpen: null, closePop: () => {}, S: { chatId: null, ctx: null } };
+  vm.runInNewContext(["ctxPct", "renderCtx"].map(lift).join("") + "this.renderCtx = renderCtx;", ctx);
   ctx.renderCtx();
   assert.equal(els.ctxBtn.hidden, true, "a new chat, before anything is sent");
   ctx.S.chatId = "c1";
@@ -487,21 +463,15 @@ test("the context ring isn't there in an empty message box, only in a chat with 
   ctx.S.ctx = { used: 150000, window: 200000 };
   ctx.renderCtx();
   assert.equal(els.ctxBtn.hidden, false);
-  ctx.S.state.agent.plan = "free";
-  ctx.renderCtx();
-  assert.equal(els.ctxBtn.hidden, true, "the Claude app doesn't say how full it is");
 });
 
-test("there's no setting for the credit balance or for which chats are listed; the plan, starting at login and the working folder are there", () => {
+test("there's no setting for the credit balance, which chats are listed or the plan; starting at login and the working folder are there", () => {
   assert.doesNotMatch(script, /Show your usage credit balance|Working folder only|data-pc="history"|data-pc="credits"|SCOPES/);
   const pc = lift("computerHtml");
-  assert.match(pc, /data-pc="plan" data-value="\$\{k\}"/);
+  assert.doesNotMatch(script, /data-pc="plan"|PLAN_KINDS|Free plan|free plan/);
   assert.match(pc, /data-pc="autostart"/);
   assert.match(pc, /Makes it a startup item on this computer/);
   assert.match(pc, /id="fWs"/);
-  assert.match(script, /const PLAN_KINDS = \[\["paid", "Paid plan"\], \["free", "Free plan"\]\];/);
-  // switching the plan is confirmed, since it changes where replies come from
-  assert.match(lift("setComputer"), /if \(key === "plan" && !confirm\(/);
 });
 
 test("everything `<command> edit` asks about can also be changed on the page", () => {
@@ -512,9 +482,9 @@ test("everything `<command> edit` asks about can also be changed on the page", (
     [/Change the name\?/, /id="fName"/],
     [/Change the logo\?/, /imgField\("logo"/],
     [/Change the tab icon\?/, /imgField\("favicon"/],
+    [/Change the tab title/, /id="fTab"/],
     [/Change the theme\?/, /data-theme-set=/],
     [/when you log in to this computer\?/, /data-pc="autostart"/],
-    [/Switch to the free plan\?|Do you have a paid plan now/, /data-pc="plan"/],
     [/Change the working folder/, /id="fWs"/],
     [/usage credits from the site\?/, /data-usage="credits"/],
     [/Change the address\?/, /data-act="move"/],
@@ -525,7 +495,7 @@ test("everything `<command> edit` asks about can also be changed on the page", (
     assert.match(script, shown, String(asked));
   }
   // and nothing it no longer asks
-  assert.doesNotMatch(edit, /usage credit balance|which of Claude Code.s chats|(Show|Hide) Fable/);
+  assert.doesNotMatch(edit, /usage credit balance|which of Claude Code.s chats|(Show|Hide) Fable|free plan|paid plan now/);
 });
 
 test("something waiting on the computer shows over the page, escaped, and the answer goes back for that reply", () => {
@@ -545,14 +515,6 @@ test("something waiting on the computer shows over the page, escaped, and the an
   assert.equal(els.remote.hidden, false, "only its own id closes it");
   ctx.hideRemote("a1");
   assert.equal(els.remote.hidden, true);
-  // the Claude app's window: a picture to click, and its buttons
-  ctx.showRemote({ id: "s1", kind: "screen", title: "Allow Claude to read <x>?", image: "QUJD", buttons: [{ label: "Deny" }, { label: "Allow once" }], at: 2 });
-  assert.equal(els.rName.textContent, "Desktop app on your computer", "a window of the desktop app, which you answer as if you were at it");
-  assert.match(els.rBody.innerHTML, /<button class="rshot" type="button" data-rshot[^>]*><img src="data:image\/jpeg;base64,QUJD"/);
-  assert.match(els.rBody.innerHTML, /data-rbutton="0">Deny<\/button><button class="btn primary" type="button" data-rbutton="1">Allow once<\/button>/);
-  assert.match(els.rBody.innerHTML, /Allow Claude to read &lt;x>\?/);
-  // a click on the picture is sent as where it was, as a share of the picture's size
-  assert.match(script, /answerRemote\(\{ click: \{ x: \(e\.clientX - r\.left\) \/ r\.width, y: \(e\.clientY - r\.top\) \/ r\.height \} \}\)/);
   assert.match(lift("answerRemote"), /apiJson\("\/api\/remote", \{ method: "POST"[^\n]*JSON\.stringify\(\{ chatId: S\.chatId, id: R\.q\.id, \.\.\.body \}\)/);
 });
 

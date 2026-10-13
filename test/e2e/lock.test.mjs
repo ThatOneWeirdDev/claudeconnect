@@ -18,7 +18,7 @@ test("a site without Cloudflare Access is closed to everyone, and says how its o
   assert.match(p.html, /Enable Cloudflare Access/);
   assert.match(p.html, /Manage Cloudflare Access/);
   assert.match(p.html, /<b>your own email address<\/b>/);
-  assert.match(p.html, /TestConnect<\/code> <code>claim/);
+  assert.match(p.html, /TestSite<\/code> <code>claim/);
   // the steps name this Worker, taken from the address it was reached at
   assert.match(p.html, /<b>127<\/b>/);
   assert.match(p.html, /dash\.cloudflare\.com\/\?to=\/:account\/workers\/services\/view\/127\//);

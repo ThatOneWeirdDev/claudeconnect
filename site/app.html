@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <script>try{var t=JSON.parse(localStorage.getItem("gql.theme"));if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
-<title>__SITE_NAME__</title>
+<title>__TAB_TITLE__</title>
 <link rel="icon" href="/favicon">
 <style>
 /* The look follows ChatGPT's as it is now, with the colours of OpenAI's own design system (apps-sdk-ui): a white page and
@@ -393,7 +393,7 @@ svg{display:block;flex:none}
 .c-icon{width:36px;height:36px;border-radius:9999px;display:grid;place-items:center;color:var(--text);flex:none;cursor:pointer}
 .c-icon:hover{background:var(--hover-2)}
 .c-icon svg,.send svg{width:20px;height:20px}
-/* a tool pill, like ChatGPT's: the permission mode, and on the free plan "Thinking" (grey while it's off) */
+/* a tool pill, like ChatGPT's: the permission mode */
 .c-pill{display:inline-flex;align-items:center;gap:4px;height:36px;padding:0 10px;border-radius:9999px;font-size:14px;line-height:20px;color:var(--accent);white-space:nowrap;flex:none;cursor:pointer}
 .c-pill svg{width:20px;height:20px}
 .c-pill:hover,.c-pill[aria-expanded="true"]{background:color-mix(in oklab,var(--accent) 12%,transparent)}
@@ -437,11 +437,75 @@ svg{display:block;flex:none}
 .rbody{padding:20px;overflow:auto}
 .rbody h3{margin:0 0 12px;font-size:18px;font-weight:600;line-height:26px}
 .rbody pre{margin:0 0 16px;padding:12px 16px;max-height:42vh;overflow:auto;background:var(--code);border-radius:12px;font:13px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
-.rshot{display:block;width:100%;margin:0 0 14px;padding:0;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--border);cursor:pointer;background:#fff}
-.rshot img{display:block;width:100%;height:auto}
-.rshot:disabled{cursor:progress;opacity:.7}
 .rnote{margin:0 0 16px;color:var(--text-2);font-size:14px;line-height:20px}
 .rbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+
+/* ---- the file browser: the working folder on the computer, over the whole page. Folders and files on the left, the one
+   picked on the right; on a phone, one then the other. */
+.files{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;background:var(--surface);color:var(--text);animation:fade .15s ease-out}
+.fb-head{flex:none;display:flex;align-items:center;gap:4px;height:52px;padding:0 8px 0 16px;border-bottom:1px solid var(--border-0)}
+.fb-title{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.fb-title h2{margin:0;font-size:18px;line-height:28px;font-weight:600;white-space:nowrap}
+.crumbs{display:flex;align-items:center;min-width:0;overflow-x:auto;scrollbar-width:none}
+.crumbs::-webkit-scrollbar{display:none}
+.crumbs button{flex:none;max-width:240px;height:32px;padding:0 8px;border-radius:8px;font-size:14px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumbs button:hover{background:var(--hover);color:var(--text)}
+.crumbs button[aria-current]{color:var(--text);font-weight:500}
+.crumbs .sep{flex:none;display:grid;color:var(--text-3)}
+.crumbs .sep svg{width:14px;height:14px}
+.fb-head .icon-btn[aria-pressed="true"]{background:var(--select)}
+.fb-head svg,.fb-vhead svg{width:20px;height:20px}
+.fb-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr)}
+.fb-side{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--border-0)}
+.fb-list{flex:1;min-height:0;overflow-y:auto;padding:6px;overscroll-behavior:contain}
+.fb-foot{flex:none;padding:8px 16px;border-top:1px solid var(--border-0);color:var(--text-3);font-size:12px;line-height:16px}
+.fb-foot:empty{display:none}
+.fb-row{display:flex;align-items:center;gap:2px;border-radius:10px}
+.fb-row:hover{background:var(--hover)}
+.fb-row.on{background:var(--select)}
+.fb-open{flex:1;min-width:0;display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 4px 6px 8px;text-align:left;color:var(--text)}
+.fb-ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--hover-2);color:var(--text-2);flex:none}
+.fb-ico svg{width:18px;height:18px}
+.fb-ico.k-folder{color:var(--accent)}
+.fb-ico.k-image{color:var(--hl-4)}
+.fb-ico.k-audio{color:var(--hl-5)}
+.fb-ico.k-video{color:var(--hl-1)}
+.fb-ico.k-pdf{color:var(--danger-text)}
+.fb-ico.k-text{color:var(--hl-3)}
+.fb-open .tx{min-width:0;display:flex;flex-direction:column}
+.fb-open b{font-weight:400;font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fb-open small{color:var(--text-3);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fb-row .icon-btn{width:32px;height:32px;margin-right:6px;color:var(--text-2);opacity:0}
+.fb-row .icon-btn svg{width:18px;height:18px}
+.fb-row:hover .icon-btn,.fb-row:focus-within .icon-btn,.fb-row.on .icon-btn{opacity:1}
+.fb-row .icon-btn:hover{color:var(--danger-text);background:var(--danger-soft)}
+.fb-view{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--surface-2)}
+.fb-vhead{flex:none;display:flex;align-items:center;gap:4px;height:56px;padding:0 8px 0 20px;border-bottom:1px solid var(--border-0);background:var(--surface)}
+.fb-vhead:empty{display:none}
+.fb-vhead .danger:hover{color:var(--danger-text);background:var(--danger-soft)}
+.fb-vbody{flex:1;min-height:0;overflow:auto;position:relative}
+.fb-vbody iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.fb-vbody .p-img{height:100%;min-height:0}
+.fb-vbody .p-img img{max-height:100%;object-fit:contain}
+.fb-media{display:grid;place-items:center;min-height:100%;padding:32px 24px}
+.fb-media video{display:block;max-width:100%;max-height:calc(100dvh - 190px);border-radius:12px;background:#000;box-shadow:var(--shadow)}
+.fb-audio{display:flex;flex-direction:column;align-items:center;gap:16px;width:min(480px,100%);padding:28px 24px;border-radius:20px;background:var(--surface);box-shadow:var(--shadow-s);text-align:center}
+.fb-audio .fb-ico{width:72px;height:72px;border-radius:18px}
+.fb-audio .fb-ico svg{width:34px;height:34px}
+.fb-audio b{font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fb-audio audio{width:100%}
+.fb-note{margin:0;padding:8px 18px;border-bottom:1px solid var(--border-0);background:var(--surface);color:var(--text-3);font-size:12px;line-height:16px}
+.fb-vbody .p-code{min-height:0}
+@media (max-width:860px){
+  .fb-head{height:calc(52px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 4px 0 12px}
+  .fb-head .icon-btn,.fb-vhead .icon-btn{width:40px;height:40px}
+  .fb-main{grid-template-columns:minmax(0,1fr)}
+  .fb-side{border-right:0}
+  .files.viewing .fb-side,.files:not(.viewing) .fb-view{display:none}
+  .fb-vhead{padding:0 4px}
+  .fb-row .icon-btn{opacity:1}
+  .fb-list,.fb-vbody{padding-bottom:env(safe-area-inset-bottom)}
+}
 
 /* ---- dialogs: Settings (tabs on the left, the close button above them), Plan usage, and the update checklist */
 .dlg{width:min(680px,calc(100vw - 24px));height:min(600px,calc(100dvh - 32px));padding:0;border:0;border-radius:16px;background:var(--elevated);color:var(--text);box-shadow:var(--shadow);overflow:hidden}
@@ -660,7 +724,6 @@ svg{display:block;flex:none}
           <div class="c-lead">
             <button type="button" class="c-icon" id="attachBtn" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.59C12.58 3.59 13.06 4.07 13.06 4.66V10.93H19.33C19.92 10.93 20.4 11.41 20.4 12C20.4 12.58 19.92 13.06 19.33 13.06H13.06V19.33C13.06 19.92 12.58 20.4 12 20.4C11.41 20.4 10.93 19.92 10.93 19.33V13.06H4.66C4.07 13.06 3.59 12.58 3.59 12C3.59 11.41 4.07 10.93 4.66 10.93H10.93V4.66C10.93 4.07 11.41 3.59 12 3.59Z" fill="currentColor"/></svg></button>
             <input type="file" id="fileInput" multiple hidden>
-            <button type="button" class="c-pill" id="thinkBtn" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg><span>Thinking</span></button>
           </div>
           <textarea id="input" rows="1" placeholder="Ask anything" aria-label="Message"></textarea>
           <div class="c-trail">
@@ -679,6 +742,7 @@ svg{display:block;flex:none}
       <div class="tabs" id="pTabs" hidden><button type="button" data-tab="preview">Preview</button><button type="button" data-tab="code">Code</button></div>
       <button class="icon-btn" id="pCopy" type="button" title="Copy" aria-label="Copy"></button>
       <a class="icon-btn" id="pDownload" title="Download" aria-label="Download"></a>
+      <button class="icon-btn" id="pReveal" type="button" title="Show in file browser" aria-label="Show in file browser" hidden></button>
       <button class="icon-btn" id="pClose" type="button" title="Close" aria-label="Close preview"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
     </div>
     <div class="p-body" id="pBody"></div>
@@ -690,6 +754,13 @@ svg{display:block;flex:none}
 <div id="toast" class="toast" hidden role="status"></div>
 <div class="remote" id="remote" hidden role="dialog" aria-modal="true" aria-labelledby="rName">
   <div class="rwin"><div class="rbar"><span class="rdots" aria-hidden="true"><i></i><i></i><i></i></span><span class="rname" id="rName"></span></div><div class="rbody" id="rBody"></div></div>
+</div>
+<div class="files" id="files" hidden role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="fb-head" id="fbHead"></div>
+  <div class="fb-main">
+    <div class="fb-side"><div class="fb-list" id="fbList" role="list" aria-label="Files"></div><div class="fb-foot" id="fbFoot"></div></div>
+    <section class="fb-view" id="fbView" aria-label="Preview"><div class="fb-vhead" id="fbVHead"></div><div class="fb-vbody" id="fbVBody"></div></section>
+  </div>
 </div>
 <dialog class="dlg" id="setDlg" aria-labelledby="setTitle">
   <div class="dlg-head">
@@ -735,12 +806,8 @@ const PERM_MODES = [
   { id: "acceptEdits", name: "Accept edits", desc: "Edits files without asking. Anything else that needs approval is asked here, or skipped." },
   { id: "plan", name: "Plan", desc: "Looks around and writes a plan. Changes nothing." }
 ];
-// On the free plan the model picker lists the Claude app's own models; "app-default" leaves the app on the one it has picked.
-const APP_DEFAULT = "app-default";
 const S = {
   model: store.get("model", DEFAULT_MODEL),
-  appModel: store.get("appModel", APP_DEFAULT),
-  think: store.get("think", false),
   perm: store.get("perm", "auto"),
   ctx: null,
   efforts: store.get("efforts", {}),
@@ -789,6 +856,14 @@ const I = {
   k_pdf: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.5 15.70V8.29C3.5 7.47 3.49 6.79 3.54 6.24C3.58 5.68 3.68 5.16 3.93 4.68L4.08 4.40C4.47 3.78 5.02 3.27 5.68 2.93L5.86 2.84C6.29 2.66 6.75 2.58 7.24 2.54C7.79 2.49 8.47 2.50 9.29 2.50H13.51C14.19 2.50 14.70 2.49 15.19 2.61L15.49 2.69C15.79 2.79 16.07 2.92 16.34 3.08L16.50 3.19C16.86 3.44 17.18 3.77 17.61 4.19L18.80 5.38L19.14 5.72C19.46 6.05 19.71 6.33 19.91 6.65L20.06 6.92C20.20 7.20 20.31 7.50 20.38 7.80L20.42 7.99C20.50 8.42 20.5 8.88 20.5 9.48V15.70C20.5 16.52 20.50 17.20 20.45 17.75C20.41 18.24 20.33 18.70 20.15 19.13L20.06 19.31C19.72 19.97 19.21 20.52 18.59 20.91L18.31 21.06C17.83 21.31 17.31 21.41 16.75 21.45C16.20 21.50 15.52 21.5 14.70 21.5H9.29C8.47 21.5 7.79 21.50 7.24 21.45C6.75 21.41 6.29 21.33 5.86 21.15L5.68 21.06C5.02 20.72 4.47 20.21 4.08 19.59L3.93 19.31C3.68 18.83 3.58 18.31 3.54 17.75C3.49 17.20 3.5 16.52 3.5 15.70ZM13 13C13.55 13 14 13.44 14 14C14 14.55 13.55 15 13 15H9C8.44 15 8 14.55 8 14C8 13.44 8.44 13 9 13H13ZM15 9.00C15.55 9.00 16 9.44 16 10C16 10.55 15.55 11 15 11H9C8.44 11 8 10.55 8 10C8 9.44 8.44 9.00 9 9.00H15ZM5.5 15.70C5.5 16.55 5.50 17.13 5.53 17.58C5.57 18.02 5.63 18.25 5.71 18.40L5.79 18.54C5.98 18.85 6.26 19.11 6.59 19.28L6.72 19.33C6.87 19.39 7.08 19.43 7.41 19.46C7.86 19.49 8.44 19.5 9.29 19.5H14.70C15.55 19.5 16.13 19.49 16.58 19.46C17.02 19.42 17.25 19.36 17.40 19.28L17.54 19.20C17.85 19.01 18.11 18.73 18.28 18.40L18.33 18.27C18.39 18.12 18.43 17.91 18.46 17.58C18.49 17.13 18.5 16.55 18.5 15.70V9.48C18.5 8.90 18.49 8.62 18.47 8.44L18.44 8.27C18.40 8.12 18.35 7.97 18.28 7.83L18.20 7.69C18.12 7.56 18.01 7.43 17.73 7.14L17.38 6.80L16.19 5.61C15.78 5.19 15.58 5.00 15.44 4.89L15.30 4.79C15.16 4.71 15.02 4.64 14.87 4.59L14.72 4.55C14.52 4.50 14.29 4.50 13.51 4.50H9.29C8.44 4.50 7.86 4.50 7.41 4.53C7.08 4.56 6.87 4.60 6.72 4.66L6.59 4.71C6.26 4.88 5.98 5.14 5.79 5.45L5.71 5.59C5.63 5.74 5.57 5.97 5.53 6.41C5.50 6.86 5.5 7.44 5.5 8.29V15.70Z" fill="currentColor"/></svg>',
   k_image: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.83 5C9.09 5 8.50 5.59 8.50 6.33C8.50 7.06 9.09 7.66 9.83 7.66C10.57 7.66 11.16 7.06 11.16 6.33C11.16 5.59 10.57 5 9.83 5ZM6.50 6.33C6.50 4.49 7.99 3 9.83 3C11.67 3 13.16 4.49 13.16 6.33C13.16 8.17 11.67 9.66 9.83 9.66C7.99 9.66 6.50 8.17 6.50 6.33ZM13.37 11.42C14.37 9.89 16.62 9.91 17.59 11.46L20.68 16.41C21.93 18.40 20.49 21 18.14 21H5.78C3.24 21 1.85 18.02 3.48 16.07L6.21 12.81C7.13 11.72 8.79 11.62 9.83 12.59L11.34 14.00C11.45 14.11 11.64 14.08 11.72 13.95L13.37 11.42ZM15.89 12.52C15.70 12.21 15.25 12.20 15.05 12.51L13.40 15.05C12.63 16.22 11.00 16.41 9.98 15.46L8.47 14.06C8.26 13.86 7.93 13.88 7.75 14.10L5.02 17.35C4.47 18.00 4.93 19 5.78 19H18.14C18.92 19 19.40 18.13 18.98 17.47L15.89 12.52Z" fill="currentColor"/></svg>'
 };
+// drawn with lines, at the weight of the filled ones
+const LINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+I.folder = LINE + '<path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.4a2 2 0 0 1 1.42.59L12.24 7H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-9Z"/></svg>';
+I.back = LINE + '<path d="M15 5l-7 7 7 7"/></svg>';
+I.eye = LINE + '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+I.refresh = LINE + '<path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>';
+I.k_audio = LINE + '<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>';
+I.k_video = LINE + '<rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/></svg>';
 I.k_web = I.globe;
 I.k_doc = I.k_pdf;
 const KIND = { web: "Web page", image: "Image", pdf: "PDF", doc: "Document", code: "Code", file: "File" };
@@ -820,7 +895,8 @@ function runLabel(model, effort) {
 function fmtSize(n) {
   if (n < 1024) return n + " B";
   if (n < 1048576) return Math.round(n / 1024) + " KB";
-  return (n / 1048576).toFixed(1) + " MB";
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+  return (n / 1073741824).toFixed(1) + " GB";
 }
 function toast(msg, ms) {
   const t = $("toast");
@@ -1010,24 +1086,15 @@ const TICK = I.check.replace("<svg", '<svg class="tick"');
 const CIRC = 56.549;
 function permOf(id) { return PERM_MODES.find(x => x.id === id) || PERM_MODES[0]; }
 function agentNow() { return (S.state && S.state.agent) || null; }
-// The free plan: replies come from the Claude app on the computer. Known from the computer, or from what it said last time.
-function freePlan() { const a = agentNow(); return !!a && a.plan === "free"; }
-// How freely Claude Code acts: not on the free plan, and not with an older program on the computer that can't.
-function permsOk() { const a = agentNow(); return !freePlan() && !(a && a.online && a.modes === false); }
+// How freely Claude Code acts: not with an older program on the computer that can't.
+function permsOk() { const a = agentNow(); return !(a && a.online && a.modes === false); }
 function permsShown() { const a = agentNow(); return PERM_MODES.filter(x => !x.ask || (a && a.ask)); }
 function permNow() { return permsShown().some(x => x.id === S.perm) ? S.perm : "auto"; }
 // Fable 5.1 runs on usage credits, so it's only in the picker when there are some to spend.
 function fableOk() { return !!(S.state && S.state.fable && S.state.fable.available); }
 function paidModels() { return ALL_MODELS.filter(m => !m.credits || fableOk()); }
-function appInfo() { const a = agentNow(); return (a && a.app) || null; }
-function appModels() { const i = appInfo(); return (i && i.models) || []; }
-function appModelNow() { return appModels().some(m => m.id === S.appModel && !m.locked) ? S.appModel : APP_DEFAULT; }
-function appModelName(id) {
-  const m = appModels().find(x => x.id === id);
-  return m ? m.name : (appInfo() && appInfo().model) || CFG.name;
-}
-// the model the next message goes to, on either plan
-function modelNow() { return freePlan() ? appModelNow() : paidModels().some(m => m.id === S.model) ? S.model : DEFAULT_MODEL; }
+// the model the next message goes to
+function modelNow() { return paidModels().some(m => m.id === S.model) ? S.model : DEFAULT_MODEL; }
 function ctxOf(meta) { const c = meta && meta.context; return c && c.window > 0 && c.used >= 0 ? { used: c.used, window: c.window } : null; }
 function fmtTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n); }
 function ctxPct(c) { const f = c ? Math.min(1, c.used / c.window) : 0; return { f, text: !c ? "0%" : f * 100 < 1 ? "<1%" : Math.round(f * 100) + "%" }; }
@@ -1035,27 +1102,13 @@ function ctxPct(c) { const f = c ? Math.min(1, c.used / c.window) : 0; return { 
 // The model switcher at the top, like ChatGPT's "ChatGPT 5 Thinking": the model, then the effort in grey. Its menu has both.
 function renderBar() {
   const put = (id, v) => { if ($(id).textContent !== v) $(id).textContent = v; };
-  if (freePlan()) {
-    const id = appModelNow();
-    const name = appModelName(id);
-    put("modelName", name);
-    $("modelBtn").setAttribute("aria-label", `Choose model. Now: ${name}`);
-    // the free plan has no effort; extended thinking is a pill in the message box, when the Claude app has the switch for it
-    $("effortName").hidden = true;
-    const i = appInfo();
-    $("thinkBtn").hidden = !(i && typeof i.thinking === "boolean");
-    $("thinkBtn").setAttribute("aria-pressed", String(!!S.think));
-    $("thinkBtn").title = S.think ? "Extended thinking is on" : "Extended thinking is off";
-  } else {
-    const m = modelOf(modelNow());
-    const e = effortFor(m.id);
-    put("modelName", m.name);
-    // a model with no effort setting has nothing after its name
-    $("effortName").hidden = !effortsOf(m).length;
-    $("thinkBtn").hidden = true;
-    if (e) put("effortName", EFF_LABEL[e]);
-    $("modelBtn").setAttribute("aria-label", `Choose model and effort. Now: ${m.name}${e ? ", " + EFF_LABEL[e] : ""}`);
-  }
+  const m = modelOf(modelNow());
+  const e = effortFor(m.id);
+  put("modelName", m.name);
+  // a model with no effort setting has nothing after its name
+  $("effortName").hidden = !effortsOf(m).length;
+  if (e) put("effortName", EFF_LABEL[e]);
+  $("modelBtn").setAttribute("aria-label", `Choose model and effort. Now: ${m.name}${e ? ", " + EFF_LABEL[e] : ""}`);
   $("permBtn").hidden = !permsOk();
   put("permName", permOf(permNow()).name);
   $("permBtn").setAttribute("aria-label", `Permissions: ${permOf(permNow()).name}`);
@@ -1067,7 +1120,7 @@ function renderBar() {
 function renderCtx() {
   const c = S.ctx;
   const { f, text } = ctxPct(c);
-  $("ctxBtn").hidden = freePlan() || !S.chatId || !c;
+  $("ctxBtn").hidden = !S.chatId || !c;
   $("ctxBar").setAttribute("stroke-dashoffset", String(CIRC * (1 - f)));
   $("ctxBtn").className = "ring" + (f >= 0.92 ? " high" : f >= 0.8 ? " mid" : "");
   const label = c ? `Context ${text} used` : "Context is empty";
@@ -1078,47 +1131,13 @@ function renderCtx() {
 }
 
 function noteHtml() { return switchNote() ? `<div class="pick-note">${I.info}<span>${esc(switchNote())}</span></div>` : ""; }
-const APP = { loading: false, asked: 0 };
 // One row of a menu: a title, a line under it, and a tick on the chosen one.
 function pmRow(attrs, on, title, desc, extra) {
   return `<button class="pm${on ? " on" : ""}" ${attrs} type="button" role="menuitemradio" aria-checked="${on}"><span class="tx"><b>${title}</b>${desc ? `<small>${desc}</small>` : ""}${extra || ""}</span>${TICK}</button>`;
 }
-// The model switcher's menu: the models, then (on a paid plan) the efforts of the one picked.
+// The model switcher's menu: the models, then the efforts of the one picked.
 function popModel() {
-  if (freePlan()) {
-    const cur = appModelNow();
-    const now = appInfo() && appInfo().model;
-    const head = `<div class="mh">Model</div>` + pmRow(`data-model="${APP_DEFAULT}"`, cur === APP_DEFAULT, "The app's choice", esc(now ? `Whatever the desktop app has picked: now ${now}` : "Whatever the desktop app has picked"));
-    const list = appModels();
-    if (!list.length) return head + `<div class="pick-note">${I.info}<span>${APP.loading ? "Reading the models in the desktop app on your computer…" : "The desktop app's models show here once it has opened on your computer."}</span></div>`;
-    return head + list.map(x => x.locked
-      ? `<button class="pm" data-model="${esc(x.id)}" type="button" role="menuitemradio" aria-checked="false" disabled aria-disabled="true"><span class="tx"><b>${esc(x.name)}</b><small>${esc(x.desc || "")}</small><span class="tag">${I.lock}Needs a paid plan</span></span>${TICK}</button>`
-      : pmRow(`data-model="${esc(x.id)}"`, x.id === cur, esc(x.name), esc(x.desc || ""))).join("");
-  }
   return `<div class="mh">Model</div>` + paidModels().map(x => pmRow(`data-model="${x.id}"`, x.id === modelNow(), x.name, x.desc, x.tag ? `<span class="tag">${x.tag}</span>` : "")).join("") + popEffort() + noteHtml();
-}
-// On the free plan the picker asks the computer to read the Claude app's model menu, when it hasn't for a while.
-async function refreshAppModels() {
-  const i = appInfo();
-  if (!freePlan() || APP.loading || (i && i.models.length && Date.now() - (i.at || 0) < 10 * 60000) || Date.now() - APP.asked < 15000) return;
-  APP.loading = true;
-  APP.asked = Date.now();
-  if (popOpen === "model") $("modelMenu").innerHTML = popModel();
-  try {
-    await apiJson("/api/app/refresh", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    const was = (i && i.at) || 0;
-    for (let k = 0; k < 30; k++) {
-      await new Promise(r => setTimeout(r, 1500));
-      await loadState();
-      const n = appInfo();
-      if (n && (n.at || 0) > was) break;
-    }
-  } catch (e) {
-    if (e.message !== "Signed out") toast(e.message);
-  }
-  APP.loading = false;
-  if (popOpen === "model") $("modelMenu").innerHTML = popModel();
-  renderBar();
 }
 // Every effort the model has, Low to Max, and Ultracode when the computer can do it.
 function popEffort() {
@@ -1139,9 +1158,9 @@ function popCtx() {
   if (!c) return '<div class="ctx-pop"><b>Context window</b><p style="margin-top:8px">Nothing used yet. This fills up as the chat gets longer.</p></div>';
   return `<div class="ctx-pop"><b>Context window</b><div class="ctx-meter"><i style="width:${Math.max(1, Math.round(f * 100))}%"></i></div><p>${text} used · ${fmtTokens(c.used)} of ${fmtTokens(c.window)} tokens</p><p class="fine">When it gets full, the conversation is compacted automatically so it can keep going.</p></div>`;
 }
-// Claude Code reads the whole conversation again when a chat changes model or effort. (The Claude app doesn't need that.)
+// Claude Code reads the whole conversation again when a chat changes model or effort.
 function switchNote() {
-  if (freePlan() || !S.chatId || !S.chat || !S.chat.model || !MODELS_BY_ID[S.chat.model]) return "";
+  if (!S.chatId || !S.chat || !S.chat.model || !MODELS_BY_ID[S.chat.model]) return "";
   const model = modelNow();
   const e = effortFor(model);
   const sameEffort = !S.chat.effort || S.chat.effort === e; // no effort known (a chat from the terminal, or Haiku) isn't a change
@@ -1198,7 +1217,6 @@ function openPop(name, keys) {
   $(b).setAttribute("aria-expanded", "true");
   popOpen = name;
   placePop($(b), pop, align);
-  if (name === "model") refreshAppModels();
   // opened from the keyboard: the chosen row has the focus, so the arrow keys and Enter work at once
   if (keys) (pop.querySelector(".pm.on") || pop.querySelector("button:not([disabled])") || pop).focus();
 }
@@ -1216,8 +1234,7 @@ $("modelMenu").addEventListener("click", e => {
   if (eff) return pick(() => { S.efforts[modelNow()] = eff.dataset.effort; store.set("efforts", S.efforts); });
   const b = e.target.closest("[data-model]");
   if (!b || b.disabled) return;
-  if (freePlan()) pick(() => { S.appModel = b.dataset.model; store.set("appModel", S.appModel); });
-  else pick(() => { S.model = b.dataset.model; store.set("model", S.model); });
+  pick(() => { S.model = b.dataset.model; store.set("model", S.model); });
 });
 $("permMenu").addEventListener("click", e => {
   e.stopPropagation();
@@ -1225,13 +1242,6 @@ $("permMenu").addEventListener("click", e => {
   if (b) pick(() => { S.perm = b.dataset.perm; store.set("perm", S.perm); });
 });
 $("ctxMenu").addEventListener("click", e => e.stopPropagation());
-$("thinkBtn").onclick = e => {
-  e.stopPropagation();
-  S.think = !S.think;
-  store.set("think", S.think);
-  renderBar();
-  toast(S.think ? `Thinking on: ${CFG.name} thinks longer before answering.` : "Thinking off.", 3000);
-};
 window.addEventListener("resize", closePop);
 document.addEventListener("click", () => { closePop(); closeMenus(); closeProfile(); });
 document.addEventListener("keydown", e => {
@@ -1244,6 +1254,7 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (e.key !== "Escape") return;
+  if (F.open) { if (!$("remote").hidden) return; if (F.sel && matchMedia("(max-width: 860px)").matches) { F.sel = null; renderFiles(); } else closeFiles(); return; }
   if (!$("pmenu").hidden) { closeProfile(); $("profileBtn").focus(); return; }
   if (popOpen) { const b = $(POPS[popOpen][0]); closePop(); closeMenus(); b.focus(); return; }
   if (document.querySelector(".menu")) { closeMenus(); return; }
@@ -1257,7 +1268,6 @@ function renderChrome() {
   const h = $("heroSub");
   if (updating()) h.textContent = `${runTitle(UP.data.run)}. Messages are paused until it's done.`;
   else if (st && !st.agent.online) h.innerHTML = `${esc(CFG.name)} is offline right now. Run <code>${esc(CFG.command)}</code> to bring it back online.`;
-  else if (st && st.agent.warning === "app_missing") h.innerHTML = `Install the desktop app on your computer from <a href="https://claude.ai/download" target="_blank" rel="noopener noreferrer">claude.ai/download</a> and sign in to it. ${esc(CFG.name)} works through it on the free plan.`;
   else if (st && st.agent.warning) h.innerHTML = `${esc(CFG.name)} needs attention. Run <code>${esc(CFG.command)} logs</code> to see why.`;
   else h.innerHTML = "";
   $("legal").textContent = `${CFG.name} can make mistakes. Check important info.`;
@@ -1420,9 +1430,10 @@ function thinkHtml(text, ms, live, open, k) {
 function artCard(a) {
   if (a.id) ARTS.set(a.id, a);
   const kind = KIND[a.kind] || "File";
-  const sub = a.tooBig || !a.id ? `${kind} · too large to show here` : `${kind} · ${fmtSize(a.size || 0)}`;
+  const off = a.tooBig || !a.id;
+  const sub = off ? `${kind} · too large to show here${a.path ? " · Show in file browser" : ""}` : `${kind} · ${fmtSize(a.size || 0)}`;
   const on = P.a && P.a.id === a.id ? " on" : "";
-  return `<div class="art${a.tooBig || !a.id ? " off" : on}"${a.id ? ` data-art="${esc(a.id)}" role="button" tabindex="0"` : ""}><span class="ico">${I["k_" + a.kind] || I.file}</span><span class="txt"><b>${esc(a.name)}</b><small>${esc(sub)}</small></span>${a.id ? `<a class="dl" href="/a/${encodeURIComponent(a.id)}?download=1" download="${esc(a.name)}" title="Download" aria-label="Download ${esc(a.name)}" data-dl>${I.download}</a>` : ""}</div>`;
+  return `<div class="art${off && !a.path ? " off" : on}"${!off ? ` data-art="${esc(a.id)}" role="button" tabindex="0"` : a.path ? ` data-reveal="${esc(a.path)}" role="button" tabindex="0"` : ""}><span class="ico">${I["k_" + a.kind] || I.file}</span><span class="txt"><b>${esc(a.name)}</b><small>${esc(sub)}</small></span>${a.id ? `<a class="dl" href="/a/${encodeURIComponent(a.id)}?download=1" download="${esc(a.name)}" title="Download" aria-label="Download ${esc(a.name)}" data-dl>${I.download}</a>` : ""}</div>`;
 }
 function toolsHtml(tools, open, k) {
   if (!tools || !tools.length) return "";
@@ -1599,9 +1610,34 @@ if (window.ResizeObserver) {
 $("jump").onclick = () => { S.stick = true; autoScroll(true); $("jump").hidden = true; };
 
 function stopPolling() { clearTimeout(S.poll); S.poll = null; }
+// Text written but not sent stays, for each chat (and for a new one), in this browser: going to another chat, or leaving the
+// page, doesn't lose it. The newest 50 are kept, for a month.
+const DRAFTS = "drafts";
+function draftKey() { return S.chatId || "new"; }
+function saveDraft(key = draftKey()) {
+  // nothing is saved before the page has put back what was there (an empty box at start isn't a draft)
+  if (!S.draftReady) return;
+  const all = store.get(DRAFTS, {}) || {};
+  const text = $("input").value;
+  if (text.trim()) all[key] = { text, at: Date.now() };
+  else delete all[key];
+  const keep = Object.entries(all).filter(([, d]) => d && typeof d.text === "string" && Date.now() - d.at < 30 * 864e5).sort((a, b) => b[1].at - a[1].at).slice(0, 50);
+  store.set(DRAFTS, Object.fromEntries(keep));
+}
+function loadDraft() {
+  const d = (store.get(DRAFTS, {}) || {})[draftKey()];
+  $("input").value = d ? d.text : "";
+  S.draftReady = true;
+  grow();
+  updateSend();
+}
+addEventListener("pagehide", () => saveDraft());
+
 async function openChat(id, push) {
   stopPolling();
   if (S.live && S.busy) return toast("Wait for this reply to finish, or stop it first.");
+  const switching = S.chatId !== id;
+  if (switching) saveDraft();
   let j;
   const fromComputer = !!S.chats.find(c => c.id === id && c.computer);
   if (fromComputer) {
@@ -1619,13 +1655,11 @@ async function openChat(id, push) {
   if (S.chatId !== id) closePanel();
   S.chatId = id;
   S.chat = j.chat;
+  if (switching) loadDraft();
   if (push) history.pushState({ id }, "", `/c/${id}`);
-  document.title = (j.chat.title || "Chat") + " · " + CFG.name;
+  document.title = (j.chat.title || "Chat") + " · " + tabName();
   // the chat carries on the way its last message was sent
-  if (freePlan()) {
-    if (j.chat.model && appModels().some(m => m.id === j.chat.model && !m.locked)) S.appModel = j.chat.model;
-    if (typeof j.chat.thinking === "boolean") S.think = j.chat.thinking;
-  } else if (j.chat.model && paidModels().some(m => m.id === j.chat.model)) {
+  if (j.chat.model && paidModels().some(m => m.id === j.chat.model)) {
     S.model = j.chat.model;
     if (j.chat.effort) S.efforts[S.model] = j.chat.effort;
   }
@@ -1669,6 +1703,8 @@ async function pollChat(id) {
 function newChat(push) {
   stopPolling();
   if (S.busy) return toast("Wait for this reply to finish, or stop it first.");
+  const switching = S.chatId !== null;
+  if (switching) saveDraft();
   S.chatId = null;
   S.chat = null;
   S.live = null;
@@ -1676,11 +1712,12 @@ function newChat(push) {
   closePanel();
   $("threadInner").innerHTML = "";
   $("main").classList.add("is-empty");
-  document.title = CFG.name;
+  document.title = tabName();
   renderBar();
   if (push) history.pushState({}, "", "/");
   renderHistory();
   renderChrome();
+  if (switching || !S.draftReady) loadDraft();
   $("input").focus();
 }
 $("newChat").onclick = () => { newChat(true); $("app").classList.remove("side-open"); };
@@ -1688,7 +1725,7 @@ $("newChat").onclick = () => { newChat(true); $("app").classList.remove("side-op
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 document.querySelectorAll("kbd[data-keys]").forEach(k => { k.textContent = k.dataset.keys === "k" ? (MAC ? "⌘K" : "Ctrl K") : (MAC ? "⇧⌘O" : "Ctrl Shift O"); });
 document.addEventListener("keydown", e => {
-  if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey || document.querySelector("dialog[open]")) return;
+  if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey || document.querySelector("dialog[open]") || F.open) return;
   const k = (e.key || "").toLowerCase();
   if (k === "o" && e.shiftKey) {
     e.preventDefault();
@@ -1740,7 +1777,7 @@ function grow() {
   if (!tall && input.scrollHeight > 36) { box.classList.add("tall"); input.style.height = "auto"; }
   input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.25) + "px";
 }
-input.addEventListener("input", () => { grow(); updateSend(); });
+input.addEventListener("input", () => { grow(); updateSend(); saveDraft(); });
 input.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !matchMedia("(hover: none)").matches) {
     e.preventDefault();
@@ -1820,12 +1857,12 @@ async function send() {
   if (updating()) return toast("An update is running. Messages work again when it's done.");
   stopPolling();
   const files = S.files.slice();
-  const free = freePlan();
   const model = modelNow();
-  const effort = free ? null : effortFor(model);
+  const effort = effortFor(model);
   const startedIn = S.chatId;
   S.busy = true;
   input.value = "";
+  saveDraft();
   grow();
   S.files = [];
   renderChips();
@@ -1841,6 +1878,7 @@ async function send() {
     if (S.live) { S.live.el.remove(); S.live = null; }
     if (!$("threadInner").children.length) $("main").classList.add("is-empty");
     input.value = text;
+    saveDraft(startedIn || "new");
     grow();
     S.files = files;
     renderChips();
@@ -1848,7 +1886,7 @@ async function send() {
   };
   let res;
   try {
-    res = await api("/api/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId: S.chatId, text, model, effort, perm: permNow(), ...(free ? { think: !!S.think } : {}), files: files.map(f => ({ name: f.name, type: f.type, data: f.data })) }) });
+    res = await api("/api/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId: S.chatId, text, model, effort, perm: permNow(), files: files.map(f => ({ name: f.name, type: f.type, data: f.data })) }) });
   } catch (e) {
     S.busy = false;
     restore(e.message === "Signed out" ? "" : e.message);
@@ -1900,17 +1938,13 @@ function handleEvent(ev, startedIn) {
       renderBar();
       if (!startedIn) {
         history.pushState({ id: ev.chat.id }, "", `/c/${ev.chat.id}`);
-        document.title = ev.chat.title + " · " + CFG.name;
+        document.title = ev.chat.title + " · " + tabName();
         S.chats = [{ id: ev.chat.id, title: ev.chat.title, updated: Date.now(), running: ev.runId }, ...S.chats.filter(c => c.id !== ev.chat.id)];
         renderHistory();
       }
       return false;
     case "delta":
       if (L) { L.text += ev.text; livePart(L, "text").text += ev.text; L.thinkActive = false; liveQueue(); }
-      return false;
-    case "replace":
-      // the Claude app's reply, read again whole: something earlier in it changed (a list or a table filling in)
-      if (L) { L.text = ev.text; L.parts = [...L.parts.filter(p => p.type !== "text"), { type: "text", text: ev.text }]; L.thinkActive = false; liveQueue(); }
       return false;
     case "remote":
       showRemote(ev.remote);
@@ -1952,16 +1986,8 @@ function showRemote(q) {
   if (R.q && R.q.id === q.id && R.q.at === q.at && !$("remote").hidden) return;
   R.q = q;
   R.busy = false;
-  $("rName").textContent = q.kind === "permission" ? CFG.name : "Desktop app on your computer";
-  let html;
-  if (q.kind === "permission") {
-    html = `<h3>${esc(q.title)}</h3>${q.detail ? `<pre>${esc(q.detail)}</pre>` : ""}<p class="rnote">${esc(CFG.name)} is asking, and waits for your answer. It carries on once you choose.</p><div class="rbtns"><button class="btn ghost" type="button" data-ranswer="deny">Deny</button><button class="btn primary" type="button" data-ranswer="allow">Allow</button></div>`;
-  } else {
-    // a picture of the window when the computer could take one; otherwise what it says
-    const shot = q.image ? `<button class="rshot" type="button" data-rshot title="Click to click there on your computer"><img src="data:image/jpeg;base64,${q.image}" alt="${esc(q.text || q.title)}" draggable="false"></button>` : q.text && q.text !== q.title ? `<pre>${esc(q.text)}</pre>` : "";
-    html = `<h3>${esc(q.title)}</h3>${shot}<p class="rnote">${q.image ? "The desktop app on your computer is asking. Click the window above, or a button here." : "The desktop app on your computer is asking. Pick an answer here, and it's picked there."}</p><div class="rbtns">${(q.buttons || []).map((b, i) => `<button class="btn ${/^(allow|approve|yes|ok|continue)/i.test(b.label) ? "primary" : "ghost"}" type="button" data-rbutton="${i}">${esc(b.label)}</button>`).join("")}</div>`;
-  }
-  $("rBody").innerHTML = html;
+  $("rName").textContent = CFG.name;
+  $("rBody").innerHTML = `<h3>${esc(q.title)}</h3>${q.detail ? `<pre>${esc(q.detail)}</pre>` : ""}<p class="rnote">${esc(CFG.name)} is asking, and waits for your answer. It carries on once you choose.</p><div class="rbtns"><button class="btn ghost" type="button" data-ranswer="deny">Deny</button><button class="btn primary" type="button" data-ranswer="allow">Allow</button></div>`;
   $("remote").hidden = false;
 }
 function hideRemote(id) {
@@ -1987,14 +2013,7 @@ async function answerRemote(body) {
 }
 $("rBody").addEventListener("click", e => {
   const a = e.target.closest("[data-ranswer]");
-  if (a) return answerRemote({ answer: a.dataset.ranswer });
-  const b = e.target.closest("[data-rbutton]");
-  if (b) return answerRemote({ button: Number(b.dataset.rbutton) });
-  const shot = e.target.closest("[data-rshot]");
-  if (shot) {
-    const r = shot.getBoundingClientRect();
-    answerRemote({ click: { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height } });
-  }
+  if (a) answerRemote({ answer: a.dataset.ranswer });
 });
 
 async function stop() {
@@ -2027,13 +2046,16 @@ document.addEventListener("click", e => {
   if (e.target.closest("[data-dl]")) return;
   const card = e.target.closest("[data-art]");
   if (card && ARTS.get(card.dataset.art)) openPanel(ARTS.get(card.dataset.art));
+  const rv = e.target.closest("[data-reveal]");
+  if (rv) revealFile(rv.dataset.reveal);
 });
 document.addEventListener("keydown", e => {
   if (e.key !== "Enter" && e.key !== " ") return;
-  const card = e.target.closest && e.target.closest("[data-art]");
+  const card = e.target.closest && e.target.closest("[data-art],[data-reveal]");
   if (!card || e.target.closest("[data-dl]")) return;
   e.preventDefault();
-  if (ARTS.get(card.dataset.art)) openPanel(ARTS.get(card.dataset.art));
+  if (card.dataset.reveal) revealFile(card.dataset.reveal);
+  else if (ARTS.get(card.dataset.art)) openPanel(ARTS.get(card.dataset.art));
 });
 
 const LANG = { htm: "html", html: "html", svg: "xml", xml: "xml", md: "markdown", markdown: "markdown", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript", ts: "typescript", tsx: "typescript", py: "python", rb: "ruby", rs: "rust", kt: "kotlin", cs: "csharp", h: "c", hpp: "cpp", sh: "bash", ps1: "powershell", yml: "yaml", txt: "plaintext", log: "plaintext", csv: "plaintext" };
@@ -2061,6 +2083,9 @@ function openPanel(a, tab) {
   $("pDownload").href = `/a/${encodeURIComponent(a.id)}?download=1`;
   $("pDownload").setAttribute("download", a.name);
   $("pDownload").innerHTML = I.download;
+  // where it is in the working folder, when it's there
+  $("pReveal").hidden = !a.path;
+  $("pReveal").innerHTML = I.folder;
   $("panel").hidden = false;
   $("app").classList.add("panel-open");
   markCards();
@@ -2109,6 +2134,210 @@ $("pTabs").onclick = e => {
   renderPanelBody();
 };
 $("pClose").onclick = () => closePanel();
+$("pReveal").onclick = () => { if (P.a && P.a.path) revealFile(P.a.path); };
+
+/* ---------- the file browser: the working folder on the computer, over the whole page ---------- */
+// Everything is read from the computer as it's looked at: the folder's list, and a file's bytes while it shows. Moving
+// something to the Trash is done there too, and never deletes anything: it can be put back from the Trash (the Recycle Bin
+// on Windows).
+const F = { open: false, from: "", path: "", list: null, loading: false, err: "", code: "", sel: null, shown: "", busy: "", seq: 0, back: null, hidden: !!store.get("hiddenFiles", false) };
+const FKIND = { folder: "Folder", image: "Image", audio: "Audio", video: "Video", pdf: "PDF", text: "Text", file: "File" };
+const FICON = { folder: I.folder, image: I.k_image, audio: I.k_audio, video: I.k_video, pdf: I.k_pdf, text: I.k_code, file: I.file };
+const TEXT_MAX = 262144; // how much of a text file shows; it can be downloaded whole
+function fsUrl(path, download) { return `/api/files/raw?path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`; }
+function joinPath(dir, name) { return dir ? dir + "/" + name : name; }
+function parentOf(path) { const i = path.lastIndexOf("/"); return i < 0 ? "" : path.slice(0, i); }
+function baseOf(path) { return path.slice(path.lastIndexOf("/") + 1); }
+function fbWhen(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" });
+}
+function fbShown() { return F.list ? F.list.entries.filter(e => F.hidden || !e.name.startsWith(".") || (F.sel && F.sel.name === e.name)) : []; }
+
+function openFiles(path, pick, from) {
+  if (!F.open) F.back = document.activeElement;
+  F.open = true;
+  F.from = from || "";
+  $("files").hidden = false;
+  $("app").inert = true;
+  loadFiles(path || "", pick);
+  setTimeout(() => { const c = $("fbHead").querySelector('[data-fb="close"]'); if (c && !$("files").contains(document.activeElement)) c.focus(); }, 0);
+}
+// where an artifact is in the working folder: its folder, with it picked
+function revealFile(path) { openFiles(parentOf(path), baseOf(path)); }
+function closeFiles() {
+  if (!F.open) return;
+  F.open = false;
+  F.seq++;
+  F.sel = null;
+  F.shown = "";
+  $("files").hidden = true;
+  $("app").inert = false;
+  $("fbVBody").innerHTML = ""; // stops whatever was playing
+  if (F.from === "settings") return openSettings("files");
+  if (F.back && F.back.isConnected && F.back.focus) F.back.focus();
+}
+
+// `pick` is a file in that folder to show; without one, what showed before stays if it's still there.
+async function loadFiles(path, pick) {
+  const seq = ++F.seq;
+  if (path !== F.path) { F.list = null; F.sel = null; }
+  F.path = path;
+  F.loading = true;
+  F.err = "";
+  renderFiles();
+  try {
+    const j = await apiJson(`/api/files?path=${encodeURIComponent(path)}`);
+    if (seq !== F.seq) return;
+    F.list = j;
+    F.path = j.path;
+    const name = pick !== undefined ? pick : F.sel && F.sel.name;
+    const e = name ? j.entries.find(x => x.name === name && !x.dir) : null;
+    F.sel = e ? { ...e, path: joinPath(j.path, e.name) } : null;
+    if (pick && !e) toast(`"${pick}" isn't in this folder any more.`);
+  } catch (e) {
+    if (seq !== F.seq) return;
+    F.list = null;
+    F.sel = null;
+    F.err = e.message === "Signed out" ? "Sign in again to see your files." : e.message;
+    F.code = (e.data && e.data.code) || "";
+  }
+  F.loading = false;
+  renderFiles();
+}
+
+function renderFiles() {
+  if (!F.open) return;
+  $("files").classList.toggle("viewing", !!F.sel);
+  const root = (F.list && F.list.root) || "Working folder";
+  const parts = F.path ? F.path.split("/") : [];
+  const crumbs = [`<button type="button" data-fb-go="" title="${esc(root)}"${parts.length ? "" : ' aria-current="page"'}>${esc(root)}</button>`]
+    .concat(parts.map((p, i) => `<span class="sep">${I.chev}</span><button type="button" data-fb-go="${esc(parts.slice(0, i + 1).join("/"))}"${i === parts.length - 1 ? ' aria-current="page"' : ""}>${esc(p)}</button>`)).join("");
+  patchHtml($("fbHead"), `<div class="fb-title"><h2 id="fbTitle">Files</h2><nav class="crumbs" aria-label="Folder">${crumbs}</nav></div><button class="icon-btn" type="button" data-fb="hidden" aria-pressed="${F.hidden}" title="${F.hidden ? "Hide hidden files" : "Show hidden files"}" aria-label="Show hidden files">${I.eye}</button><button class="icon-btn" type="button" data-fb="refresh" title="Refresh" aria-label="Refresh">${I.refresh}</button><button class="icon-btn" type="button" data-fb="close" title="Close" aria-label="Close the file browser">${I.x}</button>`);
+  const cr = $("fbHead").querySelector(".crumbs");
+  cr.scrollLeft = cr.scrollWidth;
+  const list = fbShown();
+  let html;
+  if (F.err) html = `<div class="p-empty"><span>${esc(F.err)}</span>${F.code === "missing" && F.path ? `<button class="btn ghost" type="button" data-fb-go="">Go to the working folder</button>` : `<button class="btn ghost" type="button" data-fb="refresh">Try again</button>`}</div>`;
+  else if (!F.list) html = '<div class="p-empty">Loading…</div>';
+  else if (!list.length) html = `<div class="p-empty"><span>${F.list.entries.length ? "Only hidden files here. The eye button at the top shows them." : "This folder is empty."}</span></div>`;
+  else {
+    html = list.map(e => {
+      const p = joinPath(F.path, e.name);
+      const sub = e.dir ? (e.link ? "Folder · link" : "Folder") : e.broken ? "Link to nothing" : `${fmtSize(e.size)} · ${fbWhen(e.mtime)}`;
+      const on = !!F.sel && F.sel.path === p;
+      return `<div class="fb-row${on ? " on" : ""}" role="listitem"><button type="button" class="fb-open" data-fb-open="${esc(e.name)}"${on ? ' aria-current="true"' : ""}><span class="fb-ico k-${e.kind}">${FICON[e.kind] || I.file}</span><span class="tx"><b>${esc(e.name)}</b><small>${esc(sub)}</small></span></button><button type="button" class="icon-btn" data-fb-trash="${esc(e.name)}" title="Move to Trash" aria-label="${esc(`Move ${e.name} to the Trash`)}"${F.busy ? " disabled" : ""}>${I.trash}</button></div>`;
+    }).join("");
+  }
+  patchHtml($("fbList"), html);
+  const n = F.list ? F.list.entries.length : 0;
+  const hid = F.list ? n - list.length : 0;
+  $("fbFoot").textContent = !F.list ? "" : F.list.cut ? `Showing the first ${n.toLocaleString()} of ${F.list.total.toLocaleString()} items` : `${list.length.toLocaleString()} item${list.length === 1 ? "" : "s"}${hid ? `, and ${hid.toLocaleString()} hidden` : ""}`;
+  renderFileView();
+}
+
+function noPreview(why, f) {
+  return `<div class="p-empty"><span>${esc(why)}</span><a class="btn ghost" href="${fsUrl(f.path, true)}" download="${esc(f.name)}">${I.download}Download</a></div>`;
+}
+function renderFileView() {
+  const f = F.sel;
+  const head = $("fbVHead");
+  const body = $("fbVBody");
+  if (!f) {
+    head.innerHTML = "";
+    F.shown = "";
+    patchHtml(body, `<div class="p-empty">${F.list && F.list.entries.length ? "<span>Pick a file to see it here.</span>" : ""}</div>`);
+    return;
+  }
+  patchHtml(head, `<button class="icon-btn only-narrow" type="button" data-fb="back" aria-label="Back to the folder">${I.back}</button><div class="p-title"><b>${esc(f.name)}</b><small>${esc(`${FKIND[f.kind] || "File"} · ${fmtSize(f.size)}${f.mtime ? " · " + fbWhen(f.mtime) : ""}`)}</small></div><a class="icon-btn" href="${fsUrl(f.path, true)}" download="${esc(f.name)}" title="Download" aria-label="Download">${I.download}</a><button class="icon-btn danger" type="button" data-fb="trash" title="Move to Trash" aria-label="Move to Trash"${F.busy ? " disabled" : ""}>${I.trash}</button>`);
+  // the file itself is only shown again when it's another file, or changed: a song keeps playing while the list refreshes
+  const key = `${f.path}|${f.size}|${f.mtime}`;
+  if (key === F.shown) return;
+  F.shown = key;
+  const src = fsUrl(f.path) + `&v=${f.mtime || 0}`;
+  if (f.kind === "image") body.innerHTML = `<div class="p-img"><img src="${src}" alt="${esc(f.name)}"></div>`;
+  else if (f.kind === "audio") body.innerHTML = `<div class="fb-media"><div class="fb-audio"><span class="fb-ico k-audio">${I.k_audio}</span><b>${esc(f.name)}</b><audio controls preload="metadata" src="${src}"></audio></div></div>`;
+  else if (f.kind === "video") body.innerHTML = `<div class="fb-media"><video controls playsinline preload="metadata" src="${src}"></video></div>`;
+  else if (f.kind === "pdf") body.innerHTML = `<iframe src="${src}" title="${esc(f.name)}"></iframe>`;
+  else if (f.kind === "text") return showText(f, key);
+  else body.innerHTML = noPreview("There's no preview for this kind of file.", f);
+  const media = body.querySelector("img,audio,video");
+  if (media) media.addEventListener("error", () => { if (F.shown === key) body.innerHTML = noPreview(f.kind === "image" ? "This picture can't be shown in the browser." : `This ${f.kind === "audio" ? "audio" : "video"} can't be played in the browser.`, f); });
+}
+// The start of a text file, coloured like code.
+async function showText(f, key) {
+  const body = $("fbVBody");
+  if (!f.size) { body.innerHTML = '<div class="p-empty">This file is empty.</div>'; return; }
+  body.innerHTML = '<div class="p-empty">Loading…</div>';
+  try {
+    const r = await api(fsUrl(f.path), { headers: { range: `bytes=0-${TEXT_MAX - 1}` } });
+    if (!r.ok && r.status !== 206) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Couldn't read this file."); }
+    const t = new TextDecoder().decode(await r.arrayBuffer());
+    if (F.shown !== key) return;
+    if (t.slice(0, 8000).includes("\u0000")) { body.innerHTML = noPreview("This file isn't text, so it can't be shown here.", f); return; }
+    const ext = ((f.name.match(/\.([A-Za-z0-9]+)$/) || [])[1] || "").toLowerCase();
+    const lang = LANG[ext] || ext || "plaintext";
+    const cut = f.size > TEXT_MAX ? `<p class="fb-note">Showing the first ${fmtSize(TEXT_MAX)} of ${fmtSize(f.size)}. Download it to see all of it.</p>` : "";
+    body.innerHTML = `${cut}<pre class="p-code"><code class="language-${esc(lang)}">${esc(t)}</code></pre>`;
+    if (t.length < 200000) highlight(body);
+  } catch (e) {
+    if (F.shown === key) body.innerHTML = noPreview(e.message === "Signed out" ? "Sign in again to see this file." : e.message, f);
+  }
+}
+
+async function trashFile(name) {
+  const e = F.list && F.list.entries.find(x => x.name === name);
+  if (!e || F.busy) return;
+  const path = joinPath(F.path, name);
+  if (!confirm(`Move "${name}" to the Trash on your computer?${e.dir ? " Everything in it goes too." : ""}\n\nIt isn't deleted: you can put it back from the Trash (the Recycle Bin on Windows).`)) return;
+  F.busy = path;
+  renderFiles();
+  try {
+    const r = await apiJson("/api/files/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) });
+    toast(`Moved "${name}" to the ${r.where}.`);
+    if (F.sel && F.sel.path === path) F.sel = null;
+    F.list.entries = F.list.entries.filter(x => x.name !== name);
+  } catch (err) {
+    if (err.message !== "Signed out") toast(err.message);
+  }
+  F.busy = "";
+  renderFiles();
+  if (F.open) loadFiles(F.path);
+}
+
+$("files").addEventListener("click", e => {
+  const go = e.target.closest("[data-fb-go]");
+  if (go) return loadFiles(go.dataset.fbGo);
+  const open = e.target.closest("[data-fb-open]");
+  if (open) {
+    const x = F.list && F.list.entries.find(y => y.name === open.dataset.fbOpen);
+    if (!x) return;
+    if (x.dir) return loadFiles(joinPath(F.path, x.name));
+    F.sel = { ...x, path: joinPath(F.path, x.name) };
+    return renderFiles();
+  }
+  const tr = e.target.closest("[data-fb-trash]");
+  if (tr) return trashFile(tr.dataset.fbTrash);
+  const b = e.target.closest("[data-fb]");
+  if (!b) return;
+  const act = b.dataset.fb;
+  if (act === "close") closeFiles();
+  else if (act === "refresh") loadFiles(F.path);
+  else if (act === "back") { F.sel = null; renderFiles(); }
+  else if (act === "trash" && F.sel) trashFile(F.sel.name);
+  else if (act === "hidden") { F.hidden = !F.hidden; store.set("hiddenFiles", F.hidden); renderFiles(); }
+});
+
+// Settings → Files: what it is, and the button that opens it.
+function filesPaneHtml() {
+  const a = agentNow();
+  const c = a && a.computer;
+  const why = !a || !a.online ? `${CFG.name} is offline, so the files on your computer can't be shown right now.` : !a.files ? `Update ${CFG.name} on your computer to see its files here.` : "";
+  return `<div class="sec"><h3>File browser</h3><p>Everything in the working folder${c && c.workspace ? `, <code>${esc(c.workspace)}</code>` : ""}, where ${esc(CFG.name)} works: look at photos, play audio and video, read text and download any file, full screen.</p><p>You can also move files and folders to the Trash on your computer from here. Nothing is deleted outright: you can put it back from the Trash (the Recycle Bin on Windows).</p>${why ? `<div class="note soft">${why}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="files"${why ? " disabled" : ""}>${I.folder}Open file browser</button></div></div>`;
+}
 $("pCopy").onclick = async () => {
   if (!P.a) return;
   try { copyText(await artText(P.a), $("pCopy")); } catch (e) { toast(e.message); }
@@ -2126,7 +2355,7 @@ function showSide() { $("app").classList.remove("side-collapsed"); store.set("co
 $("search").closest(".nav-item").addEventListener("click", () => { if (railed()) { showSide(); $("search").focus(); } });
 if (store.get("collapsed", false)) $("app").classList.add("side-collapsed");
 
-document.title = CFG.name;
+document.title = tabName();
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadState(); loadChats(); } });
 setInterval(() => { if (!document.hidden) loadState(); }, 20000);
@@ -2180,7 +2409,6 @@ const PLAN_NAMES = { free: "Free", pro: "Pro", max: "Max", team: "Team", enterpr
 function planLabel() {
   const a = agentNow();
   if (!a) return "";
-  if (a.plan === "free") return "Free";
   return PLAN_NAMES[a.subscription] || "";
 }
 function renderProfile() {
@@ -2348,12 +2576,11 @@ function renderUsage() {
   const l = S.state && S.state.limits;
   const body = $("usageBody");
   const offline = !!(S.state && !S.state.agent.online);
-  const free = freePlan();
-  $("usageSub").textContent = U.refreshing ? "Updating…" : l ? `${free ? "Your free plan, from the desktop app" : "From your plan"} · updated ${new Date(l.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  $("usageSub").textContent = U.refreshing ? "Updating…" : l ? `From your plan · updated ${new Date(l.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
   const shown = l ? METERS.filter(([k]) => l.windows[k]) : [];
   let html = "";
   if (!shown.length) {
-    html = U.refreshing ? '<div class="wait" style="margin:0"><span class="spin"></span><span>Reading your plan usage…</span></div>' : `<p style="margin:0 0 6px;color:var(--text-2)">No reading yet.</p><p class="fine" style="margin-top:0">${esc(CFG.name)} shows how much of your plan you've used once ${free ? "the desktop app has opened on your computer" : "it has answered a message; every reply brings a new reading"}.</p>`;
+    html = U.refreshing ? '<div class="wait" style="margin:0"><span class="spin"></span><span>Reading your plan usage…</span></div>' : `<p style="margin:0 0 6px;color:var(--text-2)">No reading yet.</p><p class="fine" style="margin-top:0">${esc(CFG.name)} shows how much of your plan you've used once it has answered a message; every reply brings a new reading.</p>`;
   } else {
     html = `<div class="meters">${shown.map(([k, label, sub]) => {
       const w = l.windows[k];
@@ -2362,11 +2589,10 @@ function renderUsage() {
       return `<div><div class="mt-top"><b>${label}</b><span>${w.reset ? "Reset" : pct + "% used"}</span></div><div class="mt-bar${cls}"><i style="width:${w.reset ? 0 : Math.min(100, pct)}%"></i></div><div class="mt-sub">${w.reset ? "It has reset. This updates with your next reply." : `Resets ${esc(relTime(w.resetsAt))} (${esc(clock(w.resetsAt))})`} · ${sub}</div></div>`;
     }).join("")}</div>`;
     const canReset = usableResets().some(x => x.can);
-    if (l.limited) html += `<div class="note err">You've hit ${free ? "your free plan's" : "a"} limit. Replies resume when it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}${canReset ? ", or use a free reset below" : ""}.</div>`;
+    if (l.limited) html += `<div class="note err">You've hit a limit. Replies resume when it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}${canReset ? ", or use a free reset below" : ""}.</div>`;
     else if (l.over && !useCredits()) html += `<div class="note warn">You've reached a plan limit. Usage credits are turned off for this site, so new messages wait until it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}.</div>`;
   }
-  // the free plan has no usage credits; its resets still show
-  html += free ? resetsHtml() : creditsHtml(l);
+  html += creditsHtml(l);
   if (offline) html += `<div class="note soft">${esc(CFG.name)} is offline, so this is the last reading. Run <code>${esc(CFG.command)}</code> on your computer for a fresh one.</div>`;
   else html += `<p class="fine">Read on your computer each time you open this, and after every reply.</p>`;
   body.innerHTML = html;
@@ -2395,7 +2621,7 @@ async function refreshUsage() {
     }
     // the balance comes a moment after the percentages
     const was = S.state.credits ? S.state.credits.at : 0;
-    for (let i = 0; i < 8 && (S.state.agent.credits || freePlan()) && $("usageDlg").open; i++) {
+    for (let i = 0; i < 8 && S.state.agent.credits && $("usageDlg").open; i++) {
       const c = await apiJson("/api/credits");
       if (c && c.at > was) { S.state.credits = c; break; }
       await new Promise(res => setTimeout(res, 1000));
@@ -2431,20 +2657,13 @@ $("usageDlg").addEventListener("click", e => { if (e.target === $("usageDlg")) $
 function renderLimitNote() {
   const note = $("cNote");
   if (switchNote()) return;
-  // Stop was pressed on the Claude app's window on the computer: it's left alone until it's allowed again, from here
-  const ai = freePlan() && appInfo();
-  if (ai && ai.paused) {
-    note.innerHTML = `${esc(CFG.name)} stopped using the desktop app on your computer, because Stop was pressed there. <button type="button" class="note-link" data-resume${APP.resuming ? " disabled" : ""}>${APP.resuming ? "Allowing it…" : `Let ${esc(CFG.name)} use it again`}</button>`;
-    note.className = "c-note warn grow";
-    return;
-  }
   const l = S.state && S.state.limits;
   const c = l && l.credits;
   const at = l && l.resetsAt ? " · resets " + relTime(l.resetsAt) : "";
   let text = "";
   let reset = null;
   if (l && l.limited) {
-    text = (freePlan() ? "You've hit your free plan's limit" : "You've hit a limit") + at;
+    text = "You've hit a limit" + at;
     reset = usableResets().find(x => x.can) || null;
   } else if (l && l.over && !useCredits()) text = "At a plan limit, and usage credits are off here" + at;
   else if (l && l.over && c && (c.state === "using" || c.state === "near")) text = "Using usage credits" + at;
@@ -2462,20 +2681,6 @@ function renderLimitNote() {
 $("cNote").addEventListener("click", async e => {
   const r = e.target.closest("[data-reset]");
   if (r) useReset(r);
-  if (e.target.closest("[data-resume]") && !APP.resuming) {
-    APP.resuming = true;
-    renderLimitNote();
-    try {
-      await apiJson("/api/app/resume", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-      const ai = appInfo();
-      if (ai) ai.paused = false;
-      toast(`${CFG.name} can use the desktop app again.`);
-    } catch (err) {
-      toast(err.message || "Couldn't reach your computer. Try again in a moment.");
-    }
-    APP.resuming = false;
-    renderLimitNote();
-  }
 });
 // a time of day, or a day and time when it's further off
 function clock(sec) {
@@ -2488,7 +2693,7 @@ function clock(sec) {
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SET = { tab: "general", name: undefined, saving: "", saved: "", address: "", confirm: "", err: "", busy: false, justUpdated: false };
-const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.upgrade], ["delete", "Delete site", I.trash]];
+const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["files", "Files", I.folder], ["address", "Address", I.globe], ["updates", "Updates", I.upgrade], ["delete", "Delete site", I.trash]];
 
 // Every setting here takes effect when it's changed: no Save button. Only a name being typed is held, until Enter or leaving
 // the field.
@@ -2543,15 +2748,27 @@ function imgField(key, label, hint) {
   return `<div class="img-field"><div class="img-prev">${prev}</div><div class="img-meta"><b>${label}</b><small>${state} · ${hint}</small></div><button type="button" class="btn ghost" data-img="${key}"${SET.saving ? " disabled" : ""}>Choose…</button>${own ? `<button type="button" class="btn ghost" data-img-reset="${key}"${SET.saving ? " disabled" : ""}>${key === "favicon" ? "Use the logo" : "Built-in"}</button>` : ""}</div>`;
 }
 
+// The text in the browser tab, next to the tab icon: the site's name unless it's given its own.
+function tabField() {
+  const status = SET.saving === "tab" ? "Saving…" : SET.saved === "tab" ? "Saved" : "";
+  return `<div class="field"><label for="fTab">Tab title</label><input class="input" id="fTab" maxlength="60" value="${esc(SET.tabTitle === undefined ? CFG.tab : SET.tabTitle)}" placeholder="${esc(CFG.name)}" autocomplete="off" enterkeyhint="done"><small>The text next to the tab icon in the browser. Leave it empty to use the site's name. Saved when you press Enter or click away.${status ? ` <b class="ok-text">${status}</b>` : ""}</small></div>`;
+}
+function saveTab() {
+  if (SET.tabTitle === undefined || SET.saving) return;
+  const t = SET.tabTitle.trim().replace(/\s+/g, " ");
+  if (t === CFG.tab) { SET.tabTitle = undefined; return; }
+  saveSite("tab", { tab: t });
+}
+
 function paneHtml() {
   const u = UP.data;
   if (SET.tab === "general") {
     const status = SET.saving === "name" ? "Saving…" : SET.saved === "name" ? "Saved" : "";
-    return `<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(SET.name === undefined ? CFG.name : SET.name)}" autocomplete="off" enterkeyhint="done"><small>Shown at the top of the page and in the browser tab. Saved when you press Enter or click away. The command <code>${esc(CFG.command)}</code> stays the same.${status ? ` <b class="ok-text">${status}</b>` : ""}</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div>${SET.err && SET.tab === "general" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div>${computerHtml()}`;
+    return `<div class="sec"><div class="field"><label for="fName">Site name</label><input class="input${draftError() ? " bad" : ""}" id="fName" maxlength="40" value="${esc(SET.name === undefined ? CFG.name : SET.name)}" autocomplete="off" enterkeyhint="done"><small>Shown at the top of the page and in the browser tab (unless it has its own title, in Appearance). Saved when you press Enter or click away. The command on your computer is the name too: <code>${esc(CFG.command)}</code>, renamed to match when the name changes.${status ? ` <b class="ok-text">${status}</b>` : ""}</small>${draftError() ? `<div class="err-text">${esc(draftError())}</div>` : ""}</div>${SET.err && SET.tab === "general" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div>${computerHtml()}`;
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
-    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. A new one is used as soon as you pick it.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
+    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. A new one is used as soon as you pick it.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}${tabField()}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
   }
   if (SET.tab === "address") {
     const h = hostParts();
@@ -2559,6 +2776,7 @@ function paneHtml() {
     return `${blockedNote()}<div class="sec"><h3>Current address</h3><div class="kv"><span>${esc(location.origin)}</span><button type="button" class="btn ghost" data-copy-link="${esc(location.origin)}">${I.copy}<span>Copy</span></button></div></div><div class="sec"><h3>Change the address</h3><p>This is the name in the web address. You'll get a new link; the old one stops working.</p><div class="field"><div class="input-row"><input id="fAddr" value="${esc(SET.address)}" placeholder="${esc(h.name)}" maxlength="63" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="New address"><span>${esc(h.suffix)}</span></div>${bad ? '<div class="err-text">Use lowercase letters, numbers and dashes, starting and ending with a letter or number.</div>' : ""}${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><ul class="warn-list"><li>The new site is set up first. This one keeps working while you turn on Cloudflare Access for the new address.</li><li>Once the new site is working, this one is deleted.</li><li>Chats stay with the old site, so they're deleted with it. Your files are kept.</li></ul><button class="btn primary" type="button" data-act="move"${!SET.address || bad || (UP.data && UP.data.blockedAdmin) ? " disabled" : ""}>Set up the new address</button></div>`;
   }
   if (SET.tab === "updates") return updatesHtml();
+  if (SET.tab === "files") return filesPaneHtml();
   const ok = SET.confirm === CFG.name;
   return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the working folder are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
 }
@@ -2588,33 +2806,22 @@ function questionsHtml(u) {
   const a = answersNow(u);
   return `<div class="sec" style="margin-top:16px"><h3>This version asks</h3>${qs.map(q => `<div class="switch"><div class="t"><span>${esc(q.label)}</span>${q.help ? `<small>${esc(q.help)}</small>` : ""}</div><button type="button" class="toggle" role="switch" data-answer="${esc(q.key)}" aria-checked="${a[q.key]}" aria-label="${esc(q.label)}"></button></div>`).join("")}</div>`;
 }
-// This computer's own settings (the same ones `<command> edit` asks about), changed straight away: whether you pay for Claude,
-// starting at login (a startup item), and the working folder.
+// This computer's own settings (the same ones `<command> edit` asks about), changed straight away: starting at login (a
+// startup item), and the working folder.
 const PC = { busy: "", err: "" };
-const PLAN_KINDS = [["paid", "Paid plan"], ["free", "Free plan"]];
-function appStatus() {
-  const i = appInfo();
-  if (i && i.kind === "app") return "Connected to the desktop app on your computer.";
-  if (i && i.found === "app") return "The desktop app opens on your computer when you send a message.";
-  return "Install the desktop app on your computer from claude.ai/download and sign in to it.";
-}
 function computerHtml() {
   const a = S.state && S.state.agent;
   const c = a && a.online && a.computer;
   const off = !c ? " disabled" : "";
   const why = !a || !a.online ? `${esc(CFG.name)} is offline, so these can't be changed right now.` : !c ? `Update ${esc(CFG.name)} to change these here, or run <code>${esc(CFG.command)} edit</code> on your computer.` : "";
-  const plan = (c && c.plan) || (a && a.plan) || "paid";
-  const canPlan = !!c && !!c.plan;
-  const planSec = `<div class="sec"><h3>Your plan</h3><div class="field"><div class="seg" role="group" aria-label="Your plan">${PLAN_KINDS.map(([k, label]) => `<button type="button" data-pc="plan" data-value="${k}" class="${plan === k ? "on" : ""}" aria-pressed="${plan === k}"${canPlan && PC.busy !== "plan" ? "" : " disabled"}>${label}</button>`).join("")}</div><small>${plan === "free" ? `On the free plan, ${esc(CFG.name)} works through the desktop app on your computer: each message is typed into it, and the reply read back as it's written. ${esc(appStatus())}` : `${esc(CFG.name)} answers from your computer, with your paid plan (Pro, Max, Team or Enterprise).`}${c && !c.plan ? ` Update ${esc(CFG.name)} to change this here.` : ""}${PC.busy === "plan" ? ' <b class="ok-text">Switching…</b>' : ""}</small></div></div>`;
-  const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in${plan === "free" ? " and can open the desktop app when a message comes in" : ""}.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
-  const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>${plan === "free" ? "Where files you attach are kept on your computer." : `Where ${esc(CFG.name)} works and where files you attach go.`} Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
-  return `${planSec}<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
+  const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
+  const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>Where ${esc(CFG.name)} works and where files you attach go. Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
+  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
 }
 // The switch moves at once; if the computer says no, it moves back and says why.
 async function setComputer(key, value) {
   const a = S.state && S.state.agent;
-  if (!a || !a.computer || (key === "workspace" && (!value || value === a.computer.workspace)) || (key === "plan" && value === a.computer.plan)) return;
-  if (key === "plan" && !confirm(value === "free" ? `Switch to the free plan? ${CFG.name} will answer through the desktop app on your computer.` : `Switch to your paid plan? ${CFG.name} will answer with your plan, from your computer, so it has to be signed in there.`)) return;
+  if (!a || !a.computer || (key === "workspace" && (!value || value === a.computer.workspace))) return;
   const before = { ...a.computer };
   a.computer = { ...a.computer, [key]: value };
   if (key === "workspace") PC.ws = value;
@@ -2627,12 +2834,6 @@ async function setComputer(key, value) {
   } catch (e) {
     a.computer = (e.data && e.data.computer) || before;
     PC.err = e.message === "Signed out" ? "" : switching(e);
-  }
-  if (key === "plan") {
-    a.plan = a.computer.plan || a.plan;
-    // what the computer can do changes with the plan: it says so a moment later
-    await new Promise(r => setTimeout(r, 1200));
-    await loadState();
   }
   PC.ws = undefined;
   PC.busy = "";
@@ -2652,12 +2853,17 @@ function whatsNewHtml(u, head) {
 function renderFoot() { $("setFoot").hidden = true; }
 
 // The site's name and images as they are now. Changing them takes effect at once, on every device, with no redeploy.
+// what the browser tab says: its own text when one is set in Settings → Appearance, or the site's name
+function tabName() { return CFG.tab || CFG.name; }
 function siteNow() { return (S.state && S.state.site) || { name: CFG.name, logo: !!document.querySelector("#brand img"), favicon: false, v: "0" }; }
 function applySite(site) {
   if (!site) return;
   if (S.state) S.state.site = site;
   CFG.name = site.name;
-  document.title = S.chat && S.chat.title ? `${S.chat.title} · ${CFG.name}` : CFG.name;
+  CFG.tab = site.tab || "";
+  // the command on the computer follows the name, once the computer has renamed it
+  if (site.command) CFG.command = site.command;
+  document.title = S.chat && S.chat.title ? `${S.chat.title} · ${tabName()}` : tabName();
   $("brand").setAttribute("aria-label", CFG.name);
   const mark = $("brand").firstElementChild;
   const want = site.logo ? `<img src="/logo?v=${esc(site.v)}" alt="">` : DEFAULT_MARK;
@@ -2676,6 +2882,7 @@ async function saveSite(what, body) {
     renderChrome();
     SET.saved = what;
     if (what === "name") SET.name = undefined;
+    if (what === "tab") SET.tabTitle = undefined;
   } catch (e) {
     SET.err = e.message === "Signed out" ? "" : switching(e);
   }
@@ -2710,11 +2917,13 @@ async function adminCall(path, body) {
 
 $("setBody").addEventListener("input", e => {
   if (e.target.id === "fName") { SET.name = e.target.value; SET.saved = ""; e.target.classList.toggle("bad", !!draftError()); }
+  else if (e.target.id === "fTab") { SET.tabTitle = e.target.value; SET.saved = ""; }
   else if (e.target.id === "fAddr") { SET.address = e.target.value.trim().toLowerCase(); const bad = SET.address && !SLUG_OK.test(SET.address); const b = $("setBody").querySelector("[data-act=move]"); if (b) b.disabled = !SET.address || !!bad || !!(UP.data && UP.data.blockedAdmin); }
   else if (e.target.id === "fDel") { SET.confirm = e.target.value; const b = $("setBody").querySelector("[data-act=delete]"); if (b) b.disabled = SET.confirm !== CFG.name || !!(UP.data && UP.data.blockedAdmin); }
 });
 $("setBody").addEventListener("change", e => {
   if (e.target.id === "fName") saveName();
+  if (e.target.id === "fTab") saveTab();
   if (e.target.id === "fWs") setComputer("workspace", e.target.value.trim());
   if (e.target.id === "fImg" && SET.pickKey) { readImage(e.target.files[0], SET.pickKey); e.target.value = ""; }
 });
@@ -2739,10 +2948,12 @@ $("setBody").addEventListener("click", async e => {
 });
 $("setBody").addEventListener("keydown", e => {
   if (e.target.id === "fName" && e.key === "Enter") { e.preventDefault(); saveName(); }
+  if (e.target.id === "fTab" && e.key === "Enter") { e.preventDefault(); saveTab(); }
   if (e.target.id === "fWs" && e.key === "Enter") { e.preventDefault(); e.target.blur(); }
 });
 
 async function doAct(act) {
+  if (act === "files") { closeSettings(); return openFiles("", undefined, "settings"); }
   if (act === "move") {
     if (!confirm(`Set up ${SET.address}${hostParts().suffix}?\n\nThe new site is created first and this one keeps working until you've turned on Cloudflare Access for it. Then this site is deleted, along with its chats.`)) return;
     return adminCall("/api/admin/move", { address: SET.address });
@@ -3084,7 +3295,10 @@ renderChrome();
   announceVersion();
   const m = location.pathname.match(/^\/c\/([\w-]+)/);
   if (m) await openChat(m[1], false);
-  else input.focus();
+  else {
+    loadDraft();
+    input.focus();
+  }
   if (document.readyState === "complete") highlight(document);
   else window.addEventListener("load", () => highlight(document));
 })();

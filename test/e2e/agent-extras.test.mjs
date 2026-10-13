@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { startSite } from "../helpers/site.mjs";
 import { makeComputer } from "../helpers/computer.mjs";
@@ -117,8 +117,9 @@ test("starting at login and the working folder change from the site, without a r
     return a.computer ? a : null;
   }, "the computer's hello");
   assert.equal(st.credits, true);
-  assert.equal(st.plan, "paid");
-  assert.deepEqual([st.computer.autostart, st.computer.history, st.computer.plan], [false, "all", "paid"]);
+  // replies only ever come from Claude Code now: there's no plan to pick
+  assert.equal(st.plan, undefined);
+  assert.deepEqual([st.computer.autostart, st.computer.history, st.computer.plan], [false, "all", undefined]);
   // the old switches do nothing now
   for (const old of [{ credits: false }, { history: "off" }, { nonsense: true }]) assert.equal((await site.post("/api/computer", old)).status, 400, JSON.stringify(old));
   assert.notEqual(JSON.parse(pc.read("config.json")).credits, false, "nothing was turned off on the computer");
@@ -149,9 +150,23 @@ test("the site's name and logo set in Settings are kept on the computer for the 
   const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   assert.equal((await site.post("/api/site", { displayName: "Renamed", logo: { b64: PNG } })).status, 200);
   await until(async () => JSON.parse(pc.read("config.json")).displayName === "Renamed", "the computer to save the name");
-  const cfg = JSON.parse(pc.read("config.json"));
-  assert.equal(cfg.command, "TestConnect", "the command stays the same");
-  const brand = JSON.parse(pc.read("site/brand.js").replace(/^export default /, "").replace(/;\s*$/, ""));
+  // the command follows the name, on the computer and on the site
+  // (read again until whole: the program here may be writing it)
+  const cfg = await until(async () => { const c = JSON.parse(pc.read("config.json")); return c.command === "Renamed" && c; }, "the command to be renamed");
+  assert.equal(cfg.shim, join(pc.home, "bin", "Renamed"));
+  assert.ok(existsSync(cfg.shim) && !existsSync(join(pc.home, "bin", "TestSite")), "the new command, and not the old one");
+  assert.match(pc.log(), /The command is Renamed now, to match the site's name\. TestSite is gone\./);
+  await until(async () => (await site.api("/api/state")).body.site.command === "Renamed", "the site to know the new command");
+  // the tab title is its own, kept on the computer too; empty, it's the name again
+  assert.equal((await site.post("/api/site", { tab: "  My\ttab  " })).body.tab, "My tab");
+  await until(async () => JSON.parse(pc.read("config.json")).tabTitle === "My tab", "the computer to save the tab title");
+  assert.equal((await site.post("/api/site", { tab: "" })).body.tab, "");
+  await until(async () => JSON.parse(pc.read("config.json")).tabTitle === undefined, "the tab title to be dropped");
+  // a name another program already answers to leaves the command as it is
+  assert.equal((await site.post("/api/site", { displayName: "git" })).status, 200);
+  await until(async () => /git is already a command on this computer, so yours stays Renamed\./.test(pc.log()), "the clash to be noted");
+  assert.equal((await until(async () => JSON.parse(pc.read("config.json")), "the config")).command, "Renamed");
+  const brand = await until(async () => JSON.parse(pc.read("site/brand.js").replace(/^export default /, "").replace(/;\s*$/, "")), "the brand file");
   assert.equal(brand.logo.b64, PNG);
   assert.equal(brand.favicon, null);
 });
@@ -195,4 +210,23 @@ test("limit resets on the account are listed, and one can be used from the site"
   // and the list is read again afterwards
   await until(async () => (await site.api("/api/credits")).body?.resets?.[0]?.grants?.[0]?.left === 0, "the resets left to update");
   assert.equal((await site.post("/api/resets/use", { program: "x; rm", grant: "launch_reset" })).status, 400);
+});
+
+test("a name changed in Settings while the computer was away reaches it when it's back, and the command follows", async t => {
+  const site = await startSite({ appVersion: "2.2.0" });
+  await site.claim();
+  const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9" });
+  t.after(async () => {
+    pc.cleanup();
+    await site.stop();
+  });
+  assert.equal((await site.post("/api/site", { displayName: "Away Name" })).status, 200);
+  pc.startAgent();
+  await until(async () => JSON.parse(pc.read("config.json")).command === "AwayName", "the command to follow the name");
+  assert.equal(JSON.parse(pc.read("config.json")).displayName, "Away Name");
+  assert.ok(existsSync(join(pc.home, "bin", "AwayName")) && !existsSync(join(pc.home, "bin", "TestSite")));
+  await until(async () => (await site.api("/api/state")).body.site.command === "AwayName", "the site to hear of it");
+  // and the page's own copy of it
+  const page = await (await site.asOwner("/")).text();
+  assert.match(page, /"command":"AwayName"/);
 });

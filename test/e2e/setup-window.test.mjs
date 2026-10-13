@@ -9,8 +9,7 @@ import { tmpdir } from "node:os";
 import { startRepo } from "../helpers/github.mjs";
 import { ROOT, makeFakes } from "../helpers/computer.mjs";
 import { startFakeCloudflare } from "../helpers/cloudflare.mjs";
-import { openPage } from "../helpers/browser.mjs";
-import { findChromium } from "../helpers/fake-claude-app.mjs";
+import { openPage, findChromium } from "../helpers/browser.mjs";
 
 const CHROME = await findChromium();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -65,13 +64,10 @@ async function setUp(t, extraEnv = {}, args = []) {
 
 test("the setup window asks everything a first install needs, explains Cloudflare Access and its card, and ends with the site's address", { skip: !CHROME && "needs a Chromium" }, async t => {
   const s = await setUp(t);
-  // the plan: paying for Claude
-  let text = await s.card("Do you have a paid plan?");
-  assert.match(text, /your site answers with your plan, from this computer/);
-  await s.click('[data-answer="y"]');
-
-  // a name the site can't use is said, and asked again
-  await s.card("Name your site");
+  // there's no plan to pick (replies always come from Claude Code): it starts with the name. One the site can't use is
+  // said, and asked again
+  let text = await s.card("Name your site");
+  assert.doesNotMatch(text, /paid plan|free plan/i);
   await s.type("!!!");
   text = await s.page.until(`(() => { const a = document.querySelector("#card .alert"); return a && a.textContent; })()`, "the reason the name won't work");
   assert.match(text, /That name won't work/);
@@ -111,40 +107,10 @@ test("the setup window asks everything a first install needs, explains Cloudflar
 
   const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
   assert.equal(cfg.displayName, "My Site");
-  assert.equal(cfg.plan, "paid");
+  assert.equal(cfg.plan, undefined, "there's no plan to keep: replies come from Claude Code");
+  assert.equal(cfg.command, "MySite", "the command is the site's name");
   // every step is ticked off in the window's list
   assert.equal(await s.page.evaluate(`document.querySelectorAll("#steps li.done").length > 3 && !document.querySelector("#steps li.now")`), true);
-});
-
-test("on the free plan the setup window asks for the Claude app until it's installed", { skip: !CHROME && "needs a Chromium" }, async t => {
-  const app = join(mkdtempSync(join(tmpdir(), "cc-gui-app-")), "Claude");
-  t.after(() => rmSync(app, { force: true }));
-  const s = await setUp(t, { CLAUDECONNECT_CLAUDE_APP: app, CLAUDECONNECT_APP_DRIVER: "cdp" }, ["--name", "Free Site", "--no-autostart"]);
-  await s.card("Do you have a paid plan?");
-  await s.click('[data-answer="n"]');
-  let text = await s.card("Install the desktop app");
-  assert.match(text, /Download the desktop app/);
-  // checked again without it: still not there
-  await s.click('[data-answer=""]');
-  await s.card("The desktop app isn't there yet");
-  // installed now
-  writeFileSync(app, "");
-  await s.click('[data-answer=""]');
-  // what using the app this way can mean for the Claude account, before anything is done with it
-  text = await s.card("Before the desktop app is used for you");
-  assert.match(text, /could be limited or closed/);
-  assert.match(text, /Stop bar/);
-  await s.click('[data-answer="y"]');
-  await s.card("Pick a logo", 60000);
-  assert.ok(existsSync(app));
-  await s.click('[data-answer=""]');
-  await s.card("Pick a tab icon");
-  await s.click('[data-answer=""]');
-  await s.card("Lock it to your Cloudflare account", 60000);
-  await s.click("[data-claim]");
-  await s.card("Nearly done");
-  assert.equal(await s.exited, 0, s.out());
-  assert.equal(JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8")).plan, "free");
 });
 
 test("when the setup stops, the window says why", { skip: !CHROME && "needs a Chromium" }, async t => {
