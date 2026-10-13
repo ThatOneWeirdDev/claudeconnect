@@ -68,7 +68,7 @@ test("a first install, then an update, through the real launcher and installer",
   });
 
   // ---- first install
-  const first = await runLauncher(home, env, ["--name", "My Site", "--no-autostart", "--no-fable"]);
+  const first = await runLauncher(home, env, ["--name", "My Site", "--no-autostart"]);
   assert.equal(first.status, 0, first.out);
   assert.match(first.out, new RegExp(`Downloading ${RELEASE.version}`));
   assert.match(first.out, /claim=/);
@@ -84,7 +84,7 @@ test("a first install, then an update, through the real launcher and installer",
   assert.equal(wr.name, "my-site");
   assert.equal(wr.account_id, "acct-1");
   assert.equal(wr.kv_namespaces[0].id, "kv-new");
-  assert.deepEqual(wr.vars, { SITE_NAME: "My Site", COMMAND: "MySite", SHOW_FABLE: "0", APP_VERSION: RELEASE.version, UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "my-site" });
+  assert.deepEqual(wr.vars, { SITE_NAME: "My Site", COMMAND: "MySite", APP_VERSION: RELEASE.version, UPDATE_REPO: "ThatOneWeirdDev/claudeconnect", UPDATE_REF: "main", WORKER_NAME: "my-site" });
 
   const cfg1 = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   assert.equal(cfg1.site, "https://my-site.testacct.workers.dev");
@@ -172,7 +172,7 @@ test("the one-line install script sets everything up, and tells you if Node is t
       });
     });
 
-  const ok = await sh(["--name", "Script Site", "--no-autostart", "--no-fable"]);
+  const ok = await sh(["--name", "Script Site", "--no-autostart"]);
   assert.equal(ok.status, 0, ok.out);
   assert.match(ok.out, new RegExp(`Downloading ${RELEASE.version}`));
   const cfg = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));

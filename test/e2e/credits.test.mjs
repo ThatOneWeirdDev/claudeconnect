@@ -66,7 +66,7 @@ test("under the limits, credits are just on or off, and junk about them is dropp
 });
 
 test("with usage credits turned off here, nothing is sent at a plan limit, nor to Fable, from any device", async t => {
-  const s = await startSite({ vars: { SHOW_FABLE: "1" } });
+  const s = await startSite();
   t.after(() => s.stop());
   await s.claim();
   const agent = await connectAgent(s);
@@ -99,6 +99,82 @@ test("with usage credits turned off here, nothing is sent at a plan limit, nor t
   await (await ok).text();
 
   assert.equal((await s.post("/api/prefs", { useCredits: "no" })).body.useCredits, false, "only a true or false changes it");
+});
+
+async function fableSite(t) {
+  const s = await startSite();
+  t.after(() => s.stop());
+  await s.claim();
+  const agent = await connectAgent(s, { caps: ["update", "admin", "limits", "modes", "credits", "computer"], computer: { autostart: false, credits: true, history: "all", workspace: "/w" } });
+  const goes = async (text, model = "claude-fable-5-1") => {
+    const sent = s.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text, model }) });
+    const run = await agent.next(m => m.type === "run");
+    assert.deepEqual([run.prompt, run.model], [text, model]);
+    agent.send({ type: "done", runId: run.runId, chatId: run.chatId, text: "ok", started: true, tools: [] });
+    await (await sent).text();
+  };
+  const fable = async () => (await s.api("/api/state")).body.fable;
+  const send = text => s.post("/api/send", { text, model: "claude-fable-5-1" });
+  return { s, agent, goes, fable, send };
+}
+
+test("Fable 5.1 is only offered when there are usage credits to spend, and isn't sent without them", async t => {
+  const { s, agent, goes, fable, send } = await fableSite(t);
+  // nothing known yet: not offered, and asking for it reads the plan again
+  assert.deepEqual([(await fable()).available, (await fable()).why], [false, "unknown"]);
+  const unknown = await send("too soon");
+  assert.equal(unknown.status, 409);
+  assert.equal(unknown.body.code, "no_credits");
+  await agent.next(m => m.type === "limits_refresh", 2000);
+  await assert.rejects(agent.next(m => m.type === "run", 300), /timed out/, "nothing reached the computer");
+
+  // Claude Code says they're on: offered, and it goes
+  await reading(s, agent, { status: "allowed", overageStatus: "allowed", windows: windows(20, 10) });
+  assert.equal((await fable()).available, true);
+  await goes("with credits");
+
+  // used up
+  await reading(s, agent, { status: "allowed", overageStatus: "rejected", overageDisabledReason: "out_of_credits", windows: windows(20, 10) });
+  assert.equal((await fable()).why, "out");
+  const held = await send("big job");
+  assert.equal(held.status, 409);
+  assert.equal(held.body.code, "no_credits");
+  assert.match(held.body.error, /^You have no usage credits left! Fable 5\.1 only runs on usage credits\./);
+  await goes("other models still go", "claude-opus-5-5");
+
+  // not turned on for the account
+  await reading(s, agent, { status: "allowed", overageStatus: "rejected", overageDisabledReason: "overage_not_provisioned", windows: windows(20, 10) });
+  assert.match((await send("again")).body.error, /^You have no usage credits! They aren't turned on for your Claude account/);
+
+  // turned off for this site
+  await reading(s, agent, { status: "allowed", overageStatus: "allowed", windows: windows(20, 10) });
+  await s.post("/api/prefs", { useCredits: false });
+  assert.deepEqual([(await fable()).available, (await fable()).why], [false, "site"]);
+  assert.equal((await send("off here")).body.code, "credits_off");
+  await s.post("/api/prefs", { useCredits: true });
+
+  // a reply Claude turns away for want of credits says so plainly
+  const sent = s.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "once more", model: "claude-fable-5-1" }) });
+  const run = await agent.next(m => m.type === "run");
+  agent.send({ type: "done", runId: run.runId, chatId: run.chatId, text: "", error: "API Error: 400 Your credit balance is too low to access this model.", started: false, tools: [] });
+  await (await sent).text();
+  const msgs = (await s.api(`/api/chats/${run.chatId}`)).body.messages;
+  assert.match(msgs.at(-1).meta.error, /^You have no usage credits! Fable 5\.1 only runs on usage credits\./);
+});
+
+test("without a word from Claude Code, the balance the computer reads decides whether Fable 5.1 is offered", async t => {
+  const { agent, goes, fable } = await fableSite(t);
+  const balance = async credits => {
+    agent.send({ type: "credits", credits });
+    await sleep(150);
+    return fable();
+  };
+  assert.equal((await balance({ extra: { enabled: true, limit: null, used: 0 }, balance: { amount: 0, currency: "USD", promos: [] } })).why, "none", "turned on, but nothing to spend");
+  assert.equal((await balance({ extra: { enabled: false, limit: null, used: 0 }, balance: { amount: 500, currency: "USD", promos: [] } })).why, "off");
+  assert.equal((await balance({ extra: { enabled: true, limit: 5000, used: 5000 }, balance: { amount: 500, currency: "USD", promos: [] } })).why, "none", "the monthly limit is reached");
+  assert.equal((await balance({ extra: { enabled: true, limit: null, used: 0 }, balance: { amount: 0, currency: "USD", promos: [{ amount: 300, currency: "USD", expires: null, name: "Gift" }] } })).available, true, "promotional credit counts");
+  await goes("on the gift");
+  assert.equal((await balance({ extra: { enabled: true, limit: 5000, used: 100 } })).available, true, "turned on with room, and no balance to read");
 });
 
 test("the computer passes on what Claude Code says about credits", async () => {

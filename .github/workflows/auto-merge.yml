@@ -1,25 +1,52 @@
-name: Auto-merge Pull Requests
+name: Auto-merge
 
+# Merges a pull request by itself once CI is green: one opened by the repository's owner, or by Claude. CI calls this after
+# every test job has passed on the pull request's newest commit (see the merge job in ci.yml), so nothing red is merged, and
+# nothing pushed after the tests started is merged either. Drafts wait until they're marked ready.
+#
+# The Actions token can merge everything except a pull request that changes the workflow files themselves: GitHub keeps
+# that for tokens with the "workflow" scope. To have those merge by themselves too, add a personal access token with the
+# repo and workflow scopes as a repository secret named AUTO_MERGE_TOKEN. Without it, such a pull request gets a comment
+# saying it needs merging by hand.
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-
-permissions:
-  contents: write
-  pull-requests: write
+  workflow_call:
 
 jobs:
-  auto-merge:
-    if: github.event.pull_request.user.login == 'Pancakefire' && github.event.pull_request.draft == false
+  merge:
+    if: >-
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == github.repository_owner || github.event.pull_request.user.login == 'claude[bot]')
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
-      - name: Enable auto-merge
+      - name: Merge the pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge "$PR_URL" --auto --squash
+          MERGE_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+          ACTIONS_TOKEN: ${{ github.token }}
+          OWN_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN != '' }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if out=$(GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR" --repo "$REPO" --squash --match-head-commit "$SHA" 2>&1); then
+            echo "Merged #$PR."
+            # A merge made with the Actions token doesn't start other workflows, so CI on main is started here instead.
+            if [ "$OWN_TOKEN" != "true" ]; then
+              GH_TOKEN="$ACTIONS_TOKEN" gh workflow run ci.yml --repo "$REPO" --ref main || echo "::warning::Couldn't start CI on main."
+            fi
+            exit 0
+          fi
+          echo "$out"
+          if printf '%s' "$out" | grep -qi "workflow"; then
+            why="It changes the workflow files, and GitHub only lets a token with the \"workflow\" scope merge that. Merge it by hand, or add a personal access token with the repo and workflow scopes as the AUTO_MERGE_TOKEN secret."
+          else
+            why="GitHub said: $(printf '%s' "$out" | tail -n 3 | tr '\n' ' ')"
+          fi
+          echo "::warning title=Not merged automatically::$why"
+          printf '### Not merged automatically\n\n%s\n' "$why" >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN="$ACTIONS_TOKEN" gh pr comment "$PR" --repo "$REPO" --body "CI is green on $SHA, but this pull request couldn't be merged automatically. $why" || true

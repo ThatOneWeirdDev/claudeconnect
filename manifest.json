@@ -1,19 +1,30 @@
 {
   "name": "claudeconnect",
-  "version": "1.11.0",
-  "released": "2026-10-09",
+  "version": "2.0.0",
+  "released": "2026-10-12",
   "notes": [
-    "\"Updated\" means updated: the update keeps its progress bar going until the site really answers as the new version, then the page switches over at once.",
-    "Limit resets: if your Claude account has resets (like the one Anthropic gave subscribers to clear a limit whenever they choose), Plan usage lists them, with how many are left, and a button to use one."
+    "No Claude subscription? Setup now asks, and on the free plan the Claude app answers instead of Claude Code: your message is typed into the app, with the model and extended thinking you pick, and the reply streams back as it's written.",
+    "Without the Claude app, Claude opens in its own window of Chrome, Edge, Brave or Chromium instead. Sign in to claude.ai there once. Works on Mac and Windows.",
+    "When Claude Code needs your permission (pick Ask first), or a window in the Claude app waits for an answer, the site dims and shows just that question, to allow or deny from any device.",
+    "Plan usage shows your free limit resets, daily or weekly, and when each limit resets. So does the note when you run out, with a button to use a reset.",
+    "A new look, closer to ChatGPT, colors included.",
+    "Settings now has everything the edit command has, and the other way round: your Claude plan, starting when you log in, the working folder, the theme, and the rest.",
+    "Everything runs as Claude Code: the switch between Claude and Claude Code is gone.",
+    "Fable 5.1 is in the model picker whenever you have usage credits to spend, and your credit balance is always shown. Their settings are gone.",
+    "The sidebar always lists every Claude Code chat on your computer, and the context circle only shows once a chat has started.",
+    "The theme is kept on the site, so it's the same on every device.",
+    "Bringing chats over from claude.ai's data export is gone, and chats brought over that way are removed from the site. They're still on claude.ai."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "1426eb181a4b573b761939a20414b565b530b855ae31747bdb07034c0e51ca25",
-    "agent/agent.mjs": "2333adde9118cffe80821d2b47db4e888848c3cb826169f2cd37609fc48012cd",
+    "installer.mjs": "b50e9cca9c8e0c07554589082c5867eeb652e27a08b35542741b5dfb141b5861",
+    "agent/agent.mjs": "e09b16e92d12b897daf87a907ed1d89457accf37495d85edfd8bafd55f5f9816",
     "agent/sessions.mjs": "2bc7f69b97cdca6037306f2d389dd3b362fe7b8f8c271508fe2d3820a8bf36c0",
-    "site/worker.js": "92ccc1717c6bb75baca3793fff5ca7971aa7ecdfeaf5d5a3b2821584feb8dafa",
-    "site/app.html": "5dbd5c5d21d977128481aeb207e20a464944c6202842a239951304050cfbd761",
-    "site/version.js": "8a042367a589983c42664b26f4f457f7c05b89f9c2cca3dfe9e10c3b70091bd9",
+    "agent/app.mjs": "6ee26a6685ac9ce8a90ea0070d2f15e807004c2e503228aeadd307dff3a9f5d0",
+    "agent/permit.mjs": "d6607a5da852305283dd8216b891f0d7925a1bc114c49dcf5226f59dfaebc1d6",
+    "site/worker.js": "5842ef593f12fae14212c7341f1fc9ed4044d1cc678fb9b0c4e18c3fcb582db3",
+    "site/app.html": "3f8edea7b477667ec1a78283e5732ab71f637690d96b698d64cd599a365aebd2",
+    "site/version.js": "2c56b3032c090182dd54d5dd93151a7b401350b5bdf5aa67ed783ab8fcedee69",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
   }

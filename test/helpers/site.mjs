@@ -57,7 +57,7 @@ export class ChatgqlHub extends Base {
   async fetch(req) {
     if (new URL(req.url).pathname === "/api/__seed") {
       const b = await req.json();
-      for (const c of b.chats || []) this.sql.exec("INSERT OR REPLACE INTO chats (id, title, model, effort, session_id, started, running, created, updated) VALUES (?, ?, 'claude-opus-5-5', 'medium', ?, 1, NULL, ?, ?)", c.id, c.title, c.id, c.created, c.updated);
+      for (const c of b.chats || []) this.sql.exec("INSERT OR REPLACE INTO chats (id, title, model, effort, session_id, started, running, created, updated, origin) VALUES (?, ?, 'claude-opus-5-5', 'medium', ?, 1, NULL, ?, ?, ?)", c.id, c.title, c.id, c.created, c.updated, c.origin || null);
       for (const m of b.messages || []) this.sql.exec("INSERT OR REPLACE INTO messages (id, chat_id, role, content, meta, created) VALUES (?, ?, ?, ?, ?, ?)", m.id, m.chat, m.role, m.content, m.meta ? JSON.stringify(m.meta) : "{}", m.created);
       return Response.json({ ok: true });
     }
@@ -108,7 +108,6 @@ export async function startSite(opts = {}) {
         bindings: {
           SITE_NAME: "Test Site",
           COMMAND: "TestConnect",
-          SHOW_FABLE: "0",
           APP_VERSION: opts.appVersion || "1.1.0",
           UPDATE_REPO: "ThatOneWeirdDev/claudeconnect",
           UPDATE_REF: "main",

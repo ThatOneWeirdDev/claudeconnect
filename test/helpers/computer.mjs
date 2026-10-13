@@ -18,7 +18,7 @@ if (a[0] === "--version") { console.log("2.1.300 (Claude Code)"); process.exit(0
 if (a[0] === "auth") { console.log(JSON.stringify({ authMethod: "claude.ai" })); process.exit(0); }
 if (a[0] === "--help") {
   // an old Claude Code has no --system-prompt-snapshot; the file "old-claude" in the home folder makes this one old
-  console.log("Usage: claude [options]\\n  --tools <tools...>  Specify the list of available tools\\n  --system-prompt <prompt>  System prompt to use for the session");
+  console.log("Usage: claude [options]\\n  --tools <tools...>  Specify the list of available tools\\n  --system-prompt <prompt>  System prompt to use for the session\\n  --permission-prompt-tool <tool>  MCP tool to handle permission prompts in non-interactive mode");
   if (!fs.existsSync(path.join(home, "old-claude"))) console.log("  --system-prompt-snapshot <on|off>  Record the system prompt once per conversation");
   process.exit(0);
 }
@@ -37,6 +37,28 @@ process.stdin.on("data", d => (prompt += d)).on("end", () => {
     process.exit(1);
   }
   out({ type: "system", subtype: "init", model: "claude-opus-5-5" });
+  // Asked for something that needs permission: like the real one, ask the --permission-prompt-tool, an MCP server started from
+  // --mcp-config, and go by its answer.
+  const tool = a.indexOf("--permission-prompt-tool") >= 0 ? a[a.indexOf("--permission-prompt-tool") + 1] : "";
+  if (/needs permission/.test(prompt) && tool) {
+    const cfg = JSON.parse(fs.readFileSync(a[a.indexOf("--mcp-config") + 1], "utf8"));
+    const [server, name] = tool.split("__").slice(1);
+    const def = cfg.mcpServers[server];
+    const child = require("node:child_process").spawn(def.command, def.args, { env: { ...process.env, ...def.env }, stdio: ["pipe", "pipe", "inherit"] });
+    const waiting = new Map();
+    require("node:readline").createInterface({ input: child.stdout }).on("line", line => { const m = JSON.parse(line); if (waiting.has(m.id)) waiting.get(m.id)(m); });
+    let n = 0;
+    const call = (method, params) => new Promise(r => { const id = ++n; waiting.set(id, r); child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\\n"); });
+    (async () => {
+      await call("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake-claude", version: "1" } });
+      const r = await call("tools/call", { name, arguments: { tool_name: "Bash", input: { command: "rm -rf build", description: "Clean the build folder" }, tool_use_id: "toolu_1" } });
+      const d = JSON.parse(r.result.content[0].text);
+      child.stdin.end();
+      out({ type: "assistant", message: { id: "m1", content: [{ type: "text", text: d.behavior === "allow" ? "Permission: allow" : "Permission: deny: " + d.message }] } });
+      out({ type: "result", subtype: "success", is_error: false, result: "ok", permission_denials: d.behavior === "allow" ? [] : [{ tool_name: "Bash" }] });
+    })();
+    return;
+  }
   if (/interleave/.test(prompt)) {
     // thinking, text, thinking, text in one reply, streamed the way Claude Code streams it
     const ev = e => out({ type: "stream_event", event: e });
@@ -125,8 +147,7 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   mkdirSync(join(home, "ws"), { recursive: true });
   makeFakes(bin);
   // the previous version, as an earlier install would have left it
-  copyFileSync(join(ROOT, "agent", "agent.mjs"), join(dir, "agent.mjs"));
-  copyFileSync(join(ROOT, "agent", "sessions.mjs"), join(dir, "sessions.mjs"));
+  for (const f of ["agent.mjs", "sessions.mjs", "app.mjs", "permit.mjs"]) copyFileSync(join(ROOT, "agent", f), join(dir, f));
   copyFileSync(join(ROOT, "ClaudeConnect.mjs"), join(dir, "ClaudeConnect.mjs"));
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ version: oldVersion, files: {} }));
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "claudeconnect", private: true, type: "module" }));
@@ -140,7 +161,7 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(dir, "agent.mjs")}" "$@"\n`);
   chmodSync(shim, 0o755);
   const config = {
-    name: "test-site", displayName: "Test Site", command: "TestConnect", fable: false,
+    name: "test-site", displayName: "Test Site", command: "TestConnect", fable: false, // fable: as installs before 1.12.0 saved it
     accountId: "acct-123", kvId: "kv-123", site: site.origin, secret: AGENT_SECRET, workspace: join(home, "ws"),
     permissionMode: "auto", shim, version: oldVersion, repo: "ThatOneWeirdDev/claudeconnect", ref: "main",
     token: site.jwt, tokenExp: Math.floor(Date.now() / 1000) + 86400 * 30, claudePath: join(bin, "claude"), id: "agent-real"

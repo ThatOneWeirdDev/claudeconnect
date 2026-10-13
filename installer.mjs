@@ -4,13 +4,14 @@
 // --update does the same from a terminal, and --edit (what `<command> edit` runs) asks about each setting with a y/n.
 import { spawnSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, accessSync, chmodSync, rmSync, statSync, readdirSync, openSync, readSync, closeSync, renameSync, cpSync, constants } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, sep, isAbsolute, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import crypto from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { SLUG_RE, NAME_RE, toSlug, cleanSiteName, cleanAddress } from "./site/names.js";
 import { MAX_IMG, sniffImage, checkImage } from "./site/image.js";
+import { QUESTION_KEYS } from "./site/version.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = process.platform === "win32";
@@ -122,6 +123,44 @@ function findClaude() {
     if (v.status === 0) return { cmd: q(local), path: local, version: (String(v.stdout).match(/\d+\.\d+\.\d+/) || [""])[0] };
   }
   return null;
+}
+
+// Claude Code, installed and signed in with a Claude plan: setup, and `edit` when you switch to paying for Claude.
+async function setUpClaudeCode() {
+  let claude = findClaude();
+  if (!claude) {
+    note("Not installed yet, installing it now.");
+    const r = IS_WIN
+      ? sh(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"`)
+      : sh(`curl -fsSL https://claude.ai/install.sh | bash`);
+    claude = findClaude();
+    if (r.status !== 0 || !claude) fail("Claude Code didn't install. Install it from https://claude.ai/install and run this again.");
+  }
+  note(`Claude Code ${claude.version} is installed.`);
+  if (!signedIn(claude.cmd)) {
+    note("Sign in with your Claude account in the browser window that opens.");
+    sh(`${claude.cmd} auth login`);
+    if (!signedIn(claude.cmd)) fail("Claude Code isn't signed in yet. Run this again when you're ready to sign in.");
+  }
+  note("Signed in with your Claude plan.");
+  return claude;
+}
+
+// The free plan needs the Claude app (or, failing that, a Chrome, Edge or Brave to open claude.ai in). Nothing to install here:
+// the program on this computer opens the app when a message comes in, and types it there.
+async function checkClaudeApp() {
+  step("Checking the Claude app");
+  note("Claude Code needs a paid plan, so replies will come from the Claude app on this computer: each message is typed into it, and the reply read back as it's written.");
+  // where the release keeps it: next to this file in a download, flattened into the install folder afterwards
+  const helpers = await import(existsSync(join(HERE, "agent", "app.mjs")) ? "./agent/app.mjs" : "./app.mjs").catch(() => null);
+  const app = helpers ? helpers.claudeAppPath() : "";
+  const browser = helpers ? helpers.browserPath() : "";
+  if (app) note("The Claude app is installed. Make sure you're signed in to it.");
+  else if (browser) note("The Claude app isn't installed, so a browser window of its own, signed in to claude.ai, is used instead. To use the app, install it from https://claude.ai/download.");
+  else {
+    note("Install the Claude app from https://claude.ai/download and sign in to it. Messages wait until it's there.");
+    if (tty) openUrl("https://claude.ai/download");
+  }
 }
 
 function signedIn(cmd) {
@@ -388,7 +427,7 @@ function wranglerConfig(o) {
     durable_objects: { bindings: [{ name: "HUB", class_name: "ChatgqlHub" }] },
     migrations: [{ tag: "v1", new_sqlite_classes: ["ChatgqlHub"] }],
     kv_namespaces: [{ binding: "TOKENS", id: o.kvId }],
-    vars: { SITE_NAME: o.displayName, COMMAND: o.command, SHOW_FABLE: o.fable ? "1" : "0", APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug },
+    vars: { SITE_NAME: o.displayName, COMMAND: o.command, APP_VERSION: o.version, UPDATE_REPO: o.repo, UPDATE_REF: o.ref, WORKER_NAME: o.slug },
     observability: { enabled: true }
   };
 }
@@ -398,13 +437,27 @@ function wranglerConfig(o) {
 // until that site is deleted.
 let REPORT_TO = null;
 
-// From a terminal, the same steps are printed as they start.
-const STEP_LABEL = { site: "Updating the site", computer: "Updating this computer", restart: "Restarting", online: "Coming back online" };
+// From a terminal, the same steps are printed as they start, and Ctrl+C asks a move to stop (CANCEL), like the site's Cancel.
+const STEP_LABEL = { site: "Updating the site", computer: "Updating this computer", restart: "Restarting", online: "Coming back online", prepare: "Checking the new address", create: "Setting up the new site", access: "Waiting for you to claim the new site", switch: "Switching this computer over", cleanup: "Deleting the old site" };
+let shownStep = "";
+let CANCEL = false;
 
 async function report(step, status, message, info) {
   if (!REMOTE) {
-    if (status === "active" && STEP_LABEL[step]) console.log(teal("▸ ") + bold(STEP_LABEL[step]));
-    return null;
+    if (status === "active" && STEP_LABEL[step] && shownStep !== step) {
+      shownStep = step;
+      console.log(teal("▸ ") + bold(STEP_LABEL[step]));
+      // what the site's page shows for this step
+      if (step === "access" && info && info.site) {
+        console.log(`  Nobody can open the new site until you turn on Cloudflare Access for it. ${bold("This one stays online meanwhile.")}`);
+        console.log(`  1. Open the Cloudflare dashboard: ${info.dash}`);
+        console.log(`     Workers & Pages → ${info.name} → Settings → Domains & Routes.`);
+        console.log("  2. On the workers.dev row choose Enable Cloudflare Access, then Manage Cloudflare Access, and allow only your own email address.");
+        console.log(`  3. Open this claim link and sign in with that email. That makes the new site yours:\n     ${info.claim}`);
+        note("Waiting for you to open the new site. Press Ctrl+C to cancel; the old site stays as it is.");
+      }
+    }
+    return CANCEL ? { cancel: true } : null;
   }
   if (!UPDATE_ID) return null;
   const c = REPORT_TO || readJson(CONFIG);
@@ -497,7 +550,7 @@ async function remoteUpdate(manifest) {
     await report("site", "active");
     signIn(old);
     installSite(manifest);
-    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version: manifest.version, repo: REPO, ref: REF }), null, 2));
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", version: manifest.version, repo: REPO, ref: REF }), null, 2));
     deploy(SITE, old, "the new version");
     // "Updated" has to mean updated: this step lasts until the site really answers as the new version, front and back
     await siteServes(old, manifest.version);
@@ -511,6 +564,7 @@ async function remoteUpdate(manifest) {
     cfg.version = manifest.version;
     cfg.repo = REPO;
     cfg.ref = REF;
+    delete cfg.fable; // there is no Fable 5.1 setting any more: it shows whenever there are usage credits
     writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
     await report("computer", "done");
     at = "restart";
@@ -587,13 +641,15 @@ function deploy(dir, old, what) {
   fail(`Cloudflare didn't accept ${what}.${why ? " " + why.slice(0, 200) : ""} Run ${old.command || "ClaudeConnect"} update on your computer to see the details.`);
 }
 
-async function restartAgent() {
+// `between` runs while it's stopped, so it can't save its own copy of config.json over a change made then.
+async function restartAgent(between) {
   const logPath = join(DIR, "agent.log");
   let from = 0;
   try {
     from = statSync(logPath).size;
   } catch {}
   await stopAgentQuietly();
+  if (between) between();
   spawnSync(process.execPath, [join(DIR, "agent.mjs"), "background"], { stdio: "ignore" });
   return waitForConnected(logPath, from, 120000);
 }
@@ -611,7 +667,7 @@ async function kvValue(kvId, key) {
   }
 }
 
-// Name, what the AI calls itself, Fable, logo and tab icon: the same site, redeployed with new settings. Chats are untouched.
+// Name, logo and tab icon: the same site, redeployed with new settings. Chats are untouched.
 async function remoteSettings(old, job) {
   accountId = old.accountId;
   let at = "site";
@@ -619,7 +675,6 @@ async function remoteSettings(old, job) {
     await report("site", "active");
     signIn(old);
     const displayName = cleanSiteName(job.displayName) || old.displayName || "ClaudeConnect";
-    const fable = typeof job.fable === "boolean" ? job.fable : !!old.fable;
     const brand = readBrand();
     for (const k of ["logo", "favicon"]) {
       if (!(k in job)) continue;
@@ -633,14 +688,15 @@ async function remoteSettings(old, job) {
     }
     writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify(brand) + ";\n");
     const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
-    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, command: old.command || "ClaudeConnect", fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName, command: old.command || "ClaudeConnect", version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
     deploy(SITE, old, "the changes");
     await report("site", "done");
     at = "computer";
     await report("computer", "active");
     const cfg = readJson(CONFIG) || old;
-    Object.assign(cfg, { displayName, fable });
+    cfg.displayName = displayName;
     delete cfg.aiName; // older installs saved a name for the AI; Claude runs with its own default instructions now
+    delete cfg.fable; // there is no Fable 5.1 setting any more: it shows whenever there are usage credits
     writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
     await report("computer", "done");
     at = "restart";
@@ -658,7 +714,6 @@ async function remoteSettings(old, job) {
     await report(at, "error", msg);
     process.exit(1);
   }
-  process.exit(0);
 }
 
 // A new address is a new Worker. The old site stays up and in use until the new one is claimed and this computer has connected to
@@ -704,7 +759,7 @@ async function remoteMove(old, job) {
     const secret = crypto.randomBytes(32).toString("base64url");
     const claim = crypto.randomBytes(18).toString("base64url");
     const version = old.version || (readJson(join(DIR, "manifest.json")) || {}).version || "0.0.0";
-    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", fable: !!old.fable, version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
+    writeFileSync(join(next, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", version, repo: old.repo || REPO, ref: old.ref || REF }), null, 2));
     touched = true;
     deploy(next, old, "the new site");
     const tmp = join(DIR, `secrets-${crypto.randomBytes(6).toString("hex")}.json`);
@@ -756,12 +811,13 @@ async function remoteMove(old, job) {
 
     at = "cleanup";
     await report("cleanup", "active", undefined, info);
-    await sleep(3500); // the page is polling: let it see this step before the site it is polling goes away
+    if (REMOTE) await sleep(3500); // the page is polling: let it see this step before the site it is polling goes away
     const gone = await cf("DELETE", `/accounts/${accountId}/workers/scripts/${encodeURIComponent(old.name)}?force=true`);
     if (!gone.ok && gone.status !== 404) fail(`${old.displayName || "The site"} now lives at ${newSite}, but the old site couldn't be deleted (${gone.error}). You can delete ${old.name} in the Cloudflare dashboard.`);
     await cf("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${old.kvId}`);
     rmSync(prev, { recursive: true, force: true });
     console.log(`Moved to ${newSite}. The old site is gone.`);
+    return newSite;
   } catch (e) {
     const msg = failure(e);
     console.error(msg);
@@ -785,7 +841,6 @@ async function remoteMove(old, job) {
     await report(at, "error", msg);
     process.exit(1);
   }
-  process.exit(0);
 }
 
 // The Delete button: the site and every chat in it are removed, and this computer stops serving it. The folder Claude works in is kept.
@@ -795,11 +850,12 @@ async function remoteDelete(old) {
   try {
     await report("site", "active");
     signIn(old);
-    await sleep(3500); // the page is polling: let it see this step before the site it is polling goes away
+    if (REMOTE) await sleep(3500); // the page is polling: let it see this step before the site it is polling goes away
     const gone = await cf("DELETE", `/accounts/${accountId}/workers/scripts/${encodeURIComponent(old.name)}?force=true`);
     if (!gone.ok && gone.status !== 404) fail(`Cloudflare wouldn't delete the site (${gone.error}).`);
     await cf("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${old.kvId}`);
     at = "computer";
+    if (!REMOTE) await report("computer", "active"); // the site is gone by now, so only a terminal is told
     const agentPath = join(DIR, "agent.mjs");
     spawnSync(process.execPath, [agentPath, "autostart", "off"], { stdio: "ignore" });
     await stopAgentQuietly();
@@ -812,7 +868,6 @@ async function remoteDelete(old) {
     await report(at, "error", msg);
     process.exit(1);
   }
-  process.exit(0);
 }
 
 if (REMOTE_OP) {
@@ -834,10 +889,29 @@ if (REMOTE_OP) {
   if (REMOTE_OP === "settings") await remoteSettings(old, job);
   else if (REMOTE_OP === "move") await remoteMove(old, job);
   else await remoteDelete(old);
+  process.exit(0);
 }
 
-// ---- `<command> edit`: each setting in turn, with what it is now, and a y/n to change it. The site's own settings are
-// redeployed in place like Settings on the site does it; the rest only touches this computer.
+// ---- `<command> edit`: every setting the site's Settings has, in the same order, each with what it is now and a y/n to
+// change it. The name, logo and tab icon are redeployed in place like Settings on the site does it; the theme and whether usage
+// credits are used are kept on the site; the rest only touches this computer. A new address, or deleting the site, comes last.
+const THEME_NAMES = { system: "System", light: "Light", dark: "Dark" };
+
+// The site's own settings, read and changed with this computer's key. Null if the site can't be reached.
+async function sitePrefs(cfg, change) {
+  try {
+    const r = await fetch(cfg.site.replace(/\/$/, "") + "/agent/prefs", {
+      method: change ? "POST" : "GET",
+      headers: { "content-type": "application/json", "cf-access-token": cfg.token || "", "x-chatgql-key": cfg.secret || "", "x-agent-id": cfg.id || "" },
+      body: change ? JSON.stringify(change) : undefined,
+      signal: AbortSignal.timeout(10000)
+    });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+
 async function editSettings() {
   let old;
   try {
@@ -849,9 +923,14 @@ async function editSettings() {
   const yes = async (q, def = false) => /^y/i.test(await ask(`  ${q} ${def ? "[Y/n]" : "[y/N]"} `, def ? "y" : "n"));
   const name = old.displayName || "ClaudeConnect";
   const agentPath = join(DIR, "agent.mjs");
+  const tilde = p => (p === HOME || p.startsWith(HOME + sep) ? "~" + p.slice(HOME.length) : p);
   console.log(bold(`\nChange ${name}`) + dim("  Enter keeps things as they are."));
-  const job = {};
-  const local = {};
+  const job = {}; // part of the site: redeployed
+  const prefs = {}; // kept on the site
+  const local = {}; // this computer's own
+  let address = "";
+
+  // General
   if (await yes(`Change the name? Now: ${name}.`)) {
     for (;;) {
       const n = String(await ask("  New name: ", "")).trim().replace(/\s+/g, " ");
@@ -863,6 +942,8 @@ async function editSettings() {
       console.log("  That name won't work. Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number.");
     }
   }
+
+  // Appearance
   const brand = readBrand();
   if (await yes(`Change the logo? Now: ${brand.logo ? "your own" : "the built-in one"}.`)) {
     const img = await askImage("Logo", "the current one", "the built-in one", "--logo", brand.logo);
@@ -872,18 +953,97 @@ async function editSettings() {
     const img = await askImage("Tab icon", "the current one", "the logo", "--favicon", brand.favicon);
     if (JSON.stringify(img) !== JSON.stringify(brand.favicon)) job.favicon = img;
   }
-  if (await yes(`${old.fable ? "Hide" : "Show"} Fable 5.1 in the model picker? It's ${old.fable ? "shown" : "hidden"} now.`)) job.fable = !old.fable;
+  const site = await sitePrefs(old);
+  if (!site) note(`${name} couldn't be reached, so its theme and whether it uses usage credits can't be changed right now.`);
+  if (site && (await yes(`Change the theme? Now: ${THEME_NAMES[site.theme] || "whatever each browser last picked"}.`))) {
+    for (;;) {
+      const t = String(await ask("  System, light or dark? ", "")).trim().toLowerCase();
+      if (!t) break;
+      if (THEME_NAMES[t]) {
+        if (t !== site.theme) prefs.theme = t;
+        break;
+      }
+      console.log("  Type system, light or dark.");
+    }
+  }
+
+  // This computer
   const auto = autostartOn();
   if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
-  const credits = old.credits !== false;
-  if (await yes(`${credits ? "Stop showing" : "Show"} your usage credit balance on the site? It's ${credits ? "shown" : "not shown"} now. This reads your Claude Code sign-in on this computer to ask Claude for it; the sign-in itself never leaves this computer.`)) local.credits = !credits;
+  // whether you pay for Claude: Claude Code answers, or the Claude app on this computer does
+  const plan = old.plan === "free" ? "free" : "paid";
+  if (await yes(plan === "paid" ? "Switch to the free plan? Now you pay for Claude, so Claude Code answers; on the free plan the Claude app on this computer does." : "Do you pay for Claude now (Pro, Max, Team or Enterprise)? Now it's the free plan, so the Claude app answers; with a paid plan Claude Code does.")) local.plan = plan === "paid" ? "free" : "paid";
+  const ws = old.workspace || join(HOME, name);
+  if (await yes(`Change the working folder, where Claude Code works and files you attach go? Now: ${tilde(ws)}.`)) {
+    for (;;) {
+      const raw = String(await ask("  New folder (a full path, like ~/Projects): ", "")).trim().replace(/^["']|["']$/g, "");
+      if (!raw) break;
+      if (!isAbsolute(raw.replace(/^~(?=$|[\\/])/, "/"))) {
+        console.log("  Use a full path, like ~/Projects or " + join(HOME, "Projects") + ".");
+        continue;
+      }
+      const dir = resolvePath(raw.replace(/^~(?=$|[\\/])/, HOME));
+      if (existsSync(dir) && !statSync(dir).isDirectory()) {
+        console.log("  That's a file, not a folder.");
+        continue;
+      }
+      if (dir !== ws) local.workspace = dir;
+      break;
+    }
+  }
+
+  // Plan usage
+  if (site && (local.plan || plan) === "paid") {
+    const on = site.useCredits !== false;
+    if (await yes(`${on ? "Stop using" : "Use"} usage credits from the site? They're ${on ? "used" : "not used"} now. ${on ? "Turned off, new messages wait while you're at a plan limit, and Fable 5.1, which only runs on them, is paused." : "Turned on, replies carry on past a plan limit, paid from your credits, and Fable 5.1 can be used."}`)) prefs.useCredits = !on;
+  }
+
+  // Address
+  if (await yes(`Change the address? Now: ${old.site}. You'd get a new link, and the old one stops working.`)) {
+    let host = "";
+    try {
+      host = new URL(old.site).hostname;
+    } catch {}
+    const suffix = host.startsWith(old.name + ".") ? host.slice(old.name.length) : "";
+    for (;;) {
+      const a = String(await ask(`  New address${suffix ? ` (the part before ${suffix})` : ""}: `, "")).trim().toLowerCase();
+      if (!a) break;
+      const slug = cleanAddress(a);
+      if (!slug) console.log("  Use lowercase letters, numbers and dashes, starting and ending with a letter or number.");
+      else if (slug === old.name) console.log("  That's the address it already has.");
+      else {
+        address = slug;
+        break;
+      }
+    }
+  }
+
+  // Delete
+  if (await yes(`Delete ${name}? This removes the site and every chat in it, and can't be undone.`)) {
+    if (String(await ask(`  Type ${name} to confirm: `, "")).trim() === name) {
+      console.log(`\n  ${bold(`Delete ${name} and every chat in it.`)} The command stops working on this computer. Your files in the working folder are kept.`);
+      if (!(await yes("Delete it now?"))) {
+        console.log("\nNothing changed.");
+        process.exit(0);
+      }
+      JOB = true;
+      Object.assign(STEP_LABEL, { site: "Deleting the site", computer: "Removing it from this computer" });
+      await remoteDelete(old);
+      process.exit(0);
+    }
+    console.log("  That isn't the name, so it won't be deleted.");
+  }
+
   const changes = [
     job.displayName && `name: ${job.displayName}`,
     "logo" in job && `logo: ${job.logo ? "new" : "built-in"}`,
     "favicon" in job && `tab icon: ${job.favicon ? "new" : "the logo"}`,
-    "fable" in job && `Fable 5.1: ${job.fable ? "shown" : "hidden"}`,
+    prefs.theme && `theme: ${THEME_NAMES[prefs.theme]}`,
     "autostart" in local && `start at login: ${local.autostart ? "yes" : "no"}`,
-    "credits" in local && `usage credit balance: ${local.credits ? "shown" : "not shown"}`
+    local.plan && `Claude plan: ${local.plan === "paid" ? "paid (Claude Code answers)" : "free (the Claude app answers)"}`,
+    local.workspace && `working folder: ${tilde(local.workspace)}`,
+    "useCredits" in prefs && `usage credits from the site: ${prefs.useCredits ? "used" : "not used"}`,
+    address && `address: ${address} (a new link; the old one stops working)`
   ].filter(Boolean);
   if (!changes.length) {
     console.log("\nNothing changed.");
@@ -894,22 +1054,60 @@ async function editSettings() {
     console.log("\nNothing changed.");
     process.exit(0);
   }
+  let failed = false;
   if ("autostart" in local) spawnSync(process.execPath, [agentPath, "autostart", local.autostart ? "on" : "off"], { stdio: "ignore" });
-  if ("credits" in local) {
-    const cfg = readJson(CONFIG) || old;
-    cfg.credits = local.credits;
-    writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-    old = cfg;
+  if (local.workspace) {
+    try {
+      mkdirSync(join(local.workspace, "uploads"), { recursive: true });
+    } catch (e) {
+      console.log(`  That folder can't be used: ${String((e && e.message) || e).slice(0, 160)}`);
+      delete local.workspace;
+      failed = true;
+    }
+  }
+  // Claude Code has to be there, and signed in, before it can answer
+  if (local.plan === "paid") {
+    try {
+      JOB = true;
+      await setUpClaudeCode();
+    } catch (e) {
+      console.log(`  ${failure(e)}`);
+      delete local.plan;
+      failed = true;
+    } finally {
+      JOB = false;
+    }
+  } else if (local.plan === "free") await checkClaudeApp();
+  const cfgChange = Object.fromEntries(["plan", "workspace"].filter(k => k in local).map(k => [k, local[k]]));
+  if (Object.keys(cfgChange).length) {
+    // written while the program here is stopped, so it can't save its own copy over this
+    const write = () => {
+      const cfg = readJson(CONFIG) || old;
+      Object.assign(cfg, cfgChange);
+      writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+      old = cfg;
+    };
+    if (agentPid()) {
+      console.log(teal("▸ ") + bold("Restarting"));
+      await restartAgent(write);
+    } else write();
+  }
+  if (Object.keys(prefs).length && !(await sitePrefs(old, prefs))) {
+    console.log(`  ${name} couldn't be reached, so the ${prefs.theme ? "theme" : ""}${prefs.theme && "useCredits" in prefs ? " and the " : ""}${"useCredits" in prefs ? "usage credits setting" : ""} didn't change. Try again in a moment.`);
+    failed = true;
   }
   JOB = true;
-  // The name, logo, tab icon and Fable are part of the site: it's redeployed, and the program here restarts.
+  // The name, logo and tab icon are part of the site: it's redeployed, and the program here restarts.
   if (Object.keys(job).length) await remoteSettings(old, job);
-  if ("credits" in local && agentPid()) {
-    console.log(teal("▸ ") + bold("Restarting"));
-    await restartAgent();
+  if (address) {
+    process.once("SIGINT", () => {
+      CANCEL = true;
+      console.log("\n  Cancelling the move…");
+    });
+    await remoteMove(readJson(CONFIG) || old, { address });
   }
-  console.log("Saved.");
-  process.exit(0);
+  console.log(failed ? "Saved the rest." : "Saved.");
+  process.exit(failed ? 1 : 0);
 }
 
 function autostartOn() {
@@ -949,14 +1147,11 @@ async function quickUpdate() {
   const cfg = installedConfig();
   console.log(bold(`\nUpdating ${cfg.displayName || "ClaudeConnect"} to ${payload.version}`) + dim("  your chats and settings are kept"));
   // what this version asks that the installed one didn't: a y/n each, before anything changes
-  const asks = (Array.isArray(payload.questions) ? payload.questions : []).filter(q => q && ["autostart", "credits"].includes(q.key) && typeof q.label === "string" && newerThan(q.since, cfg.version || "0.0.0") && !newerThan(q.since, payload.version));
+  const asks = (Array.isArray(payload.questions) ? payload.questions : []).filter(q => q && QUESTION_KEYS.includes(q.key) && typeof q.label === "string" && newerThan(q.since, cfg.version || "0.0.0") && !newerThan(q.since, payload.version));
   for (const q of asks) {
     if (q.help) note(q.help);
     const a = /^y/i.test(await ask(`  ${q.label} ${q.default ? "[Y/n]" : "[y/N]"} `, q.default ? "y" : "n"));
-    if (q.key === "credits") {
-      cfg.credits = a;
-      writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-    } else if (q.key === "autostart") spawnSync(process.execPath, [join(DIR, "agent.mjs"), "autostart", a ? "on" : "off"], { stdio: "ignore" });
+    if (q.key === "autostart") spawnSync(process.execPath, [join(DIR, "agent.mjs"), "autostart", a ? "on" : "off"], { stdio: "ignore" });
   }
   JOB = true;
   await remoteUpdate(payload);
@@ -976,23 +1171,18 @@ if (!prior.accountId) {
 }
 const known = prior.displayName || "ClaudeConnect";
 
-step("Checking Claude Code");
-let claude = findClaude();
-if (!claude) {
-  note("Not installed yet, installing it now.");
-  const r = IS_WIN
-    ? sh(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"`)
-    : sh(`curl -fsSL https://claude.ai/install.sh | bash`);
-  claude = findClaude();
-  if (r.status !== 0 || !claude) fail("Claude Code didn't install. Install it from https://claude.ai/install and run this again.");
+// Whether you pay for Claude. Claude Code needs a paid plan; without one, replies come from the Claude app on this computer,
+// typed into it. Asked once, when there's nothing set up yet; after that it's in Settings and `<command> edit`.
+let plan = flag("--free") ? "free" : flag("--paid") ? "paid" : prior.plan === "free" ? "free" : "paid";
+if (!prior.accountId && !flag("--free") && !flag("--paid")) {
+  step("Your Claude plan");
+  plan = /^y/i.test(await ask("  Do you pay for Claude (Pro, Max, Team or Enterprise)? [Y/n] ", "y")) ? "paid" : "free";
 }
-note(`Claude Code ${claude.version} is installed.`);
-if (!signedIn(claude.cmd)) {
-  note("Sign in with your Claude account in the browser window that opens.");
-  sh(`${claude.cmd} auth login`);
-  if (!signedIn(claude.cmd)) fail("Claude Code isn't signed in yet. Run this again when you're ready to sign in.");
-}
-note("Signed in with your Claude plan.");
+let claude = null;
+if (plan === "paid") {
+  step("Checking Claude Code");
+  claude = await setUpClaudeCode();
+} else await checkClaudeApp();
 
 step("Checking your Cloudflare sign-in");
 token = cloudflareToken();
@@ -1085,9 +1275,6 @@ if (priorBrand.logo || priorBrand.favicon) note("Type default to go back to the 
 const logo = await askImage("Logo", "the current one", "the built-in one", "--logo", priorBrand.logo);
 let favicon = await askImage("Tab icon", "the current one", logo ? "the logo" : "the built-in one", "--favicon", priorBrand.favicon);
 if (favicon && logo && favicon.b64 === logo.b64) favicon = null;
-const fableDef = mode === "update" && prior.fable ? "y" : "n";
-const fableAns = flag("--fable") ? "y" : flag("--no-fable") ? "n" : await ask(`  Do you have usage credits for Fable 5.1? It only shows in the model picker if you do. [${fableDef === "y" ? "Y/n" : "y/N"}] `, fableDef);
-const fable = /^y/i.test(fableAns);
 const { prefix: npmPrefix } = shimDirs();
 let binDir = npmPrefix ? (IS_WIN ? npmPrefix : join(npmPrefix, "bin")) : "";
 let onPath = true;
@@ -1116,7 +1303,7 @@ stopLocal();
 removeShims([prior.command, "chatgql"], [prior.shim]);
 installSite(payload);
 writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify({ logo, favicon }) + ";\n");
-writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, fable, version: payload.version, repo: REPO, ref: REF }), null, 2));
+writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, version: payload.version, repo: REPO, ref: REF }), null, 2));
 if (sh(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE }).status !== 0) fail("Cloudflare didn't accept the site. The messages above say why.");
 const secret = same && prior.secret ? prior.secret : crypto.randomBytes(32).toString("base64url");
 const claim = crypto.randomBytes(18).toString("base64url");
@@ -1140,13 +1327,15 @@ mkdirSync(workspace, { recursive: true });
 mkdirSync(binDir, { recursive: true });
 const agentPath = join(DIR, "agent.mjs");
 const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
-const cfg = { name: slug, displayName, command, fable, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
+const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF, plan };
 if (same && prior.id) cfg.id = prior.id;
+if (same && prior.appPort) cfg.appPort = prior.appPort;
+if (same && prior.appRefused) cfg.appRefused = prior.appRefused;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;
   cfg.tokenExp = prior.tokenExp;
 }
-if (claude.path) cfg.claudePath = claude.path;
+if (claude && claude.path) cfg.claudePath = claude.path;
 if (process.env.CLAUDECONNECT_CF_API) cfg.api = API;
 writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 if (legacy) {
