@@ -26,7 +26,11 @@ npx github:ThatOneWeirdDev/claudeconnect
 
 Each of these runs `ClaudeConnect.mjs`, a small launcher. It downloads the current release from this repository, checks every file against [`manifest.json`](manifest.json), and runs the setup that came with it. Nothing about ClaudeConnect itself is stored inside the launcher.
 
-Setup asks for a name and whether you pay for Claude, signs you in to Cloudflare, creates the site, then walks you through turning on Cloudflare Access and opening a one-time claim link. Running it again on a computer that is already set up offers **update** (in place, no questions), **reset** or **leave it**.
+Setup opens in a window in your browser: a page on your own computer (nothing is installed for it) that asks a few questions with buttons, shows each step as it happens, and walks you through the one part done in Cloudflare's dashboard. It asks whether you pay for Claude and what to call your site, signs you in to Cloudflare, creates the site, then explains turning on Cloudflare Access step by step and opens your one-time claim link. Running it again on a computer that is already set up offers **update** (in place, no questions), **reset** or **leave it**.
+
+Turning on Cloudflare Access the first time also turns on Cloudflare Zero Trust, and Cloudflare asks for a credit card for that even on its **Free** plan. Choose the Free plan: it costs nothing, Cloudflare uses the card to check you're a real person, and you won't be charged unless you pick a paid plan yourself, which ClaudeConnect never needs.
+
+The setup still works in the terminal: it's used automatically over SSH or where there's no display, and `--cli` asks for it. `--gui` opens the window anyway.
 
 ## From a terminal
 
@@ -58,7 +62,7 @@ The command you run on your computer (`<command> help` lists them) doesn't chang
 | --- | --- |
 | **+** | Add files. |
 | **Auto** / **Ask first** / **Accept edits** / **Plan** | How freely Claude Code acts. Every message runs as Claude Code, working in the folder on your computer with its own default instructions. **Auto** lets it decide what is safe. **Ask first** asks you before anything that needs permission: a command, an edit, a folder outside the working folder. **Accept edits** edits files without asking. **Plan** looks around and writes a plan, and asks before carrying it out. Whenever Claude Code asks, in any of these, the page dims and shows just that question, and **Allow** or **Deny** on any device goes straight back to Claude Code. A question nobody answers in 10 minutes is a no. |
-| **Model** and **Effort** | Show what is picked and open a list to change it. Haiku has no effort setting, so its button is hidden. Fable 5.1 is listed when you have usage credits to spend (see below). |
+| **Model** and **Effort** | Show what is picked and open a list to change it. Every model has every effort: Low, Medium, High, Extra high and Max, and **Ultracode**, which is Extra high plus Claude Code's multi-agent workflows: big tasks are split across many agents working at once, which uses much more of your plan. Ultracode is offered when the Claude Code on your computer knows it (2.1.284 or newer); an older one gets Extra high. Fable 5.1 is listed when you have usage credits to spend (see below). |
 | **Ring** | How much of the model's context window the chat has used, from the last reply. It shows once a chat has started, not in an empty message box. When it gets full the conversation is compacted automatically. |
 
 On the free plan the model list is the Claude app's own, and there's an **Extended thinking** switch instead of effort and permission modes.
@@ -104,55 +108,25 @@ On the free plan there's no Claude Code, so the sidebar has the chats started on
 
 ## Without a paid plan
 
-Claude Code needs a paid Claude plan. Without one, answer **no** when setup asks whether you pay for Claude (or switch later in **Settings** → **General** → **This computer**, or with `<command> edit`), and the [Claude app](https://claude.ai/download) answers instead:
+Claude Code needs a paid Claude plan. Without one, answer **no** when setup asks whether you pay for Claude (or switch later in **Settings** → **General** → **This computer**, or with `<command> edit`), and the [Claude desktop app](https://claude.ai/download) answers instead. The app is required: setup asks for it until it's installed, on macOS or Windows.
 
-- **Your message is typed into the Claude app** on your computer, with the model you picked on the site and extended thinking on or off, and sent. The reply is read from the app as it's written and streams to the site.
+- **Your message is typed into the Claude app** on your computer, with the model you picked on the site and extended thinking on or off, and sent. The reply is read from the app as it's written and streams to the site, with its headings, lists, code blocks, tables and links.
 - **The model picker lists the app's own models.** Ones that need a paid plan are shown but can't be picked. **The app's choice** leaves the app on whatever it has picked.
-- **A chat on the site stays one conversation in the app**, so a follow-up carries on where it left off. **Stop** stops the reply in the app too.
-- **Files you attach** are added to the message in the app. If the app won't take them, text files go into the message itself.
-- **Plan usage** shows the free plan's limits from claude.ai, when each resets, and your free limit resets, daily or weekly, with a button to use one. Running out says until when.
-- **When the app asks something**, such as a permission window, the page dims and shows a picture of just that window. Click it, or one of its buttons, on any device and the click happens in the app. Nobody answering for 10 minutes closes it, which allows nothing, and stops the reply.
+- **A chat on the site stays one conversation in the app**, so a follow-up carries on where it left off, even if you've opened another conversation in the app since. If that conversation can't be found, a new one starts with the chat so far. **Stop** stops the reply in the app too.
+- **Files you attach**: text files go into the message itself. Pictures and other files can't be handed to the app this way.
+- **Plan usage** shows the free plan's limits as far as the app says them. Running out says until when, and the site holds messages until then.
+- **When the app asks something**, such as a permission window, the page dims and shows what the window says, with its buttons. Pick one on any device and it's picked in the app. Nobody answering for 10 minutes closes it, which allows nothing, and stops the reply.
+- **You can always take the app back.** While it's using the app, a bar at the top of your screen, over every window, says so, with a **Stop** button. Press it and it lets go at once: nothing more is typed or clicked, and it doesn't touch the app again until you allow it, with the button that appears over the message box on the site.
 
-How it works: the program on your computer starts the Claude app with Chromium's debugging connection on, on a port only your computer can reach, and works with the page through it, the way a browser's developer tools do. It finds the message box, the model menu and the send button by what they are rather than where they are on the screen, so the window can be any size, behind other windows or on another desktop. It doesn't move your mouse or use your keyboard or clipboard, so you can keep using the computer while it types. If the app is already open without that connection, it's restarted once; your conversations are on claude.ai, so nothing is lost. Messages go one at a time, since there's one app window; a second one waits and says so.
+How it works: the program on your computer uses the Claude app the way a screen reader or an automation tool does, through the operating system's accessibility features: macOS Accessibility (with the small `osascript` helper macOS already has) or Windows UI Automation (with Windows PowerShell). It reads the app's window as a tree of buttons, text boxes and text, so it finds the message box, the model menu and the send button by what they are rather than where they are on the screen. It presses them without moving your mouse, and puts your message straight into the message box, so the app can stay behind your other windows. Only if the box won't take it that way does it bring the app forward for a moment and paste (putting back what was on your clipboard and the window you were in), and never while you're typing. It doesn't start the app in any special mode or close it. Messages go one at a time, since there's one app window; a second one waits and says so.
 
-No Claude app on this computer (there's none for Linux), or it won't open the connection? ClaudeConnect opens claude.ai in a window of its own in Chrome, Edge, Brave, Vivaldi or Chromium instead, with a profile of its own. Sign in to Claude there once. It's an ordinary browser window you sign in to yourself, started without the switches automation tools use, so claude.ai sees an ordinary browser and there's no "are you a robot" check beyond the one you'd get anyway.
+On a Mac this needs your permission: **System Settings** → **Privacy & Security** → **Accessibility**. Setup asks for it and opens that page. Switch on the terminal app you ran setup in, and **node** (setup shows its path; if it isn't listed, press **+** and add it), which is what runs when it starts by itself at log in. Windows asks no permission for this. There's no Claude app for Linux, so there the free plan isn't available.
 
-This depends on how claude.ai's page is built. If Anthropic changes it in a way ClaudeConnect doesn't follow, the site says it couldn't type into the app or read the reply, and an update fixes it. Paths can be set with `CLAUDECONNECT_CLAUDE_APP` and `CLAUDECONNECT_BROWSER` if yours are somewhere unusual.
+**Your Claude account.** This is automation of a Claude account: Anthropic's terms for Claude accounts don't allow using Claude through automated means except where Anthropic says so, and your account could be limited or closed for it. Setup says so and asks before anything is done with the app. Use it at your own risk; with a paid plan, Claude Code answers instead, and none of this applies.
 
-## Updating
+There's no browser to fall back on: claude.ai in a browser window driven by a program never gets past Cloudflare's human check, so the app is required.
 
-The site checks this repository for a newer version every minute (skipping GitHub's own five-minute cache) and shows **Update available**. Click it for the patch notes, then **Update now**: your computer downloads the release, checks every file against the manifest, redeploys the site in place and restarts. When the steps are done the page switches to the new version by itself, as soon as nothing you were typing, attaching or waiting for could be lost (**Reload now** is there if you'd rather not wait). It's the same address, so there's no new link. Once a page has loaded the new version, **Updated** and **Reload** are gone, on every device, until the next update (the same goes for a change in Settings). If Cloudflare still hands out the old page for a moment after you reload, the page quietly tries again rather than asking you to. You can also run `<command> update` in a terminal.
-
-The update screen can always be closed: the update carries on by itself, and the button in the top bar shows how far it's got and opens it again. When a new version brings a setting of its own, the update screen asks about it before you press **Update now**, and the answer is set as soon as the new version is running. The **Updates** panel in Settings keeps the patch notes: the first time each browser opens a new version it opens on them, and **Earlier updates** lists the last few.
-
-**First time only:** versions before 1.3.0 can't do any of this from the page, because the program on your computer doesn't know how yet. Run the install command above once and choose **update**.
-
-### Where updates come from
-
-By default `main` of this repository, saved at install and used for every later update:
-
-```sh
-node ClaudeConnect.mjs --ref v1.5.0                  # a tag or commit, so nothing changes until you decide
-node ClaudeConnect.mjs --repo yourname/claudeconnect # your own fork
-```
-
-An update runs code from that source on your computer and in your Cloudflare account, so treat the repository you point it at like any other software you install. The checksums protect against a corrupted or half-updated download. They don't protect against a source you shouldn't trust.
-
-## Making a release
-
-`manifest.json` holds the version and a SHA-256 for every file that ships. The site, the launcher and the installer all trust it, so keep it in step with the files:
-
-```sh
-node scripts/release.mjs 1.4.0   # sets the version in manifest.json and package.json, refreshes the hashes
-# edit "notes" in manifest.json: these lines are what people see under "What's new"
-# a new computer setting the update should ask about goes in "questions":
-#   { "key": "autostart", "label": "…?", "help": "…", "default": true, "since": "1.9.0" }   (keys: autostart)
-node scripts/release.mjs         # refresh the hashes after editing
-```
-
-Once it's on `main`, every open site offers the update within about a minute and a half (or straight away with **Check again**). CI fails if the hashes are stale, and on pull requests it fails if shipped files changed without a new version.
-
-A site is deployed before the program on your computer is replaced, so a new site has to keep working with the previous agent.
+This depends on how the Claude app's page is built. If Anthropic changes it in a way ClaudeConnect doesn't follow, the site says it couldn't type into the app or read the reply, and an update fixes it. The app's path can be set with `CLAUDECONNECT_CLAUDE_APP` if yours is somewhere unusual.
 
 ## Layout
 
@@ -161,9 +135,12 @@ A site is deployed before the program on your computer is replaced, so a new sit
 | `install.sh`, `install.ps1` | One-line installs. They check for Node, download the launcher and run it. |
 | `ClaudeConnect.mjs` | Launcher: downloads, verifies, runs the installer. A copy is kept on your computer for updates. |
 | `installer.mjs` | Setup wizard, plus the no-questions operations the site's Settings use: `--remote-update`, and `--remote-op settings`, `move` or `delete`. |
+| `setup.mjs`, `setup.html` | The setup's window: a local page (127.0.0.1, a one-time key) that shows the installer's questions and steps. |
 | `agent/agent.mjs` | The program on your computer that runs Claude Code and carries out what the site asks. |
 | `agent/sessions.mjs` | Reads Claude Code's saved chats, for the list and for opening them. |
-| `agent/app.mjs` | The free plan: opens the Claude app (or a browser window) over the debugging connection, types each message and reads the reply. |
+| `agent/app.mjs` | The free plan, step by step: opens the Claude app, picks the model, types each message, reads the reply, answers the app's questions from the site, and shows the Stop bar while it does. |
+| `agent/app-os.mjs` | How it uses the Claude app: through macOS Accessibility or Windows UI Automation, with `app-mac.js` and `app-mac-bar.js` (JavaScript for Automation) or `app-win.ps1` and `app-win-bar.ps1` (Windows PowerShell) doing the reading, pressing and the Stop bar. |
+| `agent/app-cdp.mjs` | A stand-in way in that the tests use, against a stand-in Claude app in a headless Chromium. |
 | `agent/permit.mjs` | The small MCP server Claude Code asks through for **Ask first**, which passes each question to the site. |
 | `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
 | `site/app.html` | The web app. Its colours and type follow OpenAI's published ChatGPT design tokens. |
@@ -180,7 +157,7 @@ npm test            # manifest check and unit tests
 npm run test:e2e    # the real worker in workerd (miniflare), and full runs with real processes
 ```
 
-The end-to-end tests run the unmodified worker with real Access-JWT verification against a throwaway key. The free plan's run in a real headless Chromium against a stand-in for claude.ai (skipped when there's no Chromium). The heavier ones run the real agent, launcher and installer together on a temporary home folder, with only `claude`, `wrangler` and Cloudflare's API replaced by fakes, and drive a complete update, a settings change, a move (including the old site being deleted only after the new one is claimed, and a cancel that rolls everything back) and a delete.
+The end-to-end tests run the unmodified worker with real Access-JWT verification against a throwaway key. The free plan's tests run the real accessibility driver (`agent/app-os.mjs`) against a stand-in for the macOS and Windows helpers, which shows a made-up Claude app the way Accessibility and UI Automation would, and the step-by-step part against a stand-in Claude app in a headless Chromium too. The helpers themselves only run on a Mac or Windows; the Windows ones' C# is kept to C# 5, the version Windows PowerShell 5.1 compiles. The setup window and the update screen are driven in a real Chromium too (all of these are skipped when there's no Chromium). The heavier ones run the real agent, launcher and installer together on a temporary home folder, with only `claude`, `wrangler` and Cloudflare's API replaced by fakes, and drive a complete update, a settings change, a move (including the old site being deleted only after the new one is claimed, and a cancel that rolls everything back) and a delete.
 
 ### Pull requests merge themselves
 

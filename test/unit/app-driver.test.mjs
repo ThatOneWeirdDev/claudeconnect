@@ -1,12 +1,13 @@
 // The free plan's pieces that don't need a browser: model ids, how a reply being written is passed on, claude.ai's usage
-// reading, free resets, and where the Claude app and a browser are looked for. The page side is tested end to end, in a real
+// reading, free resets, and where the Claude app is looked for. The page side is tested end to end, in a real
 // Chromium, in test/e2e/app.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { modelId, textChange, limitsFromUsage, resetsFrom, refillEvery, claudeAppPath, browserPath, PAGE_LIB } from "../../agent/app.mjs";
+import * as driver from "../../agent/app.mjs";
+const { modelId, textChange, limitsFromUsage, resetsFrom, refillEvery, claudeAppPath, PAGE_LIB } = driver;
 
 test("the Claude app's model names become the same ids Claude Code's models have", () => {
   assert.equal(modelId("Opus 5.5"), "claude-opus-5-5");
@@ -58,15 +59,15 @@ test("free resets say how many are left, and how often a new one comes when Clau
   assert.deepEqual(resetsFrom(null), []);
 });
 
-test("the Claude app and a browser are found where they're installed, and a test can say where", () => {
+test("the Claude app is found where it's installed, a test can say where, and there's no browser to fall back on", () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-find-"));
   const app = join(dir, "Claude");
   writeFileSync(app, "");
   assert.equal(claudeAppPath({ CLAUDECONNECT_CLAUDE_APP: app }), app);
   assert.equal(claudeAppPath({ CLAUDECONNECT_CLAUDE_APP: "" }), "", "none, on purpose");
   assert.equal(claudeAppPath({ CLAUDECONNECT_CLAUDE_APP: join(dir, "missing") }), "");
-  assert.equal(browserPath({ CLAUDECONNECT_BROWSER: app }), app);
-  assert.equal(browserPath({ CLAUDECONNECT_BROWSER: "" }), "");
+  // claude.ai in a browser window never gets past Cloudflare's human check when it's driven, so the app is required
+  assert.equal(driver.browserPath, undefined);
   if (process.platform === "win32") {
     // the newest app-<version> folder of a Squirrel install comes first, so arguments reach the app itself
     const local = join(dir, "Local");
@@ -85,4 +86,54 @@ test("the page code is one self-contained piece that defines nothing on the page
   assert.doesNotMatch(PAGE_LIB, /Runtime\.enable/);
   // it parses
   assert.doesNotThrow(() => new Function(PAGE_LIB));
+});
+
+test("the app's limit notice says when free messages come back, in this computer's time", () => {
+  const now = new Date(2026, 9, 13, 14, 30); // a Tuesday, 2:30 PM
+  const at = (d, h, m = 0) => Math.round(new Date(2026, 9, d, h, m).getTime() / 1000);
+  const { resetFromNotice } = driver;
+  assert.equal(resetFromNotice("You're out of free messages until 4:00 PM", now), at(13, 16));
+  assert.equal(resetFromNotice("You're out of free messages until 9:00 AM", now), at(14, 9), "a time already gone today is tomorrow");
+  assert.equal(resetFromNotice("You are out of free messages until tomorrow at 9 AM", now), at(14, 9));
+  assert.equal(resetFromNotice("Out of messages until Thursday 4:00 PM", now), at(15, 16));
+  assert.equal(resetFromNotice("Out of messages until Tuesday 1:00 PM", now), at(20, 13), "this weekday, gone already: next week");
+  assert.equal(resetFromNotice("Your limit resets at 12:15 AM", now), at(14, 0, 15));
+  assert.equal(resetFromNotice("Your limit resets at 17:00", now), at(13, 17));
+  for (const junk of ["", "Upgrade to Pro", "until 13:00 PM", "until 25:00"]) assert.equal(resetFromNotice(junk, now), null, junk);
+});
+
+// ---- the driver that goes through macOS Accessibility or Windows UI Automation (agent/app-os.mjs): a reply comes back as
+// a tree of what the page shows, and is turned back into Markdown
+import { markdown, ascii } from "../../agent/app-os.mjs";
+const tx = v => ({ r: "text", v });
+const g = (...k) => ({ r: "group", k });
+
+test("a reply read through accessibility comes back as the Markdown it was written in", () => {
+  const reply = g(
+    g(tx("Hello "), { r: "strong", k: [tx("there")] }, tx(", see "), { r: "link", u: "https://example.com/a", k: [tx("this")] }, tx(" and "), { r: "code", k: [tx("x = 1")] }, tx(".")),
+    { r: "heading", l: 3, k: [tx("Steps")] },
+    { r: "list", k: [g({ r: "marker", v: "1." }, tx("first")), g({ r: "marker", v: "2." }, g(tx("second, with "), { r: "em", k: [tx("feeling")] }), { r: "list", k: [g({ r: "marker", v: "•" }, tx("inner"))] })] },
+    g(g(tx("js"), { r: "button" }), g({ r: "code", c: "language-js", k: [tx("const a = 1;\n"), tx("console.log(a);\n")] })),
+    { r: "table", k: [{ r: "row", k: [{ r: "cell", k: [tx("A")] }, { r: "cell", k: [tx("B|C")] }] }, { r: "column", k: [{ r: "cell", k: [tx("A")] }] }, { r: "row", k: [{ r: "cell", k: [tx("1")] }, { r: "cell", k: [tx("2")] }] }] },
+    { r: "separator" },
+    g(tx("Done."))
+  );
+  assert.equal(
+    markdown(reply),
+    "Hello **there**, see [this](https://example.com/a) and `x = 1`.\n\n### Steps\n\n1. first\n2. second, with *feeling*\n   - inner\n\n```js\nconst a = 1;\nconsole.log(a);\n```\n\n| A | B\\|C |\n| --- | --- |\n| 1 | 2 |\n\n---\n\nDone."
+  );
+});
+
+test("a reply's buttons, pictures and empty parts leave nothing behind, and an empty reply is empty", () => {
+  assert.equal(markdown(null), "");
+  assert.equal(markdown(g()), "");
+  assert.equal(markdown(g({ r: "button" }, g({ r: "image" }), g(tx("  ")), g(tx("Only this")))), "Only this");
+  // a heading's level defaults when the system doesn't say (Windows), and a bare link stays a bare address
+  assert.equal(markdown(g({ r: "heading", k: [tx("Title")] }, g({ r: "link", u: "https://a.example/", k: [tx("https://a.example/")] }))), "## Title\n\nhttps://a.example/");
+});
+
+test("lines to the helpers are pure ASCII, so a line never breaks partway through a character", () => {
+  const s = ascii(JSON.stringify({ text: "héllo 👋 “quotes”" }));
+  assert.match(s, /^[\x20-\x7e]*$/);
+  assert.deepEqual(JSON.parse(s), { text: "héllo 👋 “quotes”" });
 });

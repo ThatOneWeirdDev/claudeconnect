@@ -153,12 +153,14 @@ test("edit can switch to the free plan: the program here restarts on the Claude 
   });
   for (let i = 0; i < 100 && !(await site.api("/api/state")).body.agent.online; i++) await sleep(150);
   const cmd = `"${process.execPath}" "${join(pc.dir, "agent.mjs")}" edit`;
-  const env = { ...pc.env, CLAUDECONNECT_CLAUDE_APP: "", CLAUDECONNECT_BROWSER: "" };
-  const r = await converse(cmd, env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/theme/, ""], [/log in/, ""], [/Switch to the free plan\?/, "y"], [/working folder,/, ""], [/address/, ""], [/Delete/, ""], [/Claude plan: free \(the Claude app answers\)[\s\S]*Save these changes\? \[Y\/n\]/, ""]]);
+  // (the stand-in driver: the free plan needs the Claude app, which there's none of on Linux)
+  const env = { ...pc.env, CLAUDECONNECT_CLAUDE_APP: "", CLAUDECONNECT_BROWSER: "", CLAUDECONNECT_APP_DRIVER: "cdp" };
+  const r = await converse(cmd, env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/theme/, ""], [/log in/, ""], [/Switch to the free plan\?/, "y"], [/working folder,/, ""], [/address/, ""], [/Delete/, ""], [/Claude plan: free \(the Claude app answers\)[\s\S]*Save these changes\? \[Y\/n\]/, ""], [/check again \(s to skip for now, q to stop\)/, "s"], [/Use the Claude app this way\? \[Y\/n\]/, ""]]);
   assert.equal(r.status, 0, r.out);
-  assert.equal(r.asked, 10, r.out);
+  assert.equal(r.asked, 12, r.out);
   assert.doesNotMatch(r.out, /usage credits from the site\?/, "the free plan has no usage credits");
   assert.match(r.out, /Install the Claude app from https:\/\/claude\.ai\/download/);
+  assert.match(r.out, /your Claude account could be limited or closed/, "the risk is said before the app is used");
   assert.equal(JSON.parse(readFileSync(join(pc.dir, "config.json"), "utf8")).plan, "free");
   let st = null;
   for (let i = 0; i < 100; i++) {

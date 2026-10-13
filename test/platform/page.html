@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Claude</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
+  nav { width: 200px; border-right: 1px solid #ddd; padding: 12px; }
+  main { flex: 1; display: flex; flex-direction: column; padding: 12px; }
+  #thread { flex: 1; overflow: auto; }
+  .font-user-message { background: #eee; padding: 8px; border-radius: 12px; margin: 8px 0; }
+  .composer { display: flex; gap: 8px; align-items: center; border: 1px solid #ccc; border-radius: 16px; padding: 8px; }
+  .ProseMirror { flex: 1; min-height: 24px; outline: none; }
+  [role="menu"] { position: absolute; left: 240px; bottom: 80px; background: #fff; border: 1px solid #ccc; padding: 4px; }
+  [role="menuitem"] { padding: 6px 10px; cursor: pointer; }
+</style>
+</head>
+<body>
+<!-- A small stand-in for claude.ai, the way the Claude app shows it: what test/platform/driver.test.mjs drives through the
+     operating system's accessibility features, in a real Chromium. -->
+<nav>
+  <a href="#new" aria-label="New chat" id="new">New chat</a>
+</nav>
+<main>
+  <div id="thread"></div>
+  <div class="composer">
+    <div contenteditable="true" role="textbox" aria-label="Write your prompt to Claude" class="ProseMirror" id="box"></div>
+    <button type="button" id="model" aria-haspopup="menu" aria-expanded="false">Sonnet 5.5</button>
+    <button type="button" id="send" aria-label="Send message" disabled>Send</button>
+  </div>
+</main>
+<div role="menu" id="menu" hidden>
+  <div role="menuitem" data-model="Sonnet 5.5"><div>Sonnet 5.5</div><div>Smart, efficient model for everyday use</div></div>
+  <div role="menuitem" data-model="Haiku 5.5"><div>Haiku 5.5</div><div>Fastest model for daily tasks</div></div>
+  <div role="menuitem" aria-disabled="true"><div>Opus 5.5</div><div>Upgrade to Pro to use this model</div></div>
+  <div role="menuitem" id="thinkItem"><div>Extended thinking</div><button type="button" role="switch" aria-checked="false" id="think" aria-label="Extended thinking"></button></div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const send = $("send");
+  const S = { model: "Sonnet 5.5", thinking: false, sent: [] };
+  window.S = S;
+  // like ProseMirror: whatever changes the box's contents, the editor follows
+  new MutationObserver(() => (send.disabled = !$("box").innerText.trim())).observe($("box"), { childList: true, subtree: true, characterData: true });
+  $("box").addEventListener("input", () => (send.disabled = !$("box").innerText.trim()));
+  $("model").addEventListener("click", () => {
+    const open = $("menu").hidden;
+    $("menu").hidden = !open;
+    $("model").setAttribute("aria-expanded", String(open));
+  });
+  $("menu").addEventListener("click", e => {
+    const sw = e.target.closest("#think, #thinkItem");
+    if (sw) {
+      S.thinking = !S.thinking;
+      $("think").setAttribute("aria-checked", String(S.thinking));
+      return;
+    }
+    const it = e.target.closest("[data-model]");
+    if (!it) return;
+    S.model = it.dataset.model;
+    $("model").textContent = S.model;
+    $("menu").hidden = true;
+    $("model").setAttribute("aria-expanded", "false");
+  });
+  $("new").addEventListener("click", e => {
+    e.preventDefault();
+    $("thread").innerHTML = "";
+  });
+  send.addEventListener("click", () => {
+    const text = $("box").innerText.trim();
+    if (!text) return;
+    S.sent.push({ text, model: S.model, thinking: S.thinking });
+    document.title = "Sent: " + S.sent.length;
+    $("box").innerHTML = "";
+    const u = document.createElement("div");
+    u.className = "font-user-message";
+    u.textContent = text;
+    $("thread").append(u);
+    const r = document.createElement("div");
+    r.className = "font-claude-response";
+    $("thread").append(r);
+    const stop = document.createElement("button");
+    stop.type = "button";
+    stop.setAttribute("aria-label", "Stop response");
+    stop.textContent = "Stop";
+    send.replaceWith(stop);
+    const parts = [
+      `<p>You said: <strong>${text.replace(/[<&]/g, "")}</strong></p>`,
+      `<p>Model: ${S.model}${S.thinking ? ", thinking on" : ""}</p>`,
+      "<h2>Plan</h2>",
+      "<ul><li>one</li><li>two</li></ul>",
+      "<ol><li>first</li><li>second</li></ol>",
+      '<div><div>python</div><pre><code class="language-python">print("hi")\n</code></pre></div>',
+      "<table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>apples</td><td>3</td></tr></tbody></table>",
+      '<p>See <a href="https://example.com/">this</a> and <code>x</code>.</p>'
+    ];
+    let i = 0;
+    const tick = setInterval(() => {
+      r.insertAdjacentHTML("beforeend", parts[i++]);
+      if (i < parts.length) return;
+      clearInterval(tick);
+      stop.replaceWith(send);
+      send.disabled = true;
+    }, 300);
+  });
+</script>
+</body>
+</html>

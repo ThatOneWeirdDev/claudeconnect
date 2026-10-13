@@ -144,7 +144,7 @@ test("Fable 5.1 is only offered when there are usage credits to spend, and isn't
 
   // not turned on for the account
   await reading(s, agent, { status: "allowed", overageStatus: "rejected", overageDisabledReason: "overage_not_provisioned", windows: windows(20, 10) });
-  assert.match((await send("again")).body.error, /^You have no usage credits! They aren't turned on for your Claude account/);
+  assert.match((await send("again")).body.error, /^You have no usage credits! They aren't turned on for your account/);
 
   // turned off for this site
   await reading(s, agent, { status: "allowed", overageStatus: "allowed", windows: windows(20, 10) });

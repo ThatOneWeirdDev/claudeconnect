@@ -6,7 +6,7 @@
 //   node scripts/release.mjs --check        change nothing, exit 1 if anything is out of date
 //   node scripts/release.mjs --check --against origin/main
 //                                           also require a version bump when any shipped file differs from that ref
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -16,7 +16,7 @@ import { parseVersion, compareVersions } from "../site/version.js";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Everything that ships to a user's computer or Cloudflare account. brand.js is not here: setup writes it per install.
-export const FILES = ["ClaudeConnect.mjs", "installer.mjs", "agent/agent.mjs", "agent/sessions.mjs", "agent/app.mjs", "agent/permit.mjs", "site/worker.js", "site/app.html", "site/version.js", "site/names.js", "site/image.js"];
+export const FILES = ["ClaudeConnect.mjs", "installer.mjs", "setup.mjs", "setup.html", "agent/agent.mjs", "agent/sessions.mjs", "agent/app.mjs", "agent/app-os.mjs", "agent/app-mac.js", "agent/app-mac-bar.js", "agent/app-win.ps1", "agent/app-win-bar.ps1", "agent/app-cdp.mjs", "agent/permit.mjs", "site/worker.js", "site/app.html", "site/version.js", "site/names.js", "site/image.js"];
 
 const sha = path => createHash("sha256").update(readFileSync(join(ROOT, path))).digest("hex");
 const readJson = path => JSON.parse(readFileSync(join(ROOT, path), "utf8"));
@@ -34,6 +34,8 @@ export function problems(manifest, pkg) {
     if (!manifest.files || manifest.files[f] !== want[f]) out.push(`${f} changed since manifest.json was written`);
   }
   for (const f of Object.keys(manifest.files || {})) if (!FILES.includes(f)) out.push(`manifest.json lists ${f}, which release.mjs doesn't know about`);
+  // The program on the computer is everything in agent/: a file left out of the release is missing on every computer.
+  for (const f of readdirSync(join(ROOT, "agent"))) if (!FILES.includes("agent/" + f)) out.push(`agent/${f} isn't in the release file list (FILES in scripts/release.mjs)`);
   // The deployed worker can only import files that ship with it.
   const worker = readFileSync(join(ROOT, "site/worker.js"), "utf8");
   for (const m of worker.matchAll(/from "\.\/([^"]+)"/g)) {

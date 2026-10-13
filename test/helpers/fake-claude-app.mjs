@@ -228,7 +228,34 @@ export async function startFakeClaude(opts = {}) {
   return { url, state, close: () => new Promise(r => srv.close(r)), id: randomUUID };
 }
 
-// The browser window the agent opened for a test, closed (it outlives the agent on purpose: it's the person's window).
+// A stand-in for the Claude desktop app, for the agent to start the way it starts the real one: a small launcher that runs a
+// headless Chromium on the claude.ai stand-in, with whatever the agent passes (its --remote-debugging-port). Its profile is
+// <programDir>/browser, so closeBrowser() closes it.
+export async function fakeClaudeApp(programDir, url, chrome) {
+  const { writeFileSync, chmodSync, mkdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const profile = join(programDir, "browser");
+  mkdirSync(profile, { recursive: true });
+  const app = join(programDir, "Claude");
+  const quiet = "--disable-background-networking --disable-component-update --disable-sync --disable-default-apps --no-pings";
+  writeFileSync(app, `#!/bin/sh\nexec "${chrome}" "$@" --headless=new --no-sandbox --disable-gpu --user-data-dir="${profile}" --no-first-run --no-default-browser-check ${quiet} "${url}/new"\n`);
+  chmodSync(app, 0o755);
+  return app;
+}
+
+// A port nobody is listening on, for the app's debugging connection in a test.
+export async function freePort() {
+  const net = await import("node:net");
+  return new Promise(resolve => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+// The app the agent opened for a test, closed (it outlives the agent on purpose: it's the person's app).
 export async function closeBrowser(programDir) {
   const { spawnSync } = await import("node:child_process");
   const { join } = await import("node:path");

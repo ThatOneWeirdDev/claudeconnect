@@ -39,6 +39,19 @@ const EDIT = flag("--edit");
 const REPO = process.env.CLAUDECONNECT_REPO || DEFAULT_REPO;
 const REF = process.env.CLAUDECONNECT_REF || "main";
 const tty = !REMOTE && process.stdin.isTTY && process.stdout.isTTY;
+// The setup in a window of its own (setup.mjs): a page in your browser instead of questions here. The terminal setup is still
+// there with --cli, and wherever a browser can't be opened: over SSH, with no display, or with no terminal to start from. --gui
+// opens it anyway (the tests do). `edit`, `update` and the jobs the site starts stay in the terminal.
+let UI = null;
+const interactive = () => tty || !!UI;
+function guiWanted() {
+  if (REMOTE || EDIT || flag("--cli") || process.env.CLAUDECONNECT_CLI) return false;
+  if (flag("--gui")) return true;
+  if (!tty || process.env.SSH_CONNECTION || process.env.SSH_TTY || process.env.CI) return false;
+  return IS_WIN || process.platform === "darwin" || !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+const rawLog = console.log.bind(console);
+class GuiStop extends Error {}
 const bold = s => (process.stdout.isTTY ? `\x1b[1m${s}\x1b[0m` : s);
 const teal = s => (process.stdout.isTTY ? `\x1b[36m${s}\x1b[0m` : s);
 const dim = s => (process.stdout.isTTY ? `\x1b[2m${s}\x1b[0m` : s);
@@ -46,11 +59,18 @@ let token = null;
 let accountId = null;
 
 function step(s) {
-  console.log("\n" + teal("▸ ") + bold(s));
+  rawLog("\n" + teal("▸ ") + bold(s));
+  if (UI) UI.step(s);
 }
 
 function note(s) {
-  console.log(dim("  " + s));
+  rawLog(dim("  " + s));
+  if (UI) UI.note(s);
+}
+
+// Lines that only make sense in the terminal, like a numbered list a question there refers to: the window asks its own way.
+function termOnly(s) {
+  rawLog(s);
 }
 
 class Stop extends Error {}
@@ -61,7 +81,19 @@ let JOB = REMOTE;
 function fail(s) {
   if (JOB) throw new Stop(s);
   console.error("\n" + bold("Setup stopped: ") + s);
+  // the window says so too, and the setup ends once it has (see startWindow)
+  if (UI) throw new GuiStop(s);
   process.exit(1);
+}
+
+// The end of the setup: the window shows how it ended before this exits, so nothing is cut off.
+async function quit(code, end) {
+  if (UI) {
+    if (end) UI.show(end.type || (code ? "fatal" : "done"), end);
+    await UI.flush();
+    UI.close();
+  }
+  process.exit(code);
 }
 
 function sh(cmd, opts = {}) {
@@ -82,12 +114,83 @@ function openUrl(u) {
   } catch {}
 }
 
-async function ask(question, def) {
+async function ask(question, def, spec) {
+  if (UI) return UI.ask(guiQuestion(question, def, spec));
   if (!tty) return def;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const a = (await rl.question(question)).trim();
   rl.close();
   return a || def;
+}
+
+// A question as the setup's window shows it. Without a description of its own it's read from the terminal prompt: a [Y/n] is a
+// yes or no, anything else a line of text.
+function guiQuestion(question, def, spec = {}) {
+  const plain = String(question).replace(/\x1b\[[0-9;]*m/g, "").trim();
+  const yn = /\[(Y\/n|y\/N)\]\s*$/.test(plain);
+  const title = plain.replace(/\s*\[[^\]]*\]\s*:?\s*$/, "").replace(/:\s*$/, "");
+  return { kind: yn ? "yesno" : "text", title, def: def == null ? "" : String(def), ...spec };
+}
+
+// A command the setup's window waits on (signing in, deploying): run without blocking, so the window keeps up while it runs and
+// shows what it prints. In the terminal it's sh() as before.
+function runLive(cmd, opts = {}) {
+  if (!UI) return Promise.resolve(sh(cmd, opts));
+  return new Promise(resolve => {
+    const env = { ...process.env, ...(opts.env || {}) };
+    if (accountId) env.CLOUDFLARE_ACCOUNT_ID = accountId;
+    let stdout = "";
+    let stderr = "";
+    let child;
+    try {
+      child = spawn(cmd, { shell: true, stdio: ["inherit", "pipe", "pipe"], cwd: opts.cwd || HOME, env });
+    } catch (e) {
+      return resolve({ status: 1, stdout, stderr: String(e.message || e) });
+    }
+    const take = (d, err) => {
+      const t = String(d);
+      if (err) stderr += t;
+      else stdout += t;
+      // what a command prints is shown, unless it's being read (a sign-in token, say)
+      if (!opts.capture) {
+        (err ? process.stderr : process.stdout).write(t);
+        UI.log(t);
+      }
+    };
+    child.stdout.on("data", d => take(d, false));
+    child.stderr.on("data", d => take(d, true));
+    child.on("error", e => (stderr += String(e.message || e)));
+    child.on("close", status => resolve({ status, stdout, stderr }));
+  });
+}
+
+// Opens the setup's window and sends everything the setup says there as well. If it can't be opened, the setup carries on here.
+async function startWindow(title, version) {
+  try {
+    const { startGui } = await import("./setup.mjs");
+    UI = await startGui({ title, version });
+  } catch (e) {
+    note(`The setup window couldn't open (${String((e && e.message) || e).slice(0, 120)}), so it carries on here.`);
+    UI = null;
+    return;
+  }
+  for (const k of ["log", "error"]) {
+    const f = console[k].bind(console);
+    console[k] = (...a) => {
+      f(...a);
+      if (UI) UI.log(a.map(String).join(" "));
+    };
+  }
+  process.on("unhandledRejection", e => {
+    throw e;
+  });
+  process.on("uncaughtException", e => {
+    if (!(e instanceof GuiStop)) console.error(e && e.stack ? e.stack : String(e));
+    const text = e instanceof GuiStop ? e.message : `Something unexpected went wrong: ${String((e && e.message) || e).slice(0, 300)}`;
+    quit(1, { type: "fatal", text });
+  });
+  rawLog(`\n  ${bold("The setup is open in your browser.")} If it didn't open, go to:\n  ${teal(UI.url)}\n` + dim("  Keep this window open until it's done. Ctrl+C here cancels it."));
+  if (!process.env.CLAUDECONNECT_GUI_NO_OPEN) openUrl(UI.url);
 }
 
 async function cf(method, path, body) {
@@ -103,7 +206,12 @@ async function cf(method, path, body) {
 }
 
 function cloudflareToken() {
-  const r = sh(`${WR} auth token --json`, { capture: true });
+  return tokenFrom(sh(`${WR} auth token --json`, { capture: true }));
+}
+async function cloudflareTokenLive() {
+  return tokenFrom(await runLive(`${WR} auth token --json`, { capture: true }));
+}
+function tokenFrom(r) {
   if (r.status !== 0) return null;
   const out = String(r.stdout || "");
   try {
@@ -126,40 +234,105 @@ function findClaude() {
 }
 
 // Claude Code, installed and signed in with a Claude plan: setup, and `edit` when you switch to paying for Claude.
-async function setUpClaudeCode() {
+async function setUpClaudeCode(name = "") {
+  note(`${name || "Your site"} answers with your plan through Anthropic's command-line tool, from claude.ai/install.`);
   let claude = findClaude();
   if (!claude) {
     note("Not installed yet, installing it now.");
     const r = IS_WIN
-      ? sh(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"`)
-      : sh(`curl -fsSL https://claude.ai/install.sh | bash`);
+      ? await runLive(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"`)
+      : await runLive(`curl -fsSL https://claude.ai/install.sh | bash`);
     claude = findClaude();
-    if (r.status !== 0 || !claude) fail("Claude Code didn't install. Install it from https://claude.ai/install and run this again.");
+    if (r.status !== 0 || !claude) fail("The command-line tool didn't install. Install it from https://claude.ai/install, then run this again.");
   }
-  note(`Claude Code ${claude.version} is installed.`);
+  note(`The command-line tool ${claude.version} is installed.`);
   if (!signedIn(claude.cmd)) {
-    note("Sign in with your Claude account in the browser window that opens.");
-    sh(`${claude.cmd} auth login`);
-    if (!signedIn(claude.cmd)) fail("Claude Code isn't signed in yet. Run this again when you're ready to sign in.");
+    note("Sign in to your claude.ai account in the browser window that opens.");
+    await runLive(`${claude.cmd} auth login`);
+    if (!signedIn(claude.cmd)) fail("It isn't signed in yet. Run this again when you're ready to sign in.");
   }
-  note("Signed in with your Claude plan.");
+  note("Signed in with your plan.");
   return claude;
 }
 
-// The free plan needs the Claude app (or, failing that, a Chrome, Edge or Brave to open claude.ai in). Nothing to install here:
-// the program on this computer opens the app when a message comes in, and types it there.
-async function checkClaudeApp() {
-  step("Checking the Claude app");
-  note("Claude Code needs a paid plan, so replies will come from the Claude app on this computer: each message is typed into it, and the reply read back as it's written.");
+// The free plan needs the Claude desktop app, signed in: the program on this computer opens it when a message comes in and
+// types the message there, through the system's accessibility features, the way a screen reader would. claude.ai in a
+// browser won't do: its human check never passes in a window something else drives. Asked until it's installed (or put off);
+// with nobody to ask, it's said, and messages wait until the app is there. There's no Claude app on Linux.
+async function checkClaudeApp(name = "") {
+  step("Checking the desktop app");
+  note(`On the free plan, ${name || "your site"} works through the desktop app on this computer: each message is typed into it, and the reply read back as it's written.`);
   // where the release keeps it: next to this file in a download, flattened into the install folder afterwards
   const helpers = await import(existsSync(join(HERE, "agent", "app.mjs")) ? "./agent/app.mjs" : "./app.mjs").catch(() => null);
-  const app = helpers ? helpers.claudeAppPath() : "";
-  const browser = helpers ? helpers.browserPath() : "";
-  if (app) note("The Claude app is installed. Make sure you're signed in to it.");
-  else if (browser) note("The Claude app isn't installed, so a browser window of its own, signed in to claude.ai, is used instead. To use the app, install it from https://claude.ai/download.");
-  else {
-    note("Install the Claude app from https://claude.ai/download and sign in to it. Messages wait until it's there.");
-    if (tty) openUrl("https://claude.ai/download");
+  if (helpers && !helpers.APP_SUPPORTED) fail("The free plan works through the desktop app, which runs on macOS and Windows, not here. On this computer, use a paid plan: run this again and answer yes when it asks whether you have a paid plan.");
+  for (let first = true; ; first = false) {
+    const app = helpers ? helpers.claudeAppPath() : "";
+    if (app) {
+      note("The desktop app is installed. Make sure you're signed in to it.");
+      break;
+    }
+    if (!interactive()) return note("Install the desktop app from https://claude.ai/download and sign in to it. Messages wait until it's there.");
+    if (first && !UI) openUrl("https://claude.ai/download");
+    const a = await ask("  Install the desktop app from https://claude.ai/download and sign in to it, then press Enter to check again (s to skip for now, q to stop): ", "", {
+      kind: "continue",
+      title: first ? "Install the desktop app" : "The desktop app isn't there yet",
+      help: "The free plan works through the desktop app from claude.ai, on this computer and signed in to your account. Download it, install it, open it and sign in, then come back here.",
+      button: "I've installed it, check again",
+      skip: "Skip for now",
+      link: "https://claude.ai/download",
+      linkLabel: "Download the desktop app"
+    });
+    if (/^q/i.test(String(a || ""))) fail("The free plan needs the desktop app. Install it from https://claude.ai/download, then run the setup again.");
+    if (/^s/i.test(String(a || ""))) {
+      note("Messages wait until the desktop app is installed and signed in.");
+      break;
+    }
+  }
+  if (interactive()) {
+    // said once, before anything is done with the app: this is automation of a Claude account
+    note(`The free plan works the desktop app for you: it types into it and presses its buttons, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk; with a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`);
+    const ok = await ask("  Use the desktop app this way? [Y/n] ", "y", {
+      title: "Before the desktop app is used for you",
+      help: `The free plan types your messages into the desktop app on this computer and presses its buttons, the way an automation tool would, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk. With a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`,
+      yes: "I understand, use the desktop app",
+      no: "Stop here"
+    });
+    if (!/^y/i.test(String(ok || ""))) fail(`Nothing was set up for the free plan. With a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead: run this again and answer yes when it asks whether you have a paid plan.`);
+  }
+  if (process.platform === "darwin" || process.env.CLAUDECONNECT_APP_DRIVER === "os") await macAccessibility();
+}
+
+// On a Mac, using another app's buttons and text boxes needs your permission: System Settings → Privacy & Security →
+// Accessibility. macOS asks for whoever started the program: the terminal app it was set up from, and node itself when it
+// starts by itself at log in. Both are switched on there; the check here can only see the first.
+function macTrust(prompt) {
+  const file = process.env.CLAUDECONNECT_APP_HELPER || (existsSync(join(HERE, "agent", "app-mac.js")) ? join(HERE, "agent", "app-mac.js") : join(HERE, "app-mac.js"));
+  const [cmd, args] = /\.mjs$/.test(file) ? [process.execPath, [file]] : ["/usr/bin/osascript", ["-l", "JavaScript", file]];
+  const r = spawnSync(cmd, args, { input: JSON.stringify({ id: 1, cmd: "trust", prompt, open: prompt }) + "\n", encoding: "utf8", timeout: 30000 });
+  for (const line of String(r.stdout || "").split("\n")) {
+    try {
+      const j = JSON.parse(line);
+      if (j.id === 1) return j.ok ? !!j.trusted : null;
+    } catch {}
+  }
+  return null;
+}
+async function macAccessibility() {
+  const terminal = { Apple_Terminal: "Terminal", "iTerm.app": "iTerm", vscode: "Visual Studio Code", ghostty: "Ghostty", WarpTerminal: "Warp" }[process.env.TERM_PROGRAM] || "the terminal app you ran this in";
+  const which = `${terminal}, and node (${process.execPath}): if node isn't in the list, press + and pick it (Command-Shift-G, then paste that path)`;
+  for (let first = true; ; first = false) {
+    const ok = macTrust(first);
+    if (ok === null) return note("Couldn't check the Mac's Accessibility permission. If messages say so later, switch it on in System Settings → Privacy & Security → Accessibility.");
+    if (ok) return note(`Allowed to use the desktop app (System Settings → Privacy & Security → Accessibility). Make sure node is switched on there too, for when it starts by itself: ${process.execPath}`);
+    if (!interactive()) return note(`Allow it to use the desktop app: System Settings → Privacy & Security → Accessibility, then switch on ${which}.`);
+    const a = await ask(`  Allow it to use the desktop app: in System Settings → Privacy & Security → Accessibility, switch on ${which}. Then press Enter to check again (s to skip for now): `, "", {
+      kind: "continue",
+      title: first ? "Allow it to use the desktop app" : "It isn't allowed yet",
+      help: `macOS asks before one program uses another's buttons and text boxes. System Settings is open at Privacy & Security → Accessibility: switch on ${which}.`,
+      button: "I've switched it on, check again",
+      skip: "Skip for now"
+    });
+    if (/^s/i.test(String(a || ""))) return note("Messages wait until it's allowed to use the desktop app.");
   }
 }
 
@@ -322,7 +495,13 @@ function readBrand() {
 async function askImage(label, keepWhat, fallbackWhat, flagName, current) {
   let preset = opt(flagName);
   for (;;) {
-    const raw = preset !== null ? preset : await ask(`  ${label}: a file path or https:// link (Enter for ${current ? keepWhat : fallbackWhat}): `, "");
+    const raw = preset !== null ? preset : await ask(`  ${label}: a file path or https:// link (Enter for ${current ? keepWhat : fallbackWhat}): `, "", {
+      kind: "image",
+      title: label === "Logo" ? "Pick a logo" : "Pick a tab icon",
+      help: label === "Logo" ? "It shows in the corner of the site. Optional: skip it for the built-in one." : "The little picture in the browser tab. Optional: skip it to use the logo.",
+      keepLabel: current ? "Keep the current one" : `Use ${fallbackWhat}`,
+      current: !!current
+    });
     preset = null;
     const v = String(raw || "").trim();
     if (!v) return current || null;
@@ -331,7 +510,7 @@ async function askImage(label, keepWhat, fallbackWhat, flagName, current) {
       return await loadImage(v);
     } catch (e) {
       console.log(`  That image won't work: ${e.message}.`);
-      if (!tty) fail(`The ${label.toLowerCase()} didn't work (${e.message}).`);
+      if (!interactive()) fail(`The ${label.toLowerCase()} didn't work (${e.message}).`);
     }
   }
 }
@@ -592,9 +771,9 @@ async function remoteUpdate(manifest) {
     // If the old program was stopped and the update broke before the new one started, bring one back.
     if (stopped) spawnSync(process.execPath, [agentPath, "background"], { stdio: "ignore" });
     await report(at, "error", msg);
-    process.exit(1);
+    await quit(1, { type: "fatal", text: msg });
   }
-  process.exit(0);
+  await quit(0, { type: "done", title: `Updated to ${manifest.version}`, text: "Your chats and settings are all still here.", site: old.site || "" });
 }
 
 // ---- changes to the site itself, started from its Settings page. They use the site files already on this computer (the
@@ -972,9 +1151,9 @@ async function editSettings() {
   if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
   // whether you pay for Claude: Claude Code answers, or the Claude app on this computer does
   const plan = old.plan === "free" ? "free" : "paid";
-  if (await yes(plan === "paid" ? "Switch to the free plan? Now you pay for Claude, so Claude Code answers; on the free plan the Claude app on this computer does." : "Do you pay for Claude now (Pro, Max, Team or Enterprise)? Now it's the free plan, so the Claude app answers; with a paid plan Claude Code does.")) local.plan = plan === "paid" ? "free" : "paid";
+  if (await yes(plan === "paid" ? `Switch to the free plan? Now it's the paid plan; on the free plan ${name} works through the desktop app on this computer.` : `Do you have a paid plan now (Pro, Max, Team or Enterprise)? Now it's the free plan, so ${name} works through the desktop app.`)) local.plan = plan === "paid" ? "free" : "paid";
   const ws = old.workspace || join(HOME, name);
-  if (await yes(`Change the working folder, where Claude Code works and files you attach go? Now: ${tilde(ws)}.`)) {
+  if (await yes(`Change the working folder, where ${name} works and files you attach go? Now: ${tilde(ws)}.`)) {
     for (;;) {
       const raw = String(await ask("  New folder (a full path, like ~/Projects): ", "")).trim().replace(/^["']|["']$/g, "");
       if (!raw) break;
@@ -1040,7 +1219,7 @@ async function editSettings() {
     "favicon" in job && `tab icon: ${job.favicon ? "new" : "the logo"}`,
     prefs.theme && `theme: ${THEME_NAMES[prefs.theme]}`,
     "autostart" in local && `start at login: ${local.autostart ? "yes" : "no"}`,
-    local.plan && `Claude plan: ${local.plan === "paid" ? "paid (Claude Code answers)" : "free (the Claude app answers)"}`,
+    local.plan && `plan: ${local.plan === "paid" ? "paid" : "free (through the desktop app)"}`,
     local.workspace && `working folder: ${tilde(local.workspace)}`,
     "useCredits" in prefs && `usage credits from the site: ${prefs.useCredits ? "used" : "not used"}`,
     address && `address: ${address} (a new link; the old one stops working)`
@@ -1069,7 +1248,7 @@ async function editSettings() {
   if (local.plan === "paid") {
     try {
       JOB = true;
-      await setUpClaudeCode();
+      await setUpClaudeCode(name);
     } catch (e) {
       console.log(`  ${failure(e)}`);
       delete local.plan;
@@ -1077,7 +1256,7 @@ async function editSettings() {
     } finally {
       JOB = false;
     }
-  } else if (local.plan === "free") await checkClaudeApp();
+  } else if (local.plan === "free") await checkClaudeApp(name);
   const cfgChange = Object.fromEntries(["plan", "workspace"].filter(k => k in local).map(k => [k, local[k]]));
   if (Object.keys(cfgChange).length) {
     // written while the program here is stopped, so it can't save its own copy over this
@@ -1170,26 +1349,33 @@ if (!prior.accountId) {
   }
 }
 const known = prior.displayName || "ClaudeConnect";
+if (guiWanted()) await startWindow(known, payload.version);
 
 // Whether you pay for Claude. Claude Code needs a paid plan; without one, replies come from the Claude app on this computer,
 // typed into it. Asked once, when there's nothing set up yet; after that it's in Settings and `<command> edit`.
 let plan = flag("--free") ? "free" : flag("--paid") ? "paid" : prior.plan === "free" ? "free" : "paid";
 if (!prior.accountId && !flag("--free") && !flag("--paid")) {
-  step("Your Claude plan");
-  plan = /^y/i.test(await ask("  Do you pay for Claude (Pro, Max, Team or Enterprise)? [Y/n] ", "y")) ? "paid" : "free";
+  step("Your plan");
+  plan = /^y/i.test(await ask("  Do you have a paid plan on claude.ai (Pro, Max, Team or Enterprise)? [Y/n] ", "y", {
+    title: "Do you have a paid plan?",
+    help: "With Pro, Max, Team or Enterprise on claude.ai, your site answers with your plan, from this computer. Without one, it works through the desktop app from claude.ai/download, which needs to be installed and signed in.",
+    yes: "Yes, I have a paid plan",
+    no: "No, I use it for free"
+  })) ? "paid" : "free";
 }
 let claude = null;
 if (plan === "paid") {
-  step("Checking Claude Code");
+  step("Setting up the paid plan");
   claude = await setUpClaudeCode();
 } else await checkClaudeApp();
 
 step("Checking your Cloudflare sign-in");
-token = cloudflareToken();
+note("Your site runs on your own Cloudflare account. The free plan is enough.");
+token = await cloudflareTokenLive();
 if (!token) {
-  note("A browser window will open so you can sign in to Cloudflare.");
-  if (sh(`${WR} login`).status !== 0) fail("Cloudflare sign-in didn't finish. Run this again when you're ready.");
-  token = cloudflareToken();
+  note("A browser window will open so you can sign in to Cloudflare. Sign in (or make a free account), allow access, then come back here.");
+  if ((await runLive(`${WR} login`)).status !== 0) fail("Cloudflare sign-in didn't finish. Run this again when you're ready.");
+  token = await cloudflareTokenLive();
 }
 if (!token) fail("Couldn't get your Cloudflare sign-in. Run this again.");
 const accounts = await cf("GET", "/accounts?per_page=50");
@@ -1199,10 +1385,15 @@ if (list.length === 1) accountId = list[0].id;
 else {
   const preset = opt("--account") || prior.accountId;
   const hit = list.find(a => a.id === preset || a.name === preset);
-  if (hit && !tty) accountId = hit.id;
+  if (hit && !interactive()) accountId = hit.id;
   else {
-    list.forEach((a, i) => console.log(`  ${i + 1}. ${a.name}`));
-    const pick = await ask(`  Which account should ClaudeConnect use? [${hit ? list.indexOf(hit) + 1 : 1}] `, String(hit ? list.indexOf(hit) + 1 : 1));
+    list.forEach((a, i) => termOnly(`  ${i + 1}. ${a.name}`));
+    const pick = await ask(`  Which account should ClaudeConnect use? [${hit ? list.indexOf(hit) + 1 : 1}] `, String(hit ? list.indexOf(hit) + 1 : 1), {
+      kind: "choice",
+      title: "Which Cloudflare account should it use?",
+      help: "You have more than one. The site is created in the one you pick.",
+      options: list.map((a, i) => ({ value: String(i + 1), label: a.name }))
+    });
     accountId = (list[Number(pick) - 1] || list[0]).id;
   }
 }
@@ -1215,11 +1406,20 @@ let target = null;
 if (found.names.length || existsSync(CONFIG) || legacy) {
   const where = found.names.length ? found.names.join(", ") : "this computer";
   target = found.v1 ? null : found.names.includes(prior.name) ? prior.name : found.names.find(n => !n.endsWith("-relay")) || null;
-  console.log("\n" + bold(`${known} is already set up`) + ` (${where}).`);
-  if (target) console.log(`  ${bold("u")}  Update it. Keeps your chats and settings, and brings the site and this computer up to date.${prior.command ? ` To change its name or look, run ${prior.command} edit.` : ""}`);
-  console.log(`  ${bold("r")}  Reset it. Deletes the site and all its chats, then sets everything up again from the start.`);
-  console.log(`  ${bold("n")}  Leave it as it is.`);
-  const pick = flag("--reset") ? "r" : flag("--update") && target ? "u" : (await ask(`  Choose [${target ? "u/" : ""}r/N]: `, "n")).toLowerCase();
+  termOnly("\n" + bold(`${known} is already set up`) + ` (${where}).`);
+  if (target) termOnly(`  ${bold("u")}  Update it. Keeps your chats and settings, and brings the site and this computer up to date.${prior.command ? ` To change its name or look, run ${prior.command} edit.` : ""}`);
+  termOnly(`  ${bold("r")}  Reset it. Deletes the site and all its chats, then sets everything up again from the start.`);
+  termOnly(`  ${bold("n")}  Leave it as it is.`);
+  const pick = flag("--reset") ? "r" : flag("--update") && target ? "u" : (await ask(`  Choose [${target ? "u/" : ""}r/N]: `, "n", {
+    kind: "choice",
+    title: `${known} is already set up`,
+    help: `It's on ${where}. What would you like to do?`,
+    options: [
+      ...(target ? [{ value: "u", label: "Update it", desc: `Keeps your chats and settings, and brings the site and this computer up to date.${prior.command ? ` To change its name or look, use Settings on the site or run ${prior.command} edit.` : ""}` }] : []),
+      { value: "r", label: "Reset it", desc: "Deletes the site and all its chats, then sets everything up again from the start." },
+      { value: "n", label: "Leave it as it is", desc: "Changes nothing." }
+    ]
+  })).toLowerCase();
   if (pick.startsWith("u") && target && !legacy && installedConfig() && installedConfig().name === target) await quickUpdate();
   if (pick.startsWith("u") && target) mode = "update";
   else if (pick.startsWith("r")) {
@@ -1229,7 +1429,7 @@ if (found.names.length || existsSync(CONFIG) || legacy) {
     found = await findExisting(prior);
   } else {
     console.log(`\nNothing changed.${prior.command ? ` Run ${prior.command} to bring it online on this computer.` : ""}`);
-    process.exit(0);
+    await quit(0, { type: "done", title: "Nothing changed", text: prior.command ? `Run ${prior.command} to bring it online on this computer.` : "", site: prior.site || "" });
   }
 }
 const same = mode === "update" && prior.name === target && (!prior.accountId || prior.accountId === accountId);
@@ -1241,28 +1441,34 @@ let slug = mode === "update" ? target : null;
 let preset = opt("--name");
 const nameDef = mode === "update" ? prior.displayName || "" : "";
 for (;;) {
-  const raw = preset || (await ask(`  Name${nameDef ? ` [${nameDef}]` : ""}: `, nameDef));
+  const raw = preset || (await ask(`  Name${nameDef ? ` [${nameDef}]` : ""}: `, nameDef, {
+    kind: "text",
+    title: mode === "update" ? "Your site's name" : "Name your site",
+    help: "It shows at the top of the site, it's what the assistant is called there, and it's the command you'll type to run it. Up to 40 letters, numbers and spaces.",
+    label: "Name",
+    placeholder: "My Assistant"
+  }));
   preset = null;
   const n = String(raw || "").trim().replace(/\s+/g, " ");
   if (!n) {
-    if (!tty) fail("Pick a name with --name.");
+    if (!interactive()) fail("Pick a name with --name.");
     continue;
   }
   if (!NAME_RE.test(n) || !toSlug(n)) {
     console.log("  That name won't work. Use up to 40 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number.");
-    if (!tty) fail("Pick a valid name with --name.");
+    if (!interactive()) fail("Pick a valid name with --name.");
     continue;
   }
   if (mode === "fresh") {
     const s2 = toSlug(n);
     if (!SLUG_RE.test(s2)) {
       console.log("  That name won't work as a web address. Try a shorter one.");
-      if (!tty) fail("Pick a valid name with --name.");
+      if (!interactive()) fail("Pick a valid name with --name.");
       continue;
     }
     if (found.have.has(s2)) {
       console.log(`  There's already a worker called ${s2} in this Cloudflare account. Pick a different name.`);
-      if (!tty) fail(`The name ${n} is taken.`);
+      if (!interactive()) fail(`The name ${n} is taken.`);
       continue;
     }
     slug = s2;
@@ -1304,19 +1510,19 @@ removeShims([prior.command, "chatgql"], [prior.shim]);
 installSite(payload);
 writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify({ logo, favicon }) + ";\n");
 writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, version: payload.version, repo: REPO, ref: REF }), null, 2));
-if (sh(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE }).status !== 0) fail("Cloudflare didn't accept the site. The messages above say why.");
+if ((await runLive(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE })).status !== 0) fail(UI ? "Cloudflare didn't accept the site. Details, below, says why." : "Cloudflare didn't accept the site. The messages above say why.");
 const secret = same && prior.secret ? prior.secret : crypto.randomBytes(32).toString("base64url");
 const claim = crypto.randomBytes(18).toString("base64url");
 const tmp = join(DIR, `secrets-${crypto.randomBytes(6).toString("hex")}.json`);
 writeFileSync(tmp, JSON.stringify({ CLAIM_CODE: claim, AGENT_SECRET: secret }), { mode: 0o600 });
-const sec = sh(`${WR} secret bulk ${q(tmp)} -c wrangler.jsonc`, { cwd: SITE });
+const sec = await runLive(`${WR} secret bulk ${q(tmp)} -c wrangler.jsonc`, { cwd: SITE });
 try {
   unlinkSync(tmp);
 } catch {}
 if (sec.status !== 0) fail("Couldn't save the site's secrets.");
 const sub = await cf("GET", `/accounts/${accountId}/workers/subdomain`);
 let site = sub.result && sub.result.subdomain ? `https://${slug}.${sub.result.subdomain}.workers.dev` : same ? prior.site || "" : "";
-if (!site) site = (await ask("  Paste the workers.dev address shown above: ", "")).replace(/\/$/, "");
+if (!site) site = (await ask("  Paste the workers.dev address shown above: ", "", { kind: "text", title: "What's your site's address?", help: "Cloudflare didn't say. It's the workers.dev address in Details, below, like https://my-site.you.workers.dev.", label: "workers.dev address", placeholder: "https://…workers.dev" })).replace(/\/$/, "");
 if (!/^https?:\/\//.test(site)) fail("Couldn't work out your workers.dev address. Run this again.");
 note(site);
 
@@ -1350,7 +1556,12 @@ else {
 }
 note(`Added the ${command} command${onPath ? "" : ` in ${binDir} (add that folder to your PATH)`}.`);
 note(`Files it makes go in ${workspace}.`);
-const auto = flag("--no-autostart") ? "n" : await ask(`  Keep ${displayName} online whenever you're logged in to this computer? [Y/n] `, "y");
+const auto = flag("--no-autostart") ? "n" : await ask(`  Keep ${displayName} online whenever you're logged in to this computer? [Y/n] `, "y", {
+  title: `Start ${displayName} when you log in?`,
+  help: `Makes it a startup item on this computer, so ${displayName} is online whenever you're logged in. You can change this in Settings on the site.`,
+  yes: "Yes, start it when I log in",
+  no: "Not now"
+});
 if (/^y/i.test(auto)) spawnSync(process.execPath, [agentPath, "autostart", "on"], { stdio: "ignore" });
 const logPath = join(DIR, "agent.log");
 let logFrom = 0;
@@ -1360,9 +1571,34 @@ try {
 spawnSync(process.execPath, [agentPath, "background"], { stdio: "ignore" });
 note(/^y/i.test(auto) ? `${displayName} is running and will start again when you log in.` : `${displayName} is running in the background.`);
 
-const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/access`;
+// the Worker's Settings (Domains & Routes), where the workers.dev row has "Enable Cloudflare Access". Not its Access tab:
+// Cloudflare says Access set up there blocks WebSocket connections, which this computer's connection to the site is.
+const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/settings`;
 const claimLink = `${site}/?claim=${claim}`;
-if (mode === "fresh") {
+if (mode === "fresh" && UI) {
+  // the window explains Cloudflare Access (and Zero Trust's card) step by step, and opens the claim link from its button
+  step("Locking it to your Cloudflare account");
+  // While the steps are on screen, the site is checked every few seconds: once Cloudflare Access is in front of it, a request
+  // with no sign-in is sent to Cloudflare's sign-in page instead of reaching the site.
+  let watching = true;
+  (async () => {
+    let last = "";
+    while (watching) {
+      let st = { ok: false, text: "Waiting for Cloudflare Access to be turned on for your site…" };
+      try {
+        const r = await fetch(`${site}/agent/check`, { redirect: "manual", signal: AbortSignal.timeout(8000) });
+        if (r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(r.headers.get("location") || "")) st = { ok: true, text: "Cloudflare Access is on. Now open your claim link." };
+      } catch {}
+      if (watching && st.text !== last) {
+        UI.show("access_status", st);
+        last = st.text;
+      }
+      for (let i = 0; i < 30 && watching; i++) await new Promise(r => setTimeout(r, 100));
+    }
+  })();
+  await ask("", "", { kind: "access", title: "Lock it to your Cloudflare account", accessPage, claimLink, worker: slug });
+  watching = false;
+} else if (mode === "fresh") {
   step("Locking it to your Cloudflare account");
   console.log(`  1. Turn on Cloudflare Access on the page that's opening:`);
   console.log(`     ${teal(accessPage)}`);
@@ -1391,7 +1627,22 @@ function connected() {
   }
 }
 
-if (tty) {
+if (UI) {
+  UI.show("online", { title: "Almost there", text: `Waiting for ${displayName} to come online. Once you've claimed the site, this takes a few seconds.` });
+  let online = false;
+  const until = Date.now() + (Number(process.env.CLAUDECONNECT_CONNECT_MS) || 180000);
+  while (!online && Date.now() < until) {
+    await new Promise(r => setTimeout(r, 1000));
+    online = connected();
+  }
+  await quit(0, {
+    type: "done",
+    title: online ? "All set" : "Nearly done",
+    text: online ? `${displayName} is online. Open it on any device: your phone, a tablet, another computer.` : `${displayName} connects by itself once you've claimed the site. Then open it on any device.`,
+    site,
+    extra: `On this computer, ${command} help lists the commands. The site says when a new version is out.`
+  });
+} else if (tty) {
   process.stdout.write(`\n  Waiting for ${displayName} to come online`);
   let online = false;
   for (let i = 0; i < 60 && !online; i++) {

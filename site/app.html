@@ -8,255 +8,284 @@
 <title>__SITE_NAME__</title>
 <link rel="icon" href="/favicon">
 <style>
-/* Colours, type and radii follow ChatGPT's own look: a white page with a #f9f9f9 sidebar in light, #212121 with a #181818
-   sidebar in dark, a pill-shaped message box (#303030 in dark), soft gray bubbles for what you send, a black (white in dark)
-   send button, and the system font. */
+/* The look follows ChatGPT's as it is now, with the colours of OpenAI's own design system (apps-sdk-ui): a white page and
+   a #f9f9f9 sidebar in light, #212121 and #181818 in dark, a one-row pill-shaped message box, soft grey bubbles for what you
+   send, a black (white in dark) send button, filled 20px icons and the system font. The dark colours are in two blocks, one
+   for "System" when the computer is dark and one for "Dark": they must stay the same. */
 :root{
-  --surface:#ffffff;--surface-2:#f9f9f9;--surface-3:#f4f4f4;--elevated:#ffffff;--menu:#ffffff;--composer:#ffffff;
+  --surface:#ffffff;--surface-2:#f9f9f9;--surface-3:#f3f3f3;--elevated:#ffffff;--menu:#ffffff;--composer:#ffffff;
   --text:#0d0d0d;--text-2:#5d5d5d;--text-3:#8f8f8f;
-  --border:rgba(0,0,0,.08);--border-2:rgba(0,0,0,.15);
-  --hover:rgba(0,0,0,.05);--select:#ececec;
-  --solid:#000000;--solid-ink:#ffffff;--solid-hover:#2f2f2f;
-  --link:#0169cc;--focus:#0285ff;--toggle:#0285ff;--avatar:#10a37f;
-  --danger:#e02e2a;--danger-soft:rgba(224,46,42,.08);--warn:#b9480d;--warn-soft:rgba(226,85,7,.1);--ok:#008635;
-  --user:#f4f4f4;--code:#f9f9f9;--code-head:#f4f4f4;
-  --composer-edge:0 4px 4px rgba(0,0,0,.04),0 0 1px rgba(0,0,0,.62);
-  --shadow:0 10px 30px rgba(0,0,0,.12),0 0 0 1px rgba(0,0,0,.08);
-  --shadow-s:0 2px 10px rgba(0,0,0,.06);
-  --hl-k:#7C3AED;--hl-s:#0B7A55;--hl-n:#B45309;--hl-c:#8A94A6;--hl-t:#1D4ED8;
-  --mono:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace;
+  --border-0:rgba(13,13,13,.05);--border:rgba(13,13,13,.10);--border-2:rgba(13,13,13,.15);
+  --hover:rgba(13,13,13,.05);--hover-2:rgba(13,13,13,.08);--select:rgba(13,13,13,.08);
+  --solid:#000000;--solid-ink:#ffffff;--solid-hover:#303030;--solid-off:#d7d7d7;--solid-off-ink:#f4f4f4;
+  --btn:#181818;--btn-ink:#ffffff;--btn-hover:#303030;
+  --link:#0169cc;--focus:#0169cc;--toggle:#0285ff;--toggle-off:#dfdfdf;--accent:#0285ff;--avatar:#10a37f;
+  --danger:#e02e2a;--danger-text:#ba2623;--danger-soft:color-mix(in oklab,#fa423e 8%,transparent);
+  --warn:#b9480d;--warn-soft:color-mix(in oklab,#fb6a22 8%,transparent);--ok:#008635;
+  --user:rgba(233,233,233,.5);--code:#f9f9f9;
+  --inline:rgba(13,13,13,.04);--inline-ring:rgba(13,13,13,.08);--quote:rgba(13,13,13,.15);
+  --seg:#ededed;--seg-on:#ffffff;
+  --composer-edge:0 4px 4px 0 rgba(0,0,0,.04),0 0 1px 0 rgba(0,0,0,.62);
+  --shadow:0 10px 15px -3px rgba(0,0,0,.10),0 4px 6px -4px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.08);
+  --shadow-s:0 1px 2px -1px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.08);
+  --scrim:rgba(0,0,0,.30);--scroll:rgba(13,13,13,.3);
+  --hl-1:#c0660d;--hl-2:#0169cc;--hl-3:#008635;--hl-4:#e04c91;--hl-5:#8046d9;
+  --mono:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono","DejaVu Sans Mono","Courier New",monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --surface:#212121;--surface-2:#181818;--surface-3:#2f2f2f;--elevated:#303030;--menu:#353535;--composer:#303030;
-    --text:#f3f3f3;--text-2:#afafaf;--text-3:#8f8f8f;
-    --border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.16);
-    --hover:rgba(255,255,255,.06);--select:#2a2a2a;
-    --solid:#ffffff;--solid-ink:#000000;--solid-hover:#e3e3e3;
-    --link:#48aaff;--focus:#48aaff;--toggle:#0285ff;--avatar:#10a37f;
-    --danger:#ff6764;--danger-soft:rgba(255,103,100,.12);--warn:#ff8549;--warn-soft:rgba(255,133,73,.14);--ok:#40c977;
-    --user:#303030;--code:#181818;--code-head:#2f2f2f;
-    --composer-edge:0 0 0 1px rgba(255,255,255,.04);
-    --shadow:0 10px 30px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.1);
-    --shadow-s:0 2px 10px rgba(0,0,0,.35);
-    --hl-k:#C4A5FF;--hl-s:#6FD3A8;--hl-n:#F3B562;--hl-c:#6B7689;--hl-t:#8FB4FF;
+    --surface:#212121;--surface-2:#181818;--surface-3:#303030;--elevated:#303030;--menu:#353535;--composer:#303030;
+    --text:#ffffff;--text-2:#afafaf;--text-3:#8f8f8f;
+    --border-0:rgba(255,255,255,.06);--border:rgba(255,255,255,.12);--border-2:rgba(255,255,255,.20);
+    --hover:rgba(255,255,255,.06);--hover-2:rgba(255,255,255,.10);--select:rgba(255,255,255,.10);
+    --solid:#ffffff;--solid-ink:#000000;--solid-hover:#ececec;--solid-off:#676767;--solid-off-ink:#2f2f2f;
+    --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;
+    --link:#339cff;--focus:#0285ff;--toggle:#0285ff;--toggle-off:#414141;--accent:#339cff;--avatar:#10a37f;
+    --danger:#e02e2a;--danger-text:#fa423e;--danger-soft:color-mix(in oklab,#fa423e 16%,transparent);
+    --warn:#ff8549;--warn-soft:color-mix(in oklab,#fb6a22 16%,transparent);--ok:#04b84c;
+    --user:rgba(50,50,50,.85);--code:#181818;
+    --inline:rgba(255,255,255,.10);--inline-ring:rgba(255,255,255,.08);--quote:rgba(255,255,255,.20);
+    --seg:rgba(0,0,0,.28);--seg-on:#454545;
+    --composer-edge:none;
+    --shadow:0 10px 15px -3px rgba(0,0,0,.20),0 4px 6px -4px rgba(0,0,0,.20),0 0 0 1px rgba(255,255,255,.10);
+    --shadow-s:0 1px 2px -1px rgba(0,0,0,.2),0 0 0 1px rgba(255,255,255,.10);
+    --scrim:rgba(0,0,0,.50);--scroll:rgba(255,255,255,.3);
+    --hl-1:#ffe48c;--hl-2:#66b5ff;--hl-3:#40c977;--hl-4:#ff8cc1;--hl-5:#ad7bf9;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --surface:#212121;--surface-2:#181818;--surface-3:#2f2f2f;--elevated:#303030;--menu:#353535;--composer:#303030;
-  --text:#f3f3f3;--text-2:#afafaf;--text-3:#8f8f8f;
-  --border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.16);
-  --hover:rgba(255,255,255,.06);--select:#2a2a2a;
-  --solid:#ffffff;--solid-ink:#000000;--solid-hover:#e3e3e3;
-  --link:#48aaff;--focus:#48aaff;--toggle:#0285ff;--avatar:#10a37f;
-  --danger:#ff6764;--danger-soft:rgba(255,103,100,.12);--warn:#ff8549;--warn-soft:rgba(255,133,73,.14);--ok:#40c977;
-  --user:#303030;--code:#181818;--code-head:#2f2f2f;
-  --composer-edge:0 0 0 1px rgba(255,255,255,.04);
-  --shadow:0 10px 30px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.1);
-  --shadow-s:0 2px 10px rgba(0,0,0,.35);
-  --hl-k:#C4A5FF;--hl-s:#6FD3A8;--hl-n:#F3B562;--hl-c:#6B7689;--hl-t:#8FB4FF;
+  --surface:#212121;--surface-2:#181818;--surface-3:#303030;--elevated:#303030;--menu:#353535;--composer:#303030;
+  --text:#ffffff;--text-2:#afafaf;--text-3:#8f8f8f;
+  --border-0:rgba(255,255,255,.06);--border:rgba(255,255,255,.12);--border-2:rgba(255,255,255,.20);
+  --hover:rgba(255,255,255,.06);--hover-2:rgba(255,255,255,.10);--select:rgba(255,255,255,.10);
+  --solid:#ffffff;--solid-ink:#000000;--solid-hover:#ececec;--solid-off:#676767;--solid-off-ink:#2f2f2f;
+  --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;
+  --link:#339cff;--focus:#0285ff;--toggle:#0285ff;--toggle-off:#414141;--accent:#339cff;--avatar:#10a37f;
+  --danger:#e02e2a;--danger-text:#fa423e;--danger-soft:color-mix(in oklab,#fa423e 16%,transparent);
+  --warn:#ff8549;--warn-soft:color-mix(in oklab,#fb6a22 16%,transparent);--ok:#04b84c;
+  --user:rgba(50,50,50,.85);--code:#181818;
+  --inline:rgba(255,255,255,.10);--inline-ring:rgba(255,255,255,.08);--quote:rgba(255,255,255,.20);
+  --seg:rgba(0,0,0,.28);--seg-on:#454545;
+  --composer-edge:none;
+  --shadow:0 10px 15px -3px rgba(0,0,0,.20),0 4px 6px -4px rgba(0,0,0,.20),0 0 0 1px rgba(255,255,255,.10);
+  --shadow-s:0 1px 2px -1px rgba(0,0,0,.2),0 0 0 1px rgba(255,255,255,.10);
+  --scrim:rgba(0,0,0,.50);--scroll:rgba(255,255,255,.3);
+  --hl-1:#ffe48c;--hl-2:#66b5ff;--hl-3:#40c977;--hl-4:#ff8cc1;--hl-5:#ad7bf9;
   color-scheme:dark;
 }
-*{box-sizing:border-box}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
 [hidden]{display:none!important}
 html,body{height:100%}
-body{margin:0;background:var(--surface);color:var(--text);font-family:ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden}
+body{margin:0;background:var(--surface);color:var(--text);font-family:ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:14px;line-height:1.4286;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-synthesis-weight:none;overflow:hidden}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;background:none;border:0;padding:0}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:8px}
-svg{display:block}
+svg{display:block;flex:none}
 .m-bg{fill:var(--text)}.m-fg{stroke:var(--surface)}
 
-/* ---- layout */
+/* ---- layout and sidebar */
 .app{--side-w:260px;--panel-w:0px;display:grid;grid-template-columns:var(--side-w) minmax(0,1fr) var(--panel-w);height:100vh;height:100dvh}
-/* collapsed, the sidebar is a rail of icons, like ChatGPT's: the logo (which opens it again), new chat, search, and you */
-@media (min-width:861px){
-  .app.side-collapsed{--side-w:52px}
-  .app.side-collapsed .side-top{height:auto;padding:10px 8px 6px;justify-content:center}
-  .app.side-collapsed #hideSide,.app.side-collapsed .history-label,.app.side-collapsed .history,.app.side-collapsed .nav-item span,.app.side-collapsed .nav-item input,.app.side-collapsed .who{display:none}
-  .app.side-collapsed .brand{padding:5px;cursor:e-resize}
-  .app.side-collapsed .side-nav{padding:0 8px;align-items:center}
-  .app.side-collapsed .nav-item{width:36px;justify-content:center;padding:0}
-  .app.side-collapsed .side-foot{margin-top:auto;border-top:0;padding:8px 6px}
-  .app.side-collapsed .profile{padding:4px;justify-content:center}
-  .app.side-collapsed .pmenu{right:auto;width:280px}
-}
 .app.panel-open{--panel-w:min(50vw,860px)}
 .side{grid-column:1;background:var(--surface-2);display:flex;flex-direction:column;min-width:0;min-height:0}
-.side-top{display:flex;align-items:center;justify-content:space-between;padding:10px 8px 6px 12px;height:56px}
-.brand{display:flex;align-items:center;gap:10px;min-width:0;text-decoration:none;color:var(--text);font-weight:600;font-size:15px;padding:4px 6px;border-radius:10px}
+.side-top{flex:none;display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 8px}
+.brand{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;color:var(--text);text-decoration:none;flex:none}
 .brand:hover{background:var(--hover)}
-.brand svg,.brand img{width:26px;height:26px;flex:none;border-radius:7px;object-fit:contain}
+.brand>svg,.brand>img{width:24px;height:24px;border-radius:6px;object-fit:contain}
 .brand span{display:none}
-.top-title{font-size:18px;font-weight:500;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;color:var(--text)}
-.icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;color:var(--text-2);flex:none}
-.icon-btn:hover{background:var(--hover);color:var(--text)}
+.icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;color:var(--text);flex:none}
+.icon-btn:hover,.icon-btn[aria-expanded="true"]{background:var(--hover)}
 .icon-btn svg{width:20px;height:20px}
-.side-nav{padding:0 8px;display:flex;flex-direction:column;gap:1px}
-.nav-item{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:10px;font-size:14px;color:var(--text);text-align:left;width:100%}
+.side-nav{display:flex;flex-direction:column}
+.nav-item{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 6px;padding:0 10px;border-radius:10px;font-size:14px;line-height:20px;color:var(--text);text-align:left;cursor:pointer}
 .nav-item:hover,.nav-item:focus-within{background:var(--hover)}
-.nav-item svg{width:18px;height:18px;flex:none;color:var(--text)}
-.nav-item input{flex:1;min-width:0;border:0;background:none;outline:none;padding:0;height:100%}
+.nav-item svg{width:20px;height:20px}
+.nav-item>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-item input{flex:1;min-width:0;height:36px;border:0;background:none;outline:none;padding:0}
+.nav-item input::-webkit-search-cancel-button{display:none}
 .nav-item input::placeholder{color:var(--text)}
 .nav-item input:focus::placeholder{color:var(--text-3)}
-.history-label{padding:20px 18px 6px;font-size:14px;font-weight:400;color:var(--text-3)}
-.history{flex:1;overflow-y:auto;padding:0 8px 10px;min-height:0}
-.item{position:relative;display:flex;align-items:center;border-radius:10px}
-.item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;color:var(--text);text-decoration:none;border-radius:10px;font-size:14px}
+.nav-item kbd{font:inherit;font-size:14px;line-height:20px;color:var(--text-3);white-space:nowrap;opacity:0;transition:opacity .15s}
+.nav-item:hover kbd{opacity:1}
+.nav-item input:not(:placeholder-shown)~kbd,.nav-item input:focus~kbd{display:none}
+.history-label{padding:20px 16px 6px;font-size:14px;line-height:20px;color:var(--text-3)}
+.history{flex:1;overflow-y:auto;padding:0 0 8px;min-height:0}
+.item{position:relative;display:flex;align-items:center;margin:0 6px;border-radius:10px}
+.item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:36px;padding:0 10px;color:var(--text);text-decoration:none;border-radius:10px;font-size:14px;line-height:20px}
 .item a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item a.sub{height:auto;min-height:48px;padding-top:6px;padding-bottom:6px}
+.item a.sub{min-height:48px;padding-top:6px;padding-bottom:6px}
 .item a .tt{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.3}
 .item a .tt small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-3);font-size:12px}
-.opening{display:flex;align-items:center;justify-content:center;gap:10px;padding:56px 0;color:var(--text-3);font-size:14px}
-.item:hover,.item.on{background:var(--hover)}
+.item:hover{background:var(--hover)}
 .item.on{background:var(--select)}
-.item .more{opacity:0;width:28px;height:28px;margin-right:4px;border-radius:8px;display:grid;place-items:center;color:var(--text-2);flex:none}
-.item:hover .more,.item.on .more,.item .more[aria-expanded="true"]{opacity:1}
-.item .more:hover{background:var(--hover);color:var(--text)}
-.item .more svg{width:16px;height:16px}
+.item .more{opacity:0;width:28px;height:28px;margin-right:6px;border-radius:8px;display:grid;place-items:center;color:var(--text-2);flex:none}
+.item:hover .more,.item.on .more,.item .more[aria-expanded="true"],.item .more:focus-visible{opacity:1}
+.item .more:hover{color:var(--text)}
+.item .more svg{width:20px;height:20px}
 .item .live{width:7px;height:7px;border-radius:50%;background:var(--text);flex:none;animation:pulse 1.4s ease-in-out infinite}
-.item input{flex:1;margin:3px 4px;padding:5px 8px;border:1px solid var(--border-2);border-radius:8px;background:var(--surface);outline:none}
-.empty-list{padding:14px 12px;color:var(--text-3);font-size:13px}
-.side-foot{padding:8px;position:relative}
-.profile{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;text-align:left}
+.item input{flex:1;min-width:0;margin:2px;padding:5px 8px;border:1px solid var(--border-2);border-radius:8px;background:var(--surface);outline:none;font-size:14px}
+.empty-list{padding:8px 16px;color:var(--text-3);font-size:13px}
+.opening{display:flex;align-items:center;justify-content:center;gap:10px;padding:56px 0;color:var(--text-3);font-size:14px}
+.side-foot{flex:none;padding:6px 0 max(8px,env(safe-area-inset-bottom));position:relative}
+.profile{display:flex;align-items:center;gap:8px;width:calc(100% - 12px);min-height:52px;margin:0 6px;padding:0 10px;border-radius:10px;text-align:left}
 .profile:hover,.profile[aria-expanded="true"]{background:var(--hover)}
-.avatar{width:28px;height:28px;border-radius:50%;background:var(--avatar);color:#fff;display:grid;place-items:center;font-weight:500;font-size:12.5px;flex:none;text-transform:uppercase}
-.who{display:flex;flex-direction:column;min-width:0;line-height:1.3}
-.who b{font-weight:400;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.who small{color:var(--text-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dot{width:8px;height:8px;border-radius:50%;background:#2f9e5a;flex:none}
-.dot.off{background:var(--text-3)}
-.dot.warn{background:var(--warn)}
+.avatar{position:relative;width:24px;height:24px;border-radius:50%;background:var(--avatar);color:#fff;display:grid;place-items:center;font-weight:600;font-size:11px;line-height:1;flex:none;text-transform:uppercase}
+.who{display:flex;flex-direction:column;min-width:0}
+.who b{font-weight:400;font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who small{color:var(--text-3);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who small:empty{display:none}
 .scrim{display:none}
+/* collapsed, the sidebar is a rail of icons, like ChatGPT's: the logo (which turns into "open sidebar" under the pointer), new chat, search, and you */
+@media (min-width:861px){
+  .app.side-collapsed{--side-w:52px}
+  .app.side-collapsed .side{border-right:1px solid var(--border-0)}
+  .app.side-collapsed .side-top{justify-content:center}
+  .app.side-collapsed #hideSide,.app.side-collapsed .history-label,.app.side-collapsed .history,.app.side-collapsed .nav-item>span,.app.side-collapsed .nav-item input,.app.side-collapsed .nav-item kbd,.app.side-collapsed .who{display:none}
+  .app.side-collapsed .brand{cursor:e-resize}
+  .app.side-collapsed .brand:hover>:not(.brand-open){display:none}
+  .app.side-collapsed .brand:hover .brand-open{display:grid}
+  .app.side-collapsed .brand-open svg{width:20px;height:20px}
+  .app.side-collapsed .nav-item{width:36px;margin:0 8px;padding:0;justify-content:center}
+  .app.side-collapsed .side-foot{margin-top:auto;padding:8px}
+  .app.side-collapsed .profile{width:36px;min-height:36px;margin:0;padding:0;justify-content:center}
+  .app.side-collapsed .pmenu{left:6px;right:auto;width:280px}
+  #hideSide{cursor:w-resize}
+}
+
+/* ---- the top bar: ChatGPT's model switcher on the left, the update button and the chat's ⋯ on the right */
 .main{grid-column:2;display:flex;flex-direction:column;min-width:0;min-height:0;height:100vh;height:100dvh;position:relative}
-.top{flex:none;height:56px;display:flex;align-items:center;gap:8px;padding:0 12px}
-.top .grow{flex:1}
+.top{flex:none;height:52px;display:flex;align-items:center;gap:4px;padding:0 8px;position:relative;z-index:2}
+.top .grow{flex:1;min-width:0}
 .only-narrow{display:none}
+.ms{display:inline-flex;align-items:center;gap:4px;min-width:0;min-height:36px;padding:0 10px;border-radius:8px;font-size:18px;line-height:28px;font-weight:400;color:var(--text);white-space:nowrap}
+.ms:hover,.ms[aria-expanded="true"]{background:var(--hover)}
+.ms>span{overflow:hidden;text-overflow:ellipsis}
+.ms .sub{color:var(--text-2);flex:none}
+.ms svg{width:16px;height:16px;color:var(--text-3)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:9999px;font-size:14px;line-height:20px;font-weight:500;white-space:nowrap;color:var(--text);flex:none}
+.pill:hover{background:var(--hover)}
+.pill svg{width:20px;height:20px}
+.pill i{display:none;width:8px;height:8px;margin:0 2px;border-radius:50%;background:currentColor;flex:none}
+.pill.busy i{display:block;animation:pulse 1.2s ease-in-out infinite}
+.pill.busy svg{display:none}
+.pill.bad{color:var(--danger-text)}
 
-/* ---- menus, and the bar under the message box */
-.menu,.pmenu,.pop{background:var(--menu);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}
-.pop{position:fixed;z-index:70;width:340px;max-width:calc(100vw - 16px);padding:8px;overflow-y:auto;animation:pop .12s ease-out}
-#ctxMenu{width:290px}
-@keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
-.c-right,.c-modes{display:flex;align-items:center;gap:2px;min-width:0}
-.c-modes{gap:6px;margin-left:6px}
-.c-right{margin-left:auto}
-.c-btn{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 8px 0 11px;border-radius:999px;font-size:14px;font-weight:500;color:var(--text-2);white-space:nowrap}
-.c-btn:hover,.c-btn[aria-expanded="true"]{background:var(--hover);color:var(--text)}
-.c-btn .chev{width:14px;height:14px;color:var(--text-3)}
-/* extended thinking in the Claude app (free plan): a pill that's lit when it's on, like ChatGPT's "Think" */
-.c-btn.think{padding:0 11px}
-.c-btn.think svg{width:16px;height:16px}
-.c-btn.think[aria-pressed="true"]{color:var(--link);background:color-mix(in srgb,var(--link) 12%,transparent)}
-.ring{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;color:var(--text-2);flex:none}
-.ring:hover,.ring[aria-expanded="true"]{background:var(--hover)}
-.ring svg{width:22px;height:22px;transform:rotate(-90deg)}
-.ring .trk{stroke:var(--border-2)}
-.ring .bar{stroke:currentColor;stroke-linecap:round;transition:stroke-dashoffset .35s}
-.ring.mid{color:var(--warn)}
-.ring.high{color:var(--danger)}
-.ctx-pop{padding:10px 12px 8px}
-.ctx-pop b{font-weight:600;font-size:14px}
-.ctx-meter{height:6px;border-radius:999px;background:var(--border-2);margin:10px 0 8px;overflow:hidden}
-.ctx-meter i{display:block;height:100%;border-radius:inherit;background:var(--text)}
-.ctx-pop p{margin:0;font-size:13px;color:var(--text-2)}
-.ctx-pop p.fine{margin-top:8px;font-size:12.5px;color:var(--text-3)}
-.pm{display:grid;grid-template-columns:1fr auto;align-items:center;gap:1px 10px;width:100%;padding:10px 12px;border-radius:10px;text-align:left}
-.pm:hover{background:var(--hover)}
-.pm b{font-weight:500;font-size:15px}
-.pm small{grid-column:1;color:var(--text-3);font-size:13px}
-.pm .tag{grid-column:1;justify-self:start;margin-top:4px;font-size:11.5px;color:var(--warn);background:var(--warn-soft);padding:1px 8px;border-radius:999px}
-.pm .tick{grid-row:1/span 3;grid-column:2;width:18px;height:18px;color:var(--text);visibility:hidden}
+/* ---- menus and popovers: no border, a hairline in the shadow, rows 36px high with 20px icons */
+.menu,.pmenu,.pop{background:var(--menu);border-radius:16px;box-shadow:var(--shadow);font-size:14px;line-height:20px;color:var(--text)}
+.pop{position:fixed;z-index:70;width:300px;max-width:calc(100vw - 16px);padding:6px;overflow-y:auto;overscroll-behavior:contain;animation:pop .35s cubic-bezier(.19,1,.22,1)}
+#permMenu{width:340px}
+@keyframes pop{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
+.mh{padding:6px 10px 4px;color:var(--text-3);font-size:12px;line-height:18px}
+.pop hr,.menu hr,.pmenu hr{border:0;height:1px;background:var(--border);margin:6px -6px}
+.pm{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 10px;border-radius:10px;text-align:left;color:var(--text)}
+.pm:hover{background:var(--hover-2)}
+.pop :focus-visible,.menu :focus-visible,.pmenu :focus-visible{outline-offset:-2px}
+.pm .tx{flex:1;min-width:0;display:flex;flex-direction:column}
+.pm b{font-weight:400;font-size:14px;line-height:20px}
+.pm small{color:var(--text-3);font-size:12px;line-height:16px}
+.pm .tag{display:flex;align-items:center;gap:4px;margin-top:2px;color:var(--text-3);font-size:12px;line-height:16px}
+.pm .tag svg{width:14px;height:14px}
+.pm .tick{width:20px;height:20px;visibility:hidden}
 .pm.on .tick{visibility:visible}
-.effort{padding:10px 10px 6px}
-.effort-head{display:flex;flex-direction:column;gap:2px;margin-bottom:12px}
-.effort-head b{font-weight:500}
-.effort-head small{color:var(--text-3);font-size:12.5px}
-.stairs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;align-items:end}
-.step{display:flex;flex-direction:column;align-items:center;gap:7px;padding:8px 2px 6px;border-radius:10px}
-.step:hover{background:var(--hover)}
-.step .bar{width:24px;border-radius:6px;background:var(--border-2);transition:background .15s}
-.step:nth-child(1) .bar{height:10px}.step:nth-child(2) .bar{height:18px}.step:nth-child(3) .bar{height:26px}.step:nth-child(4) .bar{height:34px}.step:nth-child(5) .bar{height:42px}
-.step.f .bar{background:color-mix(in srgb,var(--text) 35%,var(--border-2))}
-.step.on .bar{background:var(--text)}
-.step span{font-size:12px;color:var(--text-2);white-space:nowrap}
-.step.on span{color:var(--text);font-weight:600}
-.pick-note{display:flex;gap:9px;margin:4px 4px 4px;padding:10px 12px;border-radius:12px;background:var(--surface-3);color:var(--text-2);font-size:12.5px;line-height:1.45}
-.pick-note svg{width:15px;height:15px;flex:none;margin-top:1px;color:var(--warn)}
-.menu{position:absolute;z-index:60;min-width:170px;padding:6px}
-.menu button,.pmenu button,.pmenu .row{display:flex;width:100%;align-items:center;gap:10px;padding:0 10px;height:38px;border-radius:10px;text-align:left;font-size:14px}
-.menu button:hover,.pmenu button:hover{background:var(--hover)}
-.menu button.danger,.pmenu button.danger{color:var(--danger)}
-.menu svg,.pmenu svg{width:18px;height:18px;flex:none;color:var(--text-2)}
-.menu button.danger svg{color:var(--danger)}
-.pmenu{position:absolute;left:8px;right:8px;bottom:calc(100% - 2px);z-index:40;padding:6px;animation:pop .12s ease-out;transform-origin:bottom left}
-.pmenu .hdr{padding:8px 10px 10px;color:var(--text-3);font-size:13px;border-bottom:1px solid var(--border);margin:0 -6px 6px;padding-left:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pmenu .sp{flex:1}
-.pmenu .chip-r{margin-left:auto;font-size:12px;color:var(--text-2);background:var(--surface-3);padding:2px 8px;border-radius:999px}
-.pmenu .chip-r.up{background:var(--solid);color:var(--solid-ink);font-weight:600}
-.pmenu hr{border:0;border-top:1px solid var(--border);margin:6px -6px}
-.themes{display:inline-flex;gap:2px;padding:2px;border-radius:999px;background:var(--surface-3);margin-left:auto}
-.themes button{width:28px;height:26px;padding:0;justify-content:center;border-radius:999px;color:var(--text-3)}
-.themes button svg{width:15px;height:15px;color:inherit}
-.themes button.on{background:var(--elevated);color:var(--text);box-shadow:0 0 0 1px var(--border)}
+.pm[disabled]{opacity:.5;cursor:default}
+.pm[disabled]:hover{background:none}
+.pick-note{display:flex;gap:8px;margin:6px 4px 4px;padding:8px 10px;border-radius:10px;background:var(--hover);color:var(--text-2);font-size:12px;line-height:16px}
+.pick-note svg{width:16px;height:16px;color:var(--text-2)}
+.ctx-pop{padding:8px 10px}
+.ctx-pop b{font-weight:600;font-size:14px}
+.ctx-meter{height:6px;border-radius:999px;background:var(--hover-2);margin:10px 0 8px;overflow:hidden}
+.ctx-meter i{display:block;height:100%;border-radius:inherit;background:var(--text)}
+.ctx-pop p{margin:0;font-size:13px;line-height:18px;color:var(--text-2)}
+.ctx-pop p.fine{margin-top:8px;font-size:12px;line-height:16px;color:var(--text-3)}
+.menu{position:absolute;z-index:60;min-width:200px;padding:6px;animation:pop .35s cubic-bezier(.19,1,.22,1);transform-origin:top left}
+.menu button,.pmenu button,.pmenu .row{display:flex;width:100%;align-items:center;gap:8px;min-height:36px;padding:6px 10px;border-radius:10px;text-align:left;font-size:14px;line-height:20px;color:var(--text)}
+.menu button:hover,.pmenu button:hover{background:var(--hover-2)}
+.menu button.danger,.pmenu button.danger{color:var(--danger-text)}
+.menu svg,.pmenu svg{width:20px;height:20px}
+.pmenu{position:absolute;left:6px;right:6px;bottom:calc(100% - 4px);z-index:40;padding:6px;animation:pop .35s cubic-bezier(.19,1,.22,1);transform-origin:bottom left}
+.pmenu .hdr{padding:6px 10px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pmenu .hdr small{display:block;color:var(--text-3);font-size:12px;line-height:16px}
+.pmenu .chip-r{margin-left:auto;color:var(--text-3);font-size:12px;line-height:16px}
+.pmenu .th-row{gap:8px;padding:0 4px 0 10px;flex-wrap:nowrap}
+.themes{display:inline-flex;gap:2px;padding:2px;border-radius:999px;background:var(--seg);margin-left:auto}
+.pmenu .themes button{width:28px;min-height:24px;height:24px;padding:0;justify-content:center;border-radius:999px;color:var(--text-3)}
+.pmenu .themes button:hover{background:none;color:var(--text)}
+.pmenu .themes button svg{width:16px;height:16px}
+.pmenu .themes button.on{background:var(--seg-on);color:var(--text);box-shadow:var(--shadow-s)}
 
-/* ---- conversation */
+/* ---- the conversation */
 .thread{flex:1;overflow-y:auto;min-height:0;overscroll-behavior:contain}
-.thread-inner{max-width:768px;margin:0 auto;padding:10px 24px 36px}
-.msg{margin:24px 0}
-.msg.user{display:flex;flex-direction:column;align-items:flex-end}
-.bubble{max-width:min(70%,640px);background:var(--user);padding:10px 18px;border-radius:22px;white-space:pre-wrap;word-wrap:break-word;font-size:16px;line-height:1.6}
-.ufoot{display:flex;justify-content:flex-end;gap:2px;margin-top:4px;min-height:30px;opacity:0;transition:opacity .15s}
-.ufoot button{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--text-3)}
-.ufoot button:hover{background:var(--hover);color:var(--text)}
-.ufoot svg{width:16px;height:16px}
+.thread-inner{box-sizing:content-box;max-width:768px;margin:0 auto;padding:0 24px 32px}
+.msg.user{display:flex;flex-direction:column;align-items:flex-end;padding-top:12px}
+.msg.bot+.msg.user{padding-top:24px}
+.bubble{max-width:70%;background:var(--user);padding:6px 16px;border-radius:18px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px;line-height:24px}
+.bubble.multi{padding:12px 16px}
+.ufoot{display:flex;justify-content:flex-end;margin-top:4px;opacity:0;transition:opacity .15s}
+.ufoot button,.foot button{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;color:var(--text-2)}
+.ufoot button:hover,.foot button:hover{background:var(--hover);color:var(--text)}
+.ufoot svg,.foot svg{width:20px;height:20px}
 .msg.user:hover .ufoot,.msg.user:focus-within .ufoot{opacity:1}
 .attach-row{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-bottom:6px;max-width:85%}
-.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 8px 5px 10px;border:1px solid var(--border-2);border-radius:12px;background:var(--surface);font-size:13px;max-width:240px}
-.chip svg{width:14px;height:14px;color:var(--text-3);flex:none}
+.chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 6px 0 10px;border:1px solid var(--border);border-radius:12px;background:var(--surface);font-size:13px;max-width:240px}
+.chip svg{width:16px;height:16px;color:var(--text-2)}
 .chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip small{color:var(--text-3);flex:none}
-.chip button{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;color:var(--text-3)}
+.chip button{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:var(--text-2)}
 .chip button:hover{background:var(--hover);color:var(--text)}
-.msg.bot{font-size:16px;line-height:1.75}
+.chip button svg{width:14px;height:14px}
+.msg.bot{padding-top:20px;font-size:16px;line-height:28px}
+.md{overflow-wrap:anywhere}
 .md>*:first-child{margin-top:0}
 .md>*:last-child{margin-bottom:0}
-.md p{margin:0 0 1em}
-.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{line-height:1.3;margin:1.5em 0 .5em;font-weight:600}
-.md h1{font-size:1.5em}.md h2{font-size:1.3em}.md h3{font-size:1.12em}.md h4,.md h5,.md h6{font-size:1em}
-.md ul,.md ol{margin:0 0 1em;padding-left:1.6em}
-.md li{margin:.3em 0;padding-left:.2em}
-.md li>ul,.md li>ol{margin:.3em 0}
-.md li::marker{color:var(--text-2)}
+.md p{margin:1em 0}
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{font-weight:600}
+.md h1{font-size:1.75em;line-height:1.222;letter-spacing:-.04rem;margin:1.5rem 0 .5rem}
+.md h2{font-size:1.5em;line-height:1.222;margin:2rem 0 1rem}
+.md h3{font-size:1.25em;line-height:1.3;margin:1.125rem 0 .625rem}
+.md h4,.md h5,.md h6{font-size:1em;line-height:1.5;margin:1rem 0 .5rem}
+.md ul,.md ol{margin:.5em 0 1em;padding-left:1.625em}
+.md li{margin:.5em 0;padding-left:.375em}
+.md li>ul,.md li>ol{margin:.5em 0}
+.md li::marker{color:var(--text-2);font-weight:500}
 .md a{color:var(--link);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
 .md strong{font-weight:600}
-.md blockquote{margin:0 0 1em;padding:2px 0 2px 16px;border-left:3px solid var(--border-2);color:var(--text-2)}
-.md hr{border:0;border-top:1px solid var(--border-2);margin:1.5em 0}
-.md code{font-family:var(--mono);font-size:.88em;background:var(--surface-3);padding:.15em .4em;border-radius:6px}
-.md .table{overflow-x:auto;margin:0 0 1em;border:1px solid var(--border-2);border-radius:12px}
-.md table{border-collapse:collapse;width:100%;font-size:14.5px}
-.md th,.md td{padding:8px 14px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
-.md th{font-weight:600;background:var(--surface-2)}
-.md tr:last-child td{border-bottom:0}
-.code{margin:0 0 1em;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--code)}
-.code-head{display:flex;justify-content:space-between;align-items:center;padding:6px 8px 6px 16px;font-size:12.5px;color:var(--text-2);background:var(--code-head)}
-.code-head button{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;color:var(--text-2);font-size:12.5px}
+.md blockquote{position:relative;margin:1em 0;padding:.25em 0 .25em 24px}
+.md blockquote>:first-child{margin-top:0}
+.md blockquote>:last-child{margin-bottom:0}
+.md blockquote::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:2px;background:var(--quote)}
+.md hr{border:0;border-top:1px solid var(--border);margin:2em 0}
+.md code{font-family:var(--mono);font-size:.875em;font-weight:500;padding:1px .3rem;border-radius:4px;background:var(--inline);box-shadow:inset 0 0 0 1px var(--inline-ring)}
+.md .table{overflow-x:auto;margin:2em 0}
+.md table{width:100%;border-collapse:separate;border-spacing:0;font-size:.875em;line-height:1.7142857}
+.md th{text-align:start;font-weight:600;padding:8px;line-height:20px;border-bottom:1px solid var(--border-2);vertical-align:bottom}
+.md td{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.md th:first-child,.md td:first-child{padding-left:0}
+.md th:last-child,.md td:last-child{padding-right:0}
+.md tbody tr:last-child td{border-bottom:0}
+/* a code block is one colour, header and all; the header stays in view while a long block scrolls past */
+.code{margin:1em 0;border-radius:16px;background:var(--code)}
+.code-head{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;height:36px;padding:0 8px 0 16px;border-radius:16px 16px 0 0;background:var(--code);font-size:12px;line-height:16px;color:var(--text-2)}
+.code-head button{display:flex;align-items:center;gap:4px;height:28px;padding:0 8px;border-radius:8px;color:var(--text-2);font-size:12px;line-height:16px}
 .code-head button:hover{background:var(--hover);color:var(--text)}
-.code-head svg{width:14px;height:14px}
-.code pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.6}
-.code pre code{background:none;padding:0;font-size:inherit;border-radius:0}
-.hljs-keyword,.hljs-built_in,.hljs-selector-tag,.hljs-meta .hljs-keyword{color:var(--hl-k)}
-.hljs-string,.hljs-regexp,.hljs-template-string,.hljs-addition{color:var(--hl-s)}
-.hljs-number,.hljs-literal,.hljs-symbol,.hljs-attr,.hljs-attribute{color:var(--hl-n)}
-.hljs-comment,.hljs-quote,.hljs-deletion{color:var(--hl-c);font-style:italic}
-.hljs-title,.hljs-type,.hljs-class .hljs-title,.hljs-function .hljs-title,.hljs-tag,.hljs-name,.hljs-section{color:var(--hl-t)}
-.tools{margin:0 0 12px;font-size:14px;color:var(--text-2)}
-.tools summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:3px 8px 3px 2px;border-radius:8px;color:var(--text-2)}
+.code-head svg{width:16px;height:16px}
+.code pre{margin:0;padding:0 16px 16px;overflow-x:auto;font-family:var(--mono);font-size:14px;line-height:1.5}
+.code pre code,.md .code pre code{background:none;box-shadow:none;padding:0;font-size:inherit;font-weight:400;border-radius:0}
+/* OpenAI's own syntax colours */
+.hljs-keyword,.hljs-meta .hljs-keyword,.hljs-symbol,.hljs-deletion,.hljs-selector-pseudo{color:var(--hl-2)}
+.hljs-string,.hljs-regexp,.hljs-addition,.hljs-template-tag,.hljs-meta .hljs-string{color:var(--hl-3)}
+.hljs-title,.hljs-title.function_,.hljs-title.class_,.hljs-built_in,.hljs-section{color:var(--hl-1)}
+.hljs-attr,.hljs-attribute,.hljs-tag,.hljs-name,.hljs-selector-tag,.hljs-selector-class,.hljs-selector-id,.hljs-selector-attr,.hljs-type,.hljs-variable,.hljs-template-variable,.hljs-property{color:var(--hl-4)}
+.hljs-number,.hljs-literal,.hljs-link,.hljs-bullet{color:var(--hl-5)}
+.hljs-comment,.hljs-quote{color:color-mix(in oklab,currentColor 50%,transparent)}
+.hljs-punctuation,.hljs-operator,.hljs-meta{color:color-mix(in oklab,var(--text) 60%,transparent)}
+.hljs-variable.language_{color:inherit}
+.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:600}
+.tools{margin:0 0 12px;font-size:14px;line-height:20px;color:var(--text-2)}
+.tools summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 2px;border-radius:8px;color:var(--text-2)}
 .tools summary::-webkit-details-marker{display:none}
 .tools summary:hover{color:var(--text)}
-.tools summary svg{width:14px;height:14px;transition:transform .15s}
+.tools summary svg{width:16px;height:16px;transition:transform .15s}
 .tools details[open] summary svg{transform:rotate(90deg)}
 .tool-list{margin:4px 0 0 7px;padding-left:14px;border-left:1px solid var(--border-2)}
 .tool{display:flex;align-items:center;gap:8px;padding:3px 0}
@@ -265,215 +294,240 @@ svg{display:block}
 .tool.err i{animation:none;background:var(--danger)}
 .tool span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.think{margin:0 0 12px;font-size:14px;color:var(--text-2)}
-.think summary,.think .think-head{list-style:none;display:inline-flex;align-items:center;gap:6px;padding:3px 8px 3px 2px;border-radius:8px;color:var(--text-2)}
+.msg .think{margin:0 0 12px;font-size:14px;line-height:20px;color:var(--text-2)}
+.think summary,.think .think-head{list-style:none;display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 2px;border-radius:8px;color:var(--text-2)}
 .think summary{cursor:pointer}
 .think .think-head{padding-left:2px}
 .think summary::-webkit-details-marker{display:none}
 .think summary:hover{color:var(--text)}
-.think summary svg{width:14px;height:14px;transition:transform .15s}
+.think summary svg{width:16px;height:16px;transition:transform .15s}
 .think[open] summary svg{transform:rotate(90deg)}
 .think .live{background:linear-gradient(90deg,var(--text-3) 0%,var(--text) 45%,var(--text-3) 90%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 1.8s linear infinite}
 @keyframes shimmer{from{background-position:120% 0}to{background-position:-120% 0}}
-.think-body{margin:6px 0 2px 7px;padding:2px 0 2px 16px;border-left:1px solid var(--border-2);color:var(--text-2);font-size:14.5px;line-height:1.62}
+.think-body{margin:6px 0 2px 7px;padding:2px 0 2px 16px;border-left:1px solid var(--border-2);color:var(--text-2);font-size:14px;line-height:22px}
 .think-body.md p{margin:0 0 .7em}
 .arts{display:flex;flex-direction:column;gap:8px;margin:2px 0 14px}
-.art{display:flex;align-items:center;gap:12px;width:100%;max-width:460px;padding:9px 8px 9px 9px;border:1px solid var(--border-2);border-radius:16px;background:var(--surface);text-align:left;cursor:pointer;transition:background .15s}
-.md .art{margin:0 0 1em}
+.art{display:flex;align-items:center;gap:12px;width:100%;max-width:460px;padding:8px;border:1px solid var(--border);border-radius:16px;background:var(--surface);text-align:left;cursor:pointer;transition:background .15s}
+.md .art{margin:1em 0}
 .art:hover{background:var(--hover)}
-.art .ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--surface-3);color:var(--text);flex:none}
+.art .ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--hover-2);color:var(--text);flex:none}
 .art .ico svg{width:20px;height:20px}
 .art .txt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.35}
-.art b{font-weight:500;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.art small{color:var(--text-3);font-size:12.5px}
-.art .dl{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--text-2);flex:none}
+.art b{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.art small{color:var(--text-3);font-size:12px}
+.art .dl{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--text-2);flex:none}
 .art .dl:hover{background:var(--hover);color:var(--text)}
-.art .dl svg{width:17px;height:17px}
+.art .dl svg{width:20px;height:20px}
 .art.off{cursor:default;opacity:.75}
 .art.off:hover{background:var(--surface)}
 .art.on{border-color:var(--text-2)}
-.panel{grid-column:3;display:flex;flex-direction:column;min-width:0;min-height:0;height:100vh;height:100dvh;background:var(--surface);border-left:1px solid var(--border)}
-.p-head{flex:none;display:flex;align-items:center;gap:6px;height:56px;padding:0 8px 0 16px;border-bottom:1px solid var(--border)}
-.p-title{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
-.p-title b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.p-title small{color:var(--text-3);font-size:12px}
-.tabs{display:inline-flex;padding:3px;border-radius:999px;background:var(--surface-3);margin-right:4px}
-.tabs button{height:28px;padding:0 13px;border-radius:999px;font-size:13px;color:var(--text-2)}
-.tabs button.on{background:var(--elevated);color:var(--text);box-shadow:0 0 0 1px var(--border),var(--shadow-s)}
-.p-body{flex:1;min-height:0;overflow:auto;position:relative;background:var(--surface-2)}
-.p-body iframe{display:block;width:100%;height:100%;border:0;background:#fff}
-.p-img{display:grid;place-items:center;min-height:100%;padding:24px;background:repeating-conic-gradient(var(--surface-3) 0 25%,var(--surface-2) 0 50%) 0 0/22px 22px}
-.p-img img{max-width:100%;height:auto;border-radius:6px;box-shadow:var(--shadow)}
-.p-doc{max-width:740px;margin:0 auto;padding:26px 30px 48px;font-size:16px;line-height:1.66;background:var(--surface);min-height:100%}
-.p-code{margin:0;min-height:100%;padding:16px 18px;background:var(--code);font-family:var(--mono);font-size:13.5px;line-height:1.6;white-space:pre;tab-size:2}
-.p-code code{font-family:inherit}
-.p-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;padding:24px;color:var(--text-3);text-align:center}
-.thinking{display:flex;align-items:center;gap:10px;color:var(--text-3);font-size:14.5px;height:26px}
+.thinking{display:flex;align-items:center;gap:10px;color:var(--text-3);font-size:14px;height:28px}
 .thinking .wave{display:flex;align-items:flex-end;gap:2px;height:14px}
 .thinking .wave i{width:3px;border-radius:2px;background:var(--text);animation:wave 1s ease-in-out infinite}
 .thinking .wave i:nth-child(1){height:5px;animation-delay:0s}.thinking .wave i:nth-child(2){height:8px;animation-delay:.1s}.thinking .wave i:nth-child(3){height:11px;animation-delay:.2s}.thinking .wave i:nth-child(4){height:14px;animation-delay:.3s}
 @keyframes wave{0%,100%{opacity:.25}50%{opacity:1}}
-.caret::after{content:"";display:inline-block;width:9px;height:9px;margin-left:4px;vertical-align:baseline;border-radius:50%;background:var(--text);animation:pulse .9s ease-in-out infinite}
-.note{margin-top:10px;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.5}
-.note.err{background:var(--danger-soft);color:var(--danger)}
-.note.soft{background:var(--surface-3);color:var(--text-2)}
+.caret::after{content:"";display:inline-block;width:10px;height:10px;margin-left:4px;vertical-align:baseline;border-radius:50%;background:var(--text);animation:pulse .9s ease-in-out infinite}
+.note{margin-top:10px;padding:10px 14px;border-radius:12px;font-size:14px;line-height:20px}
+.note.err{background:var(--danger-soft);color:var(--danger-text)}
+.note.soft{background:var(--hover);color:var(--text-2)}
 .note.warn{background:var(--warn-soft);color:var(--warn)}
-.foot{display:flex;align-items:center;gap:2px;margin-top:6px;color:var(--text-3);font-size:12.5px;min-height:30px;opacity:0;transition:opacity .15s}
+.foot{display:flex;align-items:center;margin:4px 0 0 -8px;min-height:32px;color:var(--text-3);font-size:12px;line-height:16px;opacity:0;transition:opacity .15s}
 .msg.bot:hover .foot,.msg.bot:focus-within .foot,.msg.bot:last-child .foot{opacity:1}
-.foot .lbl{margin-left:6px}
-.foot button{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--text-3)}
-.foot button:hover{background:var(--hover);color:var(--text)}
-.foot svg{width:16px;height:16px}
+.foot .lbl{margin-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* ---- buttons, composer */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border-radius:999px;font-weight:500;font-size:14px;text-decoration:none;white-space:nowrap}
-.btn svg{width:15px;height:15px}
-.btn.primary{background:var(--solid);color:var(--solid-ink)}
-.btn.primary:hover{background:var(--solid-hover)}
+/* ---- the preview panel, like ChatGPT's canvas */
+.panel{grid-column:3;display:flex;flex-direction:column;min-width:0;min-height:0;height:100vh;height:100dvh;background:var(--surface);border-left:1px solid var(--border)}
+.p-head{flex:none;display:flex;align-items:center;gap:4px;height:52px;padding:0 8px 0 16px;border-bottom:1px solid var(--border-0)}
+.p-title{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.p-title b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-title small{color:var(--text-3);font-size:12px}
+.tabs{display:inline-flex;padding:2px;border-radius:999px;background:var(--seg);margin-right:4px}
+.tabs button{height:28px;padding:0 12px;border-radius:999px;font-size:13px;color:var(--text-2)}
+.tabs button.on{background:var(--seg-on);color:var(--text);box-shadow:var(--shadow-s)}
+.p-body{flex:1;min-height:0;overflow:auto;position:relative;background:var(--surface-2)}
+.p-body iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.p-img{display:grid;place-items:center;min-height:100%;padding:24px;background:repeating-conic-gradient(var(--surface-3) 0 25%,var(--surface-2) 0 50%) 0 0/22px 22px}
+.p-img img{max-width:100%;height:auto;border-radius:6px;box-shadow:var(--shadow)}
+.p-doc{max-width:740px;margin:0 auto;padding:26px 30px 48px;font-size:16px;line-height:28px;background:var(--surface);min-height:100%}
+.p-code{margin:0;min-height:100%;padding:16px 18px;background:var(--code);font-family:var(--mono);font-size:14px;line-height:1.5;white-space:pre;tab-size:2}
+.p-code code{font-family:inherit}
+.p-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%;padding:24px;color:var(--text-3);text-align:center}
+
+/* ---- buttons, and the message box: one row (+, the text, the tool pills, send) that grows to two when the text wraps or files are attached */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:9999px;font-weight:500;font-size:14px;line-height:20px;text-decoration:none;white-space:nowrap;color:var(--text)}
+.btn svg{width:16px;height:16px}
+.btn.primary{background:var(--btn);color:var(--btn-ink)}
+.btn.primary:hover{background:var(--btn-hover)}
 .btn.ghost{border:1px solid var(--border-2);background:transparent;color:var(--text)}
 .btn.ghost:hover{background:var(--hover)}
 .btn.danger{background:var(--danger);color:#fff}
-.btn.danger-ghost{color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent)}
+.btn.danger:hover{background:color-mix(in oklab,var(--danger) 88%,#000)}
+.btn.danger-ghost{color:var(--danger-text);border:1px solid color-mix(in oklab,var(--danger) 40%,transparent)}
 .btn.danger-ghost:hover{background:var(--danger-soft)}
-.btn[disabled]{opacity:.4;cursor:default;pointer-events:none}
-.dock{flex:none;padding:0 16px max(10px,env(safe-area-inset-bottom))}
-.hero{display:none;width:100%;max-width:768px;margin:0 auto 26px;padding:0 8px;text-align:center}
-.hero h1{margin:0;font-size:clamp(24px,4vw,28px);font-weight:400;letter-spacing:.01em;line-height:1.25}
-.hero p{margin:10px 0 0;color:var(--text-2);font-size:15px}
+.btn[disabled]{opacity:.5;cursor:default;pointer-events:none}
+.dock{flex:none;position:relative;padding:0 16px env(safe-area-inset-bottom)}
+.dock-wrap{position:relative;width:100%;max-width:768px;margin:0 auto}
+/* the conversation fades out above the message box, rather than being cut off at its edge */
+.main:not(.is-empty) .dock-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:24px;background:linear-gradient(to bottom,transparent,var(--surface));pointer-events:none}
+.hero{display:none;width:100%;max-width:768px;margin:0 auto 28px;padding:0 8px;text-align:center}
+.hero h1{margin:0;font-size:28px;line-height:34px;font-weight:400}
+.hero p{margin:12px 0 0;color:var(--text-2);font-size:14px;line-height:20px}
 .hero p:empty{display:none}
-.hero code{font-family:var(--mono);font-size:.88em;background:var(--surface-3);padding:.15em .4em;border-radius:6px}
+.hero code{font-family:var(--mono);font-size:.875em;font-weight:500;background:var(--inline);box-shadow:inset 0 0 0 1px var(--inline-ring);padding:1px .3rem;border-radius:4px}
+.hero a{color:var(--link)}
 .main.is-empty .thread{display:none}
-.main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:12vh;overflow-y:auto}
+.main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:calc(10vh + 32px);overflow-y:auto}
 .main.is-empty .hero{display:block}
 .main.is-empty .legal{display:none}
-.composer{max-width:768px;margin:0 auto;background:var(--composer);border-radius:28px;padding:8px;box-shadow:var(--composer-edge);transition:box-shadow .15s}
-.composer.drag{box-shadow:0 0 0 2px var(--text-2)}
+.composer{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"lead main trail";align-items:center;column-gap:4px;min-height:56px;padding:10px;border-radius:28px;background:var(--composer);box-shadow:var(--composer-edge);cursor:text;transition:box-shadow .15s}
+.composer.tall{grid-template-areas:"chips chips chips" "main main main" "lead . trail";row-gap:8px}
+.composer.drag{box-shadow:0 0 0 2px var(--accent)}
 .composer.disabled{opacity:.55;pointer-events:none}
-.chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 6px}
+.chips{grid-area:chips;display:flex;flex-wrap:wrap;gap:6px}
 .chips:empty{display:none}
-.composer textarea{display:block;width:100%;border:0;outline:0;background:none;resize:none;padding:8px 12px 6px;font-size:16px;line-height:1.5;max-height:40vh;min-height:44px}
+.composer textarea{grid-area:main;display:block;width:100%;min-width:0;min-height:24px;max-height:25dvh;margin:0;padding:0 4px;border:0;outline:0;background:none;resize:none;font-size:16px;line-height:24px;overflow-y:auto}
+.composer.tall textarea{padding:4px 6px 0}
 .composer textarea::placeholder{color:var(--text-3)}
-.c-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px}
-.c-row .icon-btn{width:36px;height:36px;border-radius:50%}
-.c-note{color:var(--text-3);font-size:12.5px;padding:4px 12px 2px}
-.note-link{color:var(--link);font-weight:500;text-decoration:underline;text-underline-offset:2px}
-.note-link[disabled]{opacity:.6;cursor:progress}
+.c-lead{grid-area:lead;display:flex;align-items:center;gap:4px;min-width:0}
+.c-trail{grid-area:trail;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
+.c-icon{width:36px;height:36px;border-radius:9999px;display:grid;place-items:center;color:var(--text);flex:none;cursor:pointer}
+.c-icon:hover{background:var(--hover-2)}
+.c-icon svg,.send svg{width:20px;height:20px}
+/* a tool pill, like ChatGPT's: the permission mode, and on the free plan "Thinking" (grey while it's off) */
+.c-pill{display:inline-flex;align-items:center;gap:4px;height:36px;padding:0 10px;border-radius:9999px;font-size:14px;line-height:20px;color:var(--accent);white-space:nowrap;flex:none;cursor:pointer}
+.c-pill svg{width:20px;height:20px}
+.c-pill:hover,.c-pill[aria-expanded="true"]{background:color-mix(in oklab,var(--accent) 12%,transparent)}
+.c-pill[aria-pressed="false"]{color:var(--text-2)}
+.c-pill[aria-pressed="false"]:hover{background:var(--hover-2);color:var(--text)}
+.ring{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;color:var(--text-2);flex:none}
+.ring:hover,.ring[aria-expanded="true"]{background:var(--hover-2)}
+.ring svg{width:20px;height:20px;transform:rotate(-90deg)}
+.ring .trk{stroke:var(--border-2)}
+.ring .bar{stroke:currentColor;stroke-linecap:round;transition:stroke-dashoffset .35s}
+.ring.mid{color:var(--warn)}
+.ring.high{color:var(--danger)}
+.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--solid);color:var(--solid-ink);flex:none;transition:background .15s,color .15s,opacity .15s}
+.send:hover{opacity:.8}
+.send[disabled]{background:var(--solid-off);color:var(--solid-off-ink);opacity:1;cursor:default}
+.c-note{margin:0 auto 8px;padding:0 12px;color:var(--text-3);font-size:12px;line-height:16px;text-align:center}
 .c-note:empty{display:none}
 .c-note.warn{color:var(--warn)}
-.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--solid);color:var(--solid-ink);flex:none;transition:opacity .15s,transform .1s}
-.send:active{transform:scale(.95)}
-.send[disabled]{opacity:.25;cursor:default}
-.send svg{width:18px;height:18px}
-.legal{max-width:768px;margin:8px auto 0;text-align:center;color:var(--text-3);font-size:12px}
+.note-link{color:var(--link);font-weight:500;text-decoration:underline;text-underline-offset:2px}
+.note-link[disabled]{opacity:.6;cursor:progress}
+.legal{min-height:32px;display:flex;align-items:center;justify-content:center;margin:0 auto;padding:8px;color:var(--text-2);font-size:12px;line-height:16px;text-align:center}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .row .grow{flex:1}
-.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:90;max-width:min(560px,calc(100vw - 32px));padding:11px 18px;border-radius:999px;background:var(--solid);color:var(--solid-ink);font-size:14px;box-shadow:var(--shadow);animation:pop .16s ease-out}
+.jump{position:absolute;left:50%;bottom:calc(100% + 12px);z-index:3;transform:translateX(-50%);width:32px;height:32px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:grid;place-items:center;box-shadow:0 4px 8px -2px rgba(0,0,0,.08);color:var(--text)}
+.jump svg{width:20px;height:20px}
+.toast{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;border-radius:12px;background:var(--btn);color:var(--btn-ink);font-size:14px;line-height:20px;box-shadow:var(--shadow);animation:toast .35s cubic-bezier(.19,1,.22,1)}
+@keyframes toast{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
 .banner{position:fixed;inset:0;z-index:95;display:grid;place-items:center;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(4px)}
 .banner div{text-align:center;max-width:380px;padding:24px}
-.banner h2{margin:0 0 6px;font-size:20px}
+.banner h2{margin:0 0 6px;font-size:20px;line-height:28px;font-weight:600}
 .banner p{margin:0 0 16px;color:var(--text-2)}
-.jump{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 10px);width:34px;height:34px;border-radius:50%;background:var(--elevated);border:1px solid var(--border-2);display:grid;place-items:center;box-shadow:var(--shadow-s);color:var(--text-2)}
-.jump svg{width:17px;height:17px}
-.dock-wrap{position:relative;width:100%;max-width:768px;margin:0 auto}
 
-/* ---- something on the computer waiting for you: Claude Code asking permission, or a window of the Claude app. Only that
-   window shows, over the darkened page, like a remote desktop of just it. */
-.remote{position:fixed;inset:0;z-index:96;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.62);animation:fade .15s ease-out}
+/* ---- something on the computer waiting for you: a question from the site's assistant, or a window of the Claude app. Only
+   that window shows, over the darkened page, like a remote desktop of just it. */
+.remote{position:fixed;inset:0;z-index:96;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.5);animation:fade .15s ease-out}
 @keyframes fade{from{opacity:0}to{opacity:1}}
-.rwin{width:min(580px,100%);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;background:var(--elevated);border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.1)}
-.rbar{flex:none;display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;background:var(--surface-3);border-bottom:1px solid var(--border);font-size:13px;color:var(--text-2)}
+.rwin{width:min(560px,100%);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;background:var(--elevated);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);animation:pop .35s cubic-bezier(.19,1,.22,1)}
+.rbar{flex:none;display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-bottom:1px solid var(--border-0);font-size:13px;color:var(--text-2)}
 .rdots{display:flex;gap:7px}.rdots i{width:11px;height:11px;border-radius:50%;background:#ff5f57}.rdots i:nth-child(2){background:#febc2e}.rdots i:nth-child(3){background:#28c840}
 .rname{flex:1;text-align:center;margin-right:52px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rbody{padding:18px 20px 20px;overflow:auto}
-.rbody h3{margin:0 0 10px;font-size:16px;font-weight:600;line-height:1.4}
-.rbody pre{margin:0 0 16px;padding:12px 14px;max-height:42vh;overflow:auto;background:var(--code);border:1px solid var(--border);border-radius:10px;font:13px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
-.rshot{display:block;width:100%;margin:0 0 14px;padding:0;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px var(--border-2);cursor:pointer;background:#fff}
+.rbody{padding:20px;overflow:auto}
+.rbody h3{margin:0 0 12px;font-size:18px;font-weight:600;line-height:26px}
+.rbody pre{margin:0 0 16px;padding:12px 16px;max-height:42vh;overflow:auto;background:var(--code);border-radius:12px;font:13px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
+.rshot{display:block;width:100%;margin:0 0 14px;padding:0;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--border);cursor:pointer;background:#fff}
 .rshot img{display:block;width:100%;height:auto}
 .rshot:disabled{cursor:progress;opacity:.7}
-.rnote{margin:0 0 14px;color:var(--text-2);font-size:13.5px}
+.rnote{margin:0 0 16px;color:var(--text-2);font-size:14px;line-height:20px}
 .rbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 
-/* ---- pill in the top bar, dialogs */
-.pill{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap;background:var(--solid);color:var(--solid-ink)}
-.pill:hover{background:var(--solid-hover)}
-.pill i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
-.pill.busy{background:var(--surface-3);color:var(--text);border:1px solid var(--border-2)}
-.pill.busy i{animation:pulse 1.2s ease-in-out infinite}
-.pill.bad{background:var(--danger-soft);color:var(--danger)}
-.dlg{width:min(760px,calc(100vw - 24px));height:min(640px,calc(100dvh - 32px));padding:0;border:0;border-radius:24px;background:var(--elevated);color:var(--text);box-shadow:var(--shadow);overflow:hidden}
-.dlg[open]{display:flex;flex-direction:column}
+/* ---- dialogs: Settings (tabs on the left, the close button above them), Plan usage, and the update checklist */
+.dlg{width:min(680px,calc(100vw - 24px));height:min(600px,calc(100dvh - 32px));padding:0;border:0;border-radius:16px;background:var(--elevated);color:var(--text);box-shadow:var(--shadow);overflow:hidden}
+.dlg[open]{display:flex;flex-direction:column;animation:pop .35s cubic-bezier(.19,1,.22,1)}
 .dlg.small{width:min(480px,calc(100vw - 24px));height:fit-content;max-height:calc(100dvh - 32px)}
 .dlg.compact{width:min(560px,calc(100vw - 24px));height:fit-content;max-height:calc(100dvh - 32px)}
 .dlg.compact .dlg-body{flex:none}
 .dlg a:not(.btn){color:var(--link)}
-.dlg::backdrop{background:rgba(0,0,0,.5)}
-.dlg-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 16px 12px 24px;border-bottom:1px solid var(--border)}
-.dlg-head h2{margin:0;font-size:18px;font-weight:600;line-height:1.3}
-.dlg-head p{margin:2px 0 0;color:var(--text-3);font-size:13px}
-.dlg-body{flex:1;min-height:0;overflow-y:auto;padding:20px 24px 24px;overscroll-behavior:contain}
+.dlg::backdrop{background:var(--scrim,rgba(0,0,0,.4))}
+.dlg-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 12px 6px 20px}
+.dlg-head h2{margin:0;padding-top:4px;font-size:18px;font-weight:600;line-height:28px}
+.dlg-head p{margin:0;color:var(--text-3);font-size:13px;line-height:18px}
+.dlg-head p:empty{display:none}
+.dlg-body{flex:1;min-height:0;overflow-y:auto;padding:8px 20px 20px;overscroll-behavior:contain}
 .dlg.small .dlg-body{flex:none}
-.set{display:grid;grid-template-columns:190px minmax(0,1fr);flex:1;min-height:0}
-.set-nav{display:flex;flex-direction:column;gap:2px;padding:12px 10px;border-right:1px solid var(--border);overflow-y:auto}
-.set-nav button{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border-radius:10px;font-size:14px;text-align:left;color:var(--text)}
-.set-nav button:hover{background:var(--hover)}
-.set-nav button.on{background:var(--select);font-weight:500}
-.set-nav button.danger{color:var(--danger)}
-.set-nav svg{width:18px;height:18px;flex:none;color:var(--text-2)}
-.set-nav button.danger svg{color:var(--danger)}
-.set-nav .badge{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--link)}
-.set-body{overflow-y:auto;padding:20px 24px 24px;min-width:0;overscroll-behavior:contain}
-.set-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 24px;border-top:1px solid var(--border);background:var(--elevated)}
+#setDlg:not(.compact) .dlg-head{display:none}
+.set{display:grid;grid-template-columns:180px minmax(0,1fr);flex:1;min-height:0}
+.set-nav{display:flex;flex-direction:column;padding:10px 8px;overflow-y:auto}
+.set-nav .set-x{margin:0 0 6px;color:var(--text)}
+.set-nav button[data-tab-set]{display:flex;align-items:center;gap:8px;min-height:36px;padding:0 10px;border-radius:10px;font-size:14px;line-height:20px;text-align:left;color:var(--text)}
+.set-nav button[data-tab-set]:hover{background:var(--hover)}
+.set-nav button.on{background:var(--select)}
+.set-nav button.danger{color:var(--danger-text)}
+.set-nav svg{width:20px;height:20px}
+.set-nav .badge{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.set-body{overflow-y:auto;padding:10px 20px 20px 12px;min-width:0;overscroll-behavior:contain}
+.pane-title{margin:0;padding:4px 0 12px;font-size:18px;line-height:28px;font-weight:600;border-bottom:1px solid var(--border-0)}
+.set-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid var(--border-0);background:var(--elevated)}
 .set-foot .hint{margin-right:auto;color:var(--text-3);font-size:13px}
-.sec{margin:0 0 22px}
-.sec:last-child{margin-bottom:0}
-.sec h3{margin:0 0 4px;font-size:15px;font-weight:600}
-.sec p{margin:0 0 10px;color:var(--text-2);font-size:13.5px;line-height:1.5}
-.field{display:flex;flex-direction:column;gap:6px;margin:0 0 16px}
-.field label{font-size:13.5px;font-weight:500}
-.field small{color:var(--text-3);font-size:12.5px}
-.input{width:100%;height:42px;padding:0 14px;border:1px solid var(--border-2);border-radius:12px;background:var(--surface);outline:none}
-.input:focus{border-color:var(--text-2)}
+.sec{margin:0;padding:12px 0;border-bottom:1px solid var(--border-0)}
+.sec:last-child{border-bottom:0}
+.sec h3{margin:0 0 4px;font-size:14px;line-height:20px;font-weight:500}
+.sec p{margin:0 0 8px;color:var(--text-2);font-size:13px;line-height:18px}
+.sec .field:last-child,.sec .switch:last-child{margin-bottom:0}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:36px}
+.srow h3,.sec.srow h3{margin:0}
+.field{display:flex;flex-direction:column;gap:6px;margin:0 0 12px}
+.field label{font-size:14px;line-height:20px;font-weight:500}
+.field small{color:var(--text-3);font-size:12px;line-height:16px}
+.input{width:100%;height:40px;padding:0 12px;border:1px solid var(--border-2);border-radius:10px;background:transparent;outline:none}
+.input:focus{border-color:var(--text-3)}
 .input.bad{border-color:var(--danger)}
-.input-row{display:flex;align-items:center;border:1px solid var(--border-2);border-radius:12px;background:var(--surface);overflow:hidden}
-.input-row:focus-within{border-color:var(--text-2)}
-.input-row input{flex:1;min-width:0;height:42px;padding:0 8px 0 14px;border:0;background:none;outline:none}
-.input-row span{color:var(--text-3);padding-right:14px;white-space:nowrap;font-size:13.5px}
-.switch{display:flex;align-items:flex-start;gap:14px;justify-content:space-between;margin:0 0 16px}
-.switch .t{display:flex;flex-direction:column;gap:2px;font-size:14px}
-.switch .t small{color:var(--text-3);font-size:12.5px;max-width:420px}
-.toggle{position:relative;width:40px;height:24px;border-radius:999px;background:var(--border-2);flex:none;margin-top:2px;transition:background .15s}
-.toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
+.input-row{display:flex;align-items:center;border:1px solid var(--border-2);border-radius:10px;background:transparent;overflow:hidden}
+.input-row:focus-within{border-color:var(--text-3)}
+.input-row input{flex:1;min-width:0;height:40px;padding:0 8px 0 12px;border:0;background:none;outline:none}
+.input-row span{color:var(--text-3);padding-right:12px;white-space:nowrap;font-size:13px}
+.switch{display:flex;align-items:center;gap:16px;justify-content:space-between;padding:8px 0;margin:0 0 4px}
+.switch .t{display:flex;flex-direction:column;gap:2px;font-size:14px;line-height:20px}
+.switch .t small{color:var(--text-3);font-size:12px;line-height:16px;max-width:420px}
+.toggle{position:relative;width:32px;height:20px;border-radius:999px;background:var(--toggle-off);flex:none;transition:background .15s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
 .toggle[aria-checked="true"]{background:var(--toggle)}
-.toggle[aria-checked="true"]::after{transform:translateX(16px)}
-.img-field{display:flex;align-items:center;gap:14px;margin:0 0 18px}
-.img-prev{width:56px;height:56px;border-radius:14px;border:1px solid var(--border-2);display:grid;place-items:center;background:var(--surface-3);overflow:hidden;flex:none}
+.toggle[aria-checked="true"]::after{transform:translateX(12px)}
+.toggle[disabled]{opacity:.5;cursor:default}
+.img-field{display:flex;align-items:center;gap:12px;margin:0 0 12px;flex-wrap:wrap}
+.img-prev{width:48px;height:48px;border-radius:12px;border:1px solid var(--border);display:grid;place-items:center;background:var(--surface-2);overflow:hidden;flex:none}
 .img-prev img,.img-prev svg{width:100%;height:100%;object-fit:contain}
 .img-meta{flex:1;min-width:0}
 .img-meta b{display:block;font-weight:500;font-size:14px}
-.img-meta small{color:var(--text-3);font-size:12.5px}
-.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--surface-3)}
-.seg button{height:30px;padding:0 14px;border-radius:999px;font-size:13.5px;color:var(--text-2)}
-.seg button.on{background:var(--elevated);color:var(--text);box-shadow:0 0 0 1px var(--border),var(--shadow-s)}
-.kv{display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);font-size:13.5px}
+.img-meta small{color:var(--text-3);font-size:12px}
+.seg{display:inline-flex;padding:2px;border-radius:999px;background:var(--seg)}
+.seg button{height:28px;padding:0 12px;border-radius:999px;font-size:13px;color:var(--text-2);white-space:nowrap}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--seg-on);color:var(--text);box-shadow:var(--shadow-s)}
+.seg button[disabled]{cursor:default}
+.kv{display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:8px 8px 8px 12px;border-radius:12px;background:var(--hover);font-size:13px}
 .kv span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
 .kv .btn{height:30px;padding:0 12px;font-size:13px}
-.danger-zone{border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);border-radius:16px;padding:16px}
-.danger-zone h3{color:var(--danger)}
-.warn-list{margin:8px 0 12px;padding-left:1.2em;color:var(--text-2);font-size:13.5px}
+.danger-zone{padding:12px 0 0}
+.danger-zone h3{margin:0 0 4px;font-size:14px;line-height:20px;font-weight:500;color:var(--danger-text)}
+.danger-zone p{margin:0 0 8px;color:var(--text-2);font-size:13px;line-height:18px}
+.warn-list{margin:8px 0 12px;padding-left:1.2em;color:var(--text-2);font-size:13px;line-height:18px}
 .warn-list li{margin:.25em 0}
-.err-text{color:var(--danger);font-size:13px;margin-top:6px}
-.fine{margin:12px 0 0;color:var(--text-3);font-size:12.5px;line-height:1.5}
+.err-text{color:var(--danger-text);font-size:13px;margin-top:6px}
+.fine{margin:12px 0 0;color:var(--text-3);font-size:12px;line-height:16px}
 .steps{list-style:none;margin:6px 0 4px;padding:0}
-.steps li{display:flex;align-items:center;gap:12px;padding:8px 2px;color:var(--text-3)}
+.steps li{display:flex;align-items:center;gap:12px;padding:7px 2px;color:var(--text-3)}
 .steps .ic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:1.5px solid var(--border-2);flex:none}
 .steps .ic svg{width:13px;height:13px}
 .steps li.active{color:var(--text);font-weight:500}
 .steps li.active .ic{border-color:var(--text)}
 .steps li.done{color:var(--text-2)}
-.steps li.done .ic{background:var(--solid);border-color:var(--solid);color:var(--solid-ink)}
-.steps li.error{color:var(--danger);font-weight:500}
+.steps li.done .ic{background:var(--btn);border-color:var(--btn);color:var(--btn-ink)}
+.steps li.error{color:var(--danger-text);font-weight:500}
 .steps li.error .ic{border-color:var(--danger);color:var(--danger)}
-.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--border-2);border-top-color:var(--text);animation:spin .8s linear infinite}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--border-2);border-top-color:var(--text);animation:spin .8s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .notes{margin:0 0 4px;padding-left:1.2em;color:var(--text-2)}
 .notes li{margin:.25em 0}
@@ -481,84 +535,85 @@ svg{display:block}
 .earlier summary{cursor:pointer;color:var(--text-2);font-size:13px}
 .earlier .rel{margin-top:12px}
 .earlier .rel h3{margin:0 0 4px;font-size:13px}
-.what{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-3);color:var(--text-2);font-size:13.5px}
-.what div{display:flex;gap:9px}
-.what svg{width:15px;height:15px;flex:none;margin-top:3px;color:var(--text)}
+.what{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:12px;background:var(--hover);color:var(--text-2);font-size:13px;line-height:18px}
+.what div{display:flex;gap:8px}
+.what svg{width:16px;height:16px;margin-top:1px;color:var(--text)}
 .vrow{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-size:15px}
 .vrow b{font-weight:600}
 .vrow svg{width:16px;height:16px;color:var(--text-3)}
-.linkbox{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 8px 8px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
+.linkbox{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 8px 8px 12px;border-radius:12px;background:var(--hover);font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
 .linkbox span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dlg-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-.howto{margin:14px 0 0;padding:14px 16px 14px 34px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);color:var(--text-2);font-size:13.5px}
+.howto{margin:14px 0 0;padding:14px 16px 14px 34px;border-radius:12px;background:var(--hover);color:var(--text-2);font-size:13px;line-height:19px}
 .howto li{margin:0 0 8px;padding-left:4px}
 .howto li:last-child{margin:0}
 .howto b{color:var(--text);font-weight:600}
-.howto code,.sec code,.fine code,.dlg-body code{font-family:var(--mono);font-size:12.5px;background:var(--surface-3);padding:.1em .4em;border-radius:6px;color:var(--text)}
-.wait{display:flex;align-items:center;gap:10px;margin:14px 0 0;color:var(--text-2);font-size:13.5px}
-.meters{display:flex;flex-direction:column;gap:22px}
+.howto code,.sec code,.fine code,.dlg-body code,.field code{font-family:var(--mono);font-size:.875em;font-weight:500;background:var(--inline);box-shadow:inset 0 0 0 1px var(--inline-ring);padding:1px .3rem;border-radius:4px;color:var(--text)}
+.wait{display:flex;align-items:center;gap:10px;margin:14px 0 0;color:var(--text-2);font-size:13px}
+.meters{display:flex;flex-direction:column;gap:20px}
 .mt-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
-.mt-top b{font-weight:500;font-size:15px}
+.mt-top b{font-weight:500;font-size:14px}
 .mt-top span{color:var(--text-2);font-size:14px}
-.mt-bar{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden}
-.mt-bar i{display:block;height:100%;border-radius:999px;background:var(--text);min-width:2px}
+.mt-bar{height:8px;border-radius:999px;background:var(--hover-2);overflow:hidden}
+.mt-bar i{display:block;height:100%;border-radius:999px;background:var(--text);min-width:2px;transition:width .4s ease}
 .mt-bar.hot i{background:var(--warn)}
 .mt-bar.full i{background:var(--danger)}
-.mt-sub{margin-top:6px;color:var(--text-3);font-size:13px}
+.mt-sub{margin-top:6px;color:var(--text-3);font-size:12px;line-height:16px}
 .ok-text{color:var(--ok);font-weight:500}
 .field .seg{align-self:flex-start;max-width:100%;overflow-x:auto}
 .prog{margin:2px 0 6px}
-.prog-step{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14.5px;font-weight:500}
+.prog-step{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14px;font-weight:500}
 .prog-step small{margin-left:auto;color:var(--text-3);font-weight:400;font-size:13px}
-.credits{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
-.credits p{margin:0 0 14px;color:var(--text-2);font-size:13.5px}
+.credits{margin-top:20px;padding-top:16px;border-top:1px solid var(--border-0)}
+.credits p{margin:0 0 12px;color:var(--text-2);font-size:13px;line-height:18px}
 .reset-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 0}
 .reset-row .t{display:flex;flex-direction:column;gap:2px;font-size:14px;min-width:0}
-.reset-row small{color:var(--text-3);font-size:12.5px}
+.reset-row small{color:var(--text-3);font-size:12px;line-height:16px}
 .reset-row .btn{height:32px;padding:0 14px;font-size:13px;flex:none}
-.bal{display:flex;flex-direction:column;gap:6px;margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--surface-3);font-size:13.5px}
+.bal{display:flex;flex-direction:column;gap:6px;margin:12px 0 0;padding:12px 14px;border-radius:12px;background:var(--hover);font-size:13px}
 .bal div{display:flex;justify-content:space-between;gap:12px}
 .bal span{color:var(--text-2)}
 .bal b{font-weight:500;text-align:right}
-.state{font-size:12.5px;font-weight:500;padding:2px 10px;border-radius:999px;background:var(--surface-3);color:var(--text-2)}
-.state.using,.state.on{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.state{font-size:12px;font-weight:500;padding:2px 10px;border-radius:999px;background:var(--hover-2);color:var(--text-2)}
+.state.using,.state.on{background:color-mix(in oklab,var(--ok) 14%,transparent);color:var(--ok)}
 .state.near{background:var(--warn-soft);color:var(--warn)}
-.state.out{background:var(--danger-soft);color:var(--danger)}
+.state.out{background:var(--danger-soft);color:var(--danger-text)}
 @media (max-width:1280px) and (min-width:861px){
   .app.panel-open{--side-w:0px}
   .app.panel-open .side{display:none}
   .app.panel-open{--panel-w:min(55vw,860px)}
 }
+/* ---- phones: the sidebar is a drawer, the top bar is ☰ and the model switcher, 40px touch targets */
 @media (max-width:860px){
   .app,.app.side-collapsed,.app.panel-open{grid-template-columns:minmax(0,1fr)}
   .main{grid-column:1}
   .panel{position:fixed;inset:0;z-index:55;border-left:0;padding-top:env(safe-area-inset-top)}
-  .app .side,.app.side-collapsed .side{display:flex;position:fixed;top:0;bottom:0;left:0;width:min(86vw,300px);z-index:50;transform:translateX(-102%);transition:transform .22s ease}
+  .app .side,.app.side-collapsed .side{display:flex;position:fixed;top:0;bottom:0;left:0;width:min(85vw,320px);z-index:50;transform:translateX(-102%);transition:transform .3s cubic-bezier(.19,1,.22,1)}
   .app.side-open .side{transform:none;box-shadow:var(--shadow)}
-  .app.side-open .scrim{display:block;position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.4)}
+  .app.side-open .scrim{display:block;position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.5)}
   .only-narrow{display:grid}
   .only-wide{display:none}
-  .top{padding:0 6px;gap:4px}
-  .c-modes{margin-left:2px}
-  .c-btn{padding:0 6px 0 9px}
-  .thread-inner{padding:6px 16px 28px}
-  .dock{padding:0 10px max(8px,env(safe-area-inset-bottom))}
-  .bubble{max-width:88%}
+  .top{padding:env(safe-area-inset-top) 8px 0;gap:0;height:calc(52px + env(safe-area-inset-top))}
+  .top .icon-btn{width:40px;height:40px}
+  .pill{height:40px}
+  .pill.solo{width:40px;padding:0;justify-content:center}
+  .thread-inner{padding:0 16px 24px}
+  .dock{padding:0 24px env(safe-area-inset-bottom)}
+  .hero h1{font-size:24px;line-height:30px}
+  .nav-item kbd{display:none}
   .dlg{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border-radius:0}
-  .dlg.small{height:fit-content;border-radius:20px 20px 0 0;margin-top:auto;width:100vw}
+  .dlg.small,.dlg.compact{height:fit-content;max-height:92dvh;border-radius:16px 16px 0 0;margin:auto 0 0;width:100vw}
+  #setDlg:not(.compact) .dlg-head{display:flex}
+  .set-nav .set-x{display:none}
   .set{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
-  .set-nav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--border);padding:8px 10px}
-  .set-nav button{flex:none;height:34px;padding:0 12px}
+  .set-nav{flex-direction:row;overflow-x:auto;gap:2px;padding:4px 12px 8px;border-bottom:1px solid var(--border-0)}
+  .set-nav button[data-tab-set]{flex:none;min-height:32px;padding:0 12px}
   .set-nav svg{display:none}
-  .set-body{padding:16px}
+  .set-body{padding:4px 16px 16px}
+  .pane-title{display:none}
   .set-foot{padding:10px 16px}
-  .dlg-head{padding:14px 10px 10px 16px}
-  .dlg-body{padding:16px}
-}
-@media (max-width:700px){
-  .c-row{row-gap:6px}
-  .c-modes{order:3;flex:1 1 100%;margin:0;padding:6px 2px 0;border-top:1px solid var(--border)}
-  .c-right{order:2}
+  .dlg-head{padding:12px 8px 6px 16px}
+  .dlg-body{padding:8px 16px 16px}
 }
 @media (hover:none){.foot,.ufoot{opacity:1}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
@@ -568,12 +623,12 @@ svg{display:block}
 <div class="app" id="app">
   <aside class="side" id="side" aria-label="Chats">
     <div class="side-top">
-      <a class="brand" href="/" id="brand" aria-label="__SITE_NAME__">__BRAND_MARK__<span>__SITE_NAME__</span></a>
-      <button class="icon-btn" id="hideSide" title="Close sidebar" aria-label="Close sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M9 4v16"/></svg></button>
+      <a class="brand" href="/" id="brand" aria-label="__SITE_NAME__">__BRAND_MARK__<span>__SITE_NAME__</span><span class="brand-open" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.45C8 5.42 8.00 5.39 8.00 5.36C7.55 5.37 7.18 5.38 6.85 5.41C6.32 5.45 5.99 5.53 5.74 5.64L5.63 5.69C5.14 5.94 4.73 6.32 4.44 6.79L4.32 7.00C4.19 7.26 4.10 7.61 4.05 8.21C4.00 8.83 4 9.62 4 10.76V13.23C4 14.37 4.00 15.16 4.05 15.78C4.10 16.38 4.19 16.73 4.32 16.99L4.44 17.20C4.73 17.67 5.14 18.05 5.63 18.30L5.74 18.35C5.99 18.46 6.32 18.54 6.85 18.58C7.17 18.61 7.55 18.62 8 18.62V5.45ZM22 13.23C22 14.33 22.00 15.22 21.94 15.94C21.89 16.58 21.78 17.15 21.56 17.68L21.45 17.90C20.97 18.84 20.21 19.61 19.27 20.09C18.67 20.39 18.03 20.51 17.30 20.57C16.59 20.63 15.70 20.63 14.59 20.63H9.40C9.27 20.63 9.15 20.63 9.03 20.63C9.02 20.63 9.01 20.63 9 20.63C8.98 20.63 8.97 20.63 8.95 20.63C8.05 20.63 7.31 20.62 6.69 20.57C6.05 20.52 5.48 20.42 4.95 20.19L4.73 20.09C3.84 19.64 3.12 18.94 2.63 18.08L2.54 17.90C2.24 17.31 2.11 16.67 2.05 15.94C1.99 15.22 2 14.33 2 13.23V10.76C2 9.66 1.99 8.77 2.05 8.05C2.11 7.32 2.24 6.68 2.54 6.09L2.63 5.91C3.12 5.05 3.84 4.35 4.73 3.90L4.95 3.80C5.48 3.57 6.05 3.47 6.69 3.42C7.40 3.36 8.29 3.36 9.40 3.36H14.59C15.70 3.36 16.59 3.36 17.30 3.42C18.03 3.48 18.67 3.60 19.26 3.90L19.44 4.00C20.30 4.48 21.00 5.21 21.45 6.09L21.56 6.31C21.78 6.84 21.89 7.41 21.94 8.05C22.00 8.77 22 9.66 22 10.76V13.23ZM10 18.63H14.59C15.73 18.63 16.52 18.63 17.14 18.58C17.75 18.53 18.09 18.44 18.36 18.30L18.56 18.19C19.03 17.90 19.42 17.49 19.67 16.99L19.72 16.89C19.82 16.64 19.90 16.31 19.94 15.78C19.99 15.16 20 14.37 20 13.23V10.76C20 9.62 19.99 8.83 19.94 8.21C19.90 7.68 19.82 7.35 19.72 7.10L19.67 7.00C19.42 6.50 19.03 6.09 18.56 5.80L18.36 5.69C18.09 5.55 17.75 5.46 17.14 5.41C16.52 5.36 15.73 5.36 14.59 5.36H9.99C9.99 5.39 10 5.42 10 5.45V18.63Z" fill="currentColor"/></svg></span></a>
+      <button class="icon-btn" id="hideSide" type="button" title="Close sidebar" aria-label="Close sidebar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.45C8 5.42 8.00 5.39 8.00 5.36C7.55 5.37 7.18 5.38 6.85 5.41C6.32 5.45 5.99 5.53 5.74 5.64L5.63 5.69C5.14 5.94 4.73 6.32 4.44 6.79L4.32 7.00C4.19 7.26 4.10 7.61 4.05 8.21C4.00 8.83 4 9.62 4 10.76V13.23C4 14.37 4.00 15.16 4.05 15.78C4.10 16.38 4.19 16.73 4.32 16.99L4.44 17.20C4.73 17.67 5.14 18.05 5.63 18.30L5.74 18.35C5.99 18.46 6.32 18.54 6.85 18.58C7.17 18.61 7.55 18.62 8 18.62V5.45ZM22 13.23C22 14.33 22.00 15.22 21.94 15.94C21.89 16.58 21.78 17.15 21.56 17.68L21.45 17.90C20.97 18.84 20.21 19.61 19.27 20.09C18.67 20.39 18.03 20.51 17.30 20.57C16.59 20.63 15.70 20.63 14.59 20.63H9.40C9.27 20.63 9.15 20.63 9.03 20.63C9.02 20.63 9.01 20.63 9 20.63C8.98 20.63 8.97 20.63 8.95 20.63C8.05 20.63 7.31 20.62 6.69 20.57C6.05 20.52 5.48 20.42 4.95 20.19L4.73 20.09C3.84 19.64 3.12 18.94 2.63 18.08L2.54 17.90C2.24 17.31 2.11 16.67 2.05 15.94C1.99 15.22 2 14.33 2 13.23V10.76C2 9.66 1.99 8.77 2.05 8.05C2.11 7.32 2.24 6.68 2.54 6.09L2.63 5.91C3.12 5.05 3.84 4.35 4.73 3.90L4.95 3.80C5.48 3.57 6.05 3.47 6.69 3.42C7.40 3.36 8.29 3.36 9.40 3.36H14.59C15.70 3.36 16.59 3.36 17.30 3.42C18.03 3.48 18.67 3.60 19.26 3.90L19.44 4.00C20.30 4.48 21.00 5.21 21.45 6.09L21.56 6.31C21.78 6.84 21.89 7.41 21.94 8.05C22.00 8.77 22 9.66 22 10.76V13.23ZM10 18.63H14.59C15.73 18.63 16.52 18.63 17.14 18.58C17.75 18.53 18.09 18.44 18.36 18.30L18.56 18.19C19.03 17.90 19.42 17.49 19.67 16.99L19.72 16.89C19.82 16.64 19.90 16.31 19.94 15.78C19.99 15.16 20 14.37 20 13.23V10.76C20 9.62 19.99 8.83 19.94 8.21C19.90 7.68 19.82 7.35 19.72 7.10L19.67 7.00C19.42 6.50 19.03 6.09 18.56 5.80L18.36 5.69C18.09 5.55 17.75 5.46 17.14 5.41C16.52 5.36 15.73 5.36 14.59 5.36H9.99C9.99 5.39 10 5.42 10 5.45V18.63Z" fill="currentColor"/></svg></button>
     </div>
     <div class="side-nav">
-      <button class="nav-item" id="newChat" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V13"/><path d="M17.6 3.6a1.9 1.9 0 0 1 2.8 2.8L12 14.8l-3.6.8.8-3.6z"/></svg><span>New chat</span></button>
-      <label class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"></label>
+      <button class="nav-item" id="newChat" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.67 3.91C16.89 2.69 18.86 2.69 20.08 3.91C21.30 5.13 21.30 7.10 20.08 8.32L14.14 14.26C13.38 15.02 12.39 15.52 11.32 15.67L9.14 15.98C8.82 16.03 8.51 15.92 8.29 15.70C8.07 15.48 7.96 15.17 8.01 14.85L8.32 12.67C8.47 11.60 8.97 10.61 9.73 9.85L15.67 3.91ZM18.67 5.32C18.23 4.88 17.52 4.88 17.08 5.32L11.14 11.26C10.69 11.72 10.39 12.31 10.30 12.96L10.17 13.82L11.03 13.69C11.68 13.60 12.27 13.30 12.73 12.85L18.67 6.91C19.11 6.47 19.11 5.76 18.67 5.32ZM11 3.99C11.00 4.55 10.55 4.99 10.00 5.00C9.00 5.00 8.29 5.00 7.74 5.06C7.20 5.11 6.88 5.20 6.63 5.32C6.07 5.61 5.61 6.07 5.32 6.63C5.19 6.90 5.10 7.24 5.05 7.85C5.00 8.47 5 9.26 5 10.4V13.6C5 14.73 5.00 15.52 5.05 16.14C5.10 16.75 5.19 17.09 5.32 17.36C5.61 17.92 6.07 18.38 6.63 18.67C6.90 18.80 7.24 18.89 7.85 18.94C8.47 18.99 9.26 19 10.4 19H13.6C14.73 19 15.52 18.99 16.14 18.94C16.75 18.89 17.09 18.80 17.36 18.67C17.92 18.38 18.38 17.92 18.67 17.36C18.79 17.11 18.88 16.79 18.93 16.25C18.99 15.70 18.99 14.99 18.99 13.99C19.00 13.44 19.44 12.99 20.00 13C20.55 13.00 21.00 13.44 20.99 14.00C20.99 14.97 20.99 15.78 20.93 16.44C20.86 17.11 20.73 17.71 20.45 18.26C19.97 19.21 19.21 19.97 18.27 20.45C17.67 20.75 17.03 20.88 16.30 20.94C15.60 21 14.72 21 13.64 21H10.35C9.27 21 8.39 21 7.69 20.94C6.96 20.88 6.32 20.75 5.73 20.45C4.78 19.97 4.02 19.21 3.54 18.26C3.24 17.67 3.11 17.03 3.05 16.30C2.99 15.60 2.99 14.72 3 13.64V10.35C2.99 9.27 2.99 8.39 3.05 7.69C3.11 6.96 3.24 6.32 3.54 5.73C4.02 4.78 4.78 4.02 5.73 3.54C6.28 3.26 6.88 3.13 7.55 3.06C8.21 3.00 9.02 3.00 9.99 3.00C10.55 2.99 10.99 3.44 11 3.99Z" fill="currentColor"/></svg><span>New chat</span><kbd data-keys="shift+o" aria-hidden="true">Ctrl Shift O</kbd></button>
+      <label class="nav-item"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"><kbd data-keys="k" aria-hidden="true">Ctrl K</kbd></label>
     </div>
     <div class="history-label">Chats</div>
     <nav class="history" id="history"></nav>
@@ -588,34 +643,31 @@ svg{display:block}
   <div class="scrim" id="scrim"></div>
   <main class="main is-empty" id="main">
     <header class="top">
-      <button class="icon-btn only-narrow" id="openSide" aria-label="Open chats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h16"/></svg></button>
-      <span class="top-title" id="topTitle">__SITE_NAME__</span>
+      <button class="icon-btn only-narrow" id="openSide" type="button" aria-label="Open sidebar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 8a1 1 0 0 1 1-1h16a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm0 8a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Z"/></svg></button>
+      <button class="ms" id="modelBtn" type="button" aria-haspopup="menu" aria-expanded="false"><span id="modelName">Opus 5.5</span><span class="sub" id="effortName">Medium</span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.29 9.29a1 1 0 0 1 1.41 0L12 12.58l3.29-3.29a1 1 0 1 1 1.41 1.41l-4 4a1 1 0 0 1-1.41 0l-4-4a1 1 0 0 1 0-1.41Z" clip-rule="evenodd"/></svg></button>
       <div class="grow"></div>
-      <button class="pill" id="updatePill" type="button" hidden><i></i><span class="only-wide" id="pillText"></span><span class="only-narrow" id="pillShort"></span></button>
+      <button class="pill" id="updatePill" type="button" hidden><i></i><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 12C4 7.58 7.58 4 12 4C16.41 4 20 7.58 20 12C20 16.41 16.41 20 12 20C7.58 20 4 16.41 4 12ZM12 2C6.47 2 2 6.47 2 12C2 17.52 6.47 22 12 22C17.52 22 22 17.52 22 12C22 6.47 17.52 2 12 2ZM16.20 10.79L12.70 7.29C12.31 6.90 11.68 6.90 11.29 7.29L7.79 10.79C7.40 11.18 7.40 11.81 7.79 12.20C8.18 12.59 8.81 12.59 9.20 12.20L11 10.41V16C11 16.55 11.44 17 12 17C12.55 17 13 16.55 13 16V10.41L14.79 12.20C15.18 12.59 15.81 12.59 16.20 12.20C16.59 11.81 16.59 11.18 16.20 10.79Z" fill="currentColor"/></svg><span class="only-wide" id="pillText"></span><span class="only-narrow" id="pillShort"></span></button>
+      <button class="icon-btn" id="chatMore" type="button" hidden title="Chat options" aria-label="Chat options" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm7 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm7 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z"/></svg></button>
     </header>
     <section class="thread" id="thread"><div class="thread-inner" id="threadInner"></div></section>
     <div class="dock">
       <div class="hero"><h1 id="heroTitle">What's on your mind today?</h1><p id="heroSub"></p></div>
       <div class="dock-wrap">
-        <button class="jump" id="jump" hidden aria-label="Jump to latest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+        <button class="jump" id="jump" type="button" hidden aria-label="Jump to latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21C11.73 21 11.48 20.89 11.29 20.70L4.29 13.70C3.90 13.31 3.90 12.68 4.29 12.29C4.68 11.90 5.31 11.90 5.70 12.29L11 17.58V4C11 3.44 11.44 3 12 3C12.55 3 13 3.44 13 4V17.58L18.29 12.29C18.68 11.90 19.31 11.90 19.70 12.29C20.09 12.68 20.09 13.31 19.70 13.70L12.70 20.70C12.51 20.89 12.26 21 12 21Z" fill="currentColor"/></svg></button>
+        <div class="c-note" id="cNote"></div>
         <form class="composer" id="composer" autocomplete="off">
           <div class="chips" id="chips"></div>
-          <textarea id="input" rows="1" placeholder="Ask anything" aria-label="Message"></textarea>
-          <div class="c-row">
-            <button type="button" class="icon-btn" id="attachBtn" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+          <div class="c-lead">
+            <button type="button" class="c-icon" id="attachBtn" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.59C12.58 3.59 13.06 4.07 13.06 4.66V10.93H19.33C19.92 10.93 20.4 11.41 20.4 12C20.4 12.58 19.92 13.06 19.33 13.06H13.06V19.33C13.06 19.92 12.58 20.4 12 20.4C11.41 20.4 10.93 19.92 10.93 19.33V13.06H4.66C4.07 13.06 3.59 12.58 3.59 12C3.59 11.41 4.07 10.93 4.66 10.93H10.93V4.66C10.93 4.07 11.41 3.59 12 3.59Z" fill="currentColor"/></svg></button>
             <input type="file" id="fileInput" multiple hidden>
-            <div class="c-modes">
-              <button type="button" class="c-btn" id="permBtn" aria-haspopup="true" aria-expanded="false" title="How freely Claude Code acts"><span id="permName">Auto</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
-            </div>
-            <div class="c-right">
-              <button type="button" class="c-btn" id="modelBtn" aria-haspopup="true" aria-expanded="false" title="Choose model"><span id="modelName">Opus 5.5</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
-              <button type="button" class="c-btn" id="effortBtn" aria-haspopup="true" aria-expanded="false" title="Choose effort"><span id="effortName">Medium</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
-              <button type="button" class="c-btn think" id="thinkBtn" aria-pressed="false" hidden title="Extended thinking in the Claude app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2V16h5v-.2c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z"/></svg><span>Think</span></button>
-              <button type="button" class="ring" id="ctxBtn" aria-haspopup="true" aria-expanded="false" aria-label="Context is empty" title="Context is empty"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" aria-hidden="true"><circle class="trk" cx="12" cy="12" r="9"/><circle class="bar" id="ctxBar" cx="12" cy="12" r="9" stroke-dasharray="56.549" stroke-dashoffset="56.549"/></svg></button>
-              <button type="submit" class="send" id="sendBtn" aria-label="Send" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
-            </div>
+            <button type="button" class="c-pill" id="thinkBtn" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg><span>Thinking</span></button>
           </div>
-          <div class="c-note" id="cNote"></div>
+          <textarea id="input" rows="1" placeholder="Ask anything" aria-label="Message"></textarea>
+          <div class="c-trail">
+            <button type="button" class="c-pill" id="permBtn" aria-haspopup="menu" aria-expanded="false" title="Permissions"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.34 10.03a1 1 0 1 0-1.68-1.07l-2.47 3.89-.943-1.03a1 1 0 0 0-1.47 1.34l1.82 2a1 1 0 0 0 1.58-.138l3.17-5Z"/><path fill-rule="evenodd" d="M13.20 1.93a3 3 0 0 0-2.40 0l-6 2.62A3 3 0 0 0 3 7.30V13a9 9 0 1 0 18 0V7.30a3 3 0 0 0-1.79-2.74l-6-2.62Zm-1.60 1.83a1 1 0 0 1 .802 0l6 2.62a1 1 0 0 1 .599.91V13a7 7 0 1 1-14 0V7.30a1 1 0 0 1 .6-.916l6-2.62Z" clip-rule="evenodd"/></svg><span id="permName">Auto</span></button>
+            <button type="button" class="ring" id="ctxBtn" aria-haspopup="true" aria-expanded="false" aria-label="Context is empty" title="Context is empty"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" aria-hidden="true"><circle class="trk" cx="12" cy="12" r="9"/><circle class="bar" id="ctxBar" cx="12" cy="12" r="9" stroke-dasharray="56.549" stroke-dashoffset="56.549"/></svg></button>
+            <button type="submit" class="send" id="sendBtn" aria-label="Send" disabled><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3C12.26 3 12.51 3.10 12.70 3.29L19.70 10.29C20.09 10.68 20.09 11.31 19.70 11.70C19.31 12.09 18.68 12.09 18.29 11.70L13 6.41V20C13 20.55 12.55 21 12 21C11.44 21 11 20.55 11 20V6.41L5.70 11.70C5.31 12.09 4.68 12.09 4.29 11.70C3.90 11.31 3.90 10.68 4.29 10.29L11.29 3.29C11.48 3.10 11.73 3 12 3Z" fill="currentColor"/></svg></button>
+          </div>
         </form>
       </div>
       <p class="legal" id="legal"></p>
@@ -627,14 +679,13 @@ svg{display:block}
       <div class="tabs" id="pTabs" hidden><button type="button" data-tab="preview">Preview</button><button type="button" data-tab="code">Code</button></div>
       <button class="icon-btn" id="pCopy" type="button" title="Copy" aria-label="Copy"></button>
       <a class="icon-btn" id="pDownload" title="Download" aria-label="Download"></a>
-      <button class="icon-btn" id="pClose" type="button" title="Close" aria-label="Close preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <button class="icon-btn" id="pClose" type="button" title="Close" aria-label="Close preview"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
     </div>
     <div class="p-body" id="pBody"></div>
   </aside>
 </div>
-<div class="pop" id="modelMenu" hidden role="dialog" aria-label="Choose model"></div>
-<div class="pop" id="effortMenu" hidden role="dialog" aria-label="Choose effort"></div>
-<div class="pop" id="permMenu" hidden role="dialog" aria-label="How freely Claude Code acts"></div>
+<div class="pop" id="modelMenu" hidden role="menu" aria-label="Model"></div>
+<div class="pop" id="permMenu" hidden role="menu" aria-label="Permissions"></div>
 <div class="pop" id="ctxMenu" hidden role="dialog" aria-label="Context window"></div>
 <div id="toast" class="toast" hidden role="status"></div>
 <div class="remote" id="remote" hidden role="dialog" aria-modal="true" aria-labelledby="rName">
@@ -643,7 +694,7 @@ svg{display:block}
 <dialog class="dlg" id="setDlg" aria-labelledby="setTitle">
   <div class="dlg-head">
     <div><h2 id="setTitle">Settings</h2><p id="setSub"></p></div>
-    <button class="icon-btn" id="setClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <button class="icon-btn" id="setClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
   </div>
   <div id="setBody" style="display:contents"></div>
   <div class="set-foot" id="setFoot" hidden></div>
@@ -651,24 +702,24 @@ svg{display:block}
 <dialog class="dlg small" id="usageDlg" aria-labelledby="usageTitle">
   <div class="dlg-head">
     <div><h2 id="usageTitle">Plan usage</h2><p id="usageSub"></p></div>
-    <button class="icon-btn" id="usageClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <button class="icon-btn" id="usageClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
   </div>
   <div class="dlg-body" id="usageBody"></div>
 </dialog>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
 <script>
 (() => {
-const EFF = ["low", "medium", "high", "xhigh", "max"];
-const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
+const EFF = ["low", "medium", "high", "xhigh", "max", "ultracode"];
+const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max", ultracode: "Ultracode" };
 const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
 // the built-in logo, the same as the site's own (DEFAULT_MARK in worker.js)
 const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="m-bg" width="64" height="64" rx="16"/><circle class="m-fg" cx="29" cy="29" r="12.5" fill="none" stroke-width="6.5"/><path class="m-fg" d="M41.5 29v22" stroke-width="6.5" stroke-linecap="round"/><path class="m-fg" d="M36 45h11" stroke-width="5" stroke-linecap="round"/></svg>`;
 const ALL_MODELS = [
-  { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable. Built for long, hard tasks.", efforts: EFF, def: "high", tag: "Uses usage credits", credits: true },
-  { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Deep reasoning for complex work.", efforts: EFF, def: "medium" },
-  { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work.", efforts: EFF, def: "medium" },
-  { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks.", efforts: [], def: null }
+  { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable, for long and hard tasks", efforts: EFF, def: "high", tag: "Uses usage credits", credits: true },
+  { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Deep reasoning for complex work", efforts: EFF, def: "medium" },
+  { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work", efforts: EFF, def: "medium" },
+  { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks", efforts: EFF, def: "medium" }
 ];
 const MAX_BYTES = 15 * 1024 * 1024;
 const $ = id => document.getElementById(id);
@@ -676,9 +727,10 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem("gql." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("gql." + k, JSON.stringify(v)); } catch {} }
 };
-// How freely Claude Code acts. "Ask first" is only there when the computer can ask you here (cap "ask").
+// How freely the computer acts on its own (Claude Code's permission modes). "Ask first" is only there when the computer can ask
+// you here (cap "ask").
 const PERM_MODES = [
-  { id: "auto", name: "Auto", desc: "Claude Code decides what is safe and gets on with it." },
+  { id: "auto", name: "Auto", desc: "Decides for itself what's safe, and gets on with it." },
   { id: "default", name: "Ask first", desc: "Asks you here before running commands or changing files.", ask: true },
   { id: "acceptEdits", name: "Accept edits", desc: "Edits files without asking. Anything else that needs approval is asked here, or skipped." },
   { id: "plan", name: "Plan", desc: "Looks around and writes a plan. Changes nothing." }
@@ -704,38 +756,41 @@ const S = {
   stick: true,
   query: ""
 };
-const UP = { data: null, timer: null, failing: 0, checking: false, seen: "", dismissing: false, lastRun: null, gone: null, reloadTimer: null };
+const UP = { data: null, timer: null, failing: 0, checking: false, seen: "", dismissing: false, lastRun: null, gone: null, reloadTimer: null, open: {} };
 if (!ALL_MODELS.find(m => m.id === S.model)) S.model = DEFAULT_MODEL;
 if (!PERM_MODES.find(x => x.id === S.perm)) S.perm = "auto";
+// The icons are ChatGPT's own: @openai/apps-sdk-ui 0.2.2 (MIT, Copyright 2025 OpenAI). Filled, on a 24px grid, drawn at 20px.
 const I = {
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>',
-  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
-  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
-  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
-  dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
-  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
-  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>',
-  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2.2"/></svg>',
-  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>',
-  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
-  retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
-  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></svg>',
-  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
-  gauge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 18a8.5 8.5 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13.5" r="1"/></svg>',
-  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
-  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
-  monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/></svg>',
-  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>',
-  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-9 9"/></svg>',
-  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
-  k_web: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M6.5 6.5h.01M9 6.5h.01"/></svg>',
-  k_image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-9 9"/></svg>',
-  k_pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>',
-  k_doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14M5 9h14M5 14h9M5 19h6"/></svg>',
-  k_code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 8-4 4 4 4M15 8l4 4-4 4"/></svg>'
+  copy: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.75 2H16.24C17.04 1.99 17.71 1.99 18.25 2.04C18.81 2.09 19.33 2.18 19.81 2.43C20.56 2.81 21.18 3.43 21.56 4.18C21.81 4.66 21.90 5.18 21.95 5.74C22 6.28 22 6.95 22 7.75V11.24C22 12.04 22 12.71 21.95 13.25C21.90 13.81 21.81 14.33 21.56 14.81C21.18 15.56 20.56 16.18 19.81 16.56C19.33 16.81 18.81 16.90 18.25 16.95C17.89 16.98 17.47 16.99 16.99 16.99C16.99 17.47 16.98 17.89 16.95 18.25C16.90 18.81 16.81 19.33 16.56 19.81C16.18 20.56 15.56 21.18 14.81 21.56C14.33 21.81 13.81 21.90 13.25 21.95C12.71 22 12.04 22 11.24 22H7.75C6.95 22 6.28 22 5.74 21.95C5.18 21.90 4.66 21.81 4.18 21.56C3.43 21.18 2.81 20.56 2.43 19.81C2.18 19.33 2.09 18.81 2.04 18.25C1.99 17.71 1.99 17.04 2 16.24V12.75C1.99 11.95 1.99 11.28 2.04 10.74C2.09 10.18 2.18 9.66 2.43 9.18C2.81 8.43 3.43 7.81 4.18 7.43C4.66 7.18 5.18 7.09 5.74 7.04C6.10 7.01 6.52 7.00 7.00 7.00C7.00 6.52 7.01 6.10 7.04 5.74C7.09 5.18 7.18 4.66 7.43 4.18C7.81 3.43 8.43 2.81 9.18 2.43C9.66 2.18 10.18 2.09 10.74 2.04C11.28 1.99 11.95 1.99 12.75 2ZM9.00 7L11.24 7C12.04 6.99 12.71 6.99 13.25 7.04C13.81 7.09 14.33 7.18 14.81 7.43C15.56 7.81 16.18 8.43 16.56 9.18C16.81 9.66 16.90 10.18 16.95 10.74C17 11.28 17 11.95 17 12.75V14.99C17.44 14.99 17.79 14.98 18.08 14.96C18.52 14.92 18.75 14.86 18.90 14.78C19.28 14.59 19.59 14.28 19.78 13.90C19.86 13.75 19.92 13.52 19.96 13.08C19.99 12.63 20 12.05 20 11.2V7.8C20 6.94 19.99 6.36 19.96 5.91C19.92 5.47 19.86 5.24 19.78 5.09C19.59 4.71 19.28 4.40 18.90 4.21C18.75 4.13 18.52 4.07 18.08 4.03C17.63 4.00 17.05 4 16.2 4H12.8C11.94 4 11.36 4.00 10.91 4.03C10.47 4.07 10.24 4.13 10.09 4.21C9.71 4.40 9.40 4.71 9.21 5.09C9.13 5.24 9.07 5.47 9.03 5.91C9.01 6.20 9.00 6.55 9.00 7ZM5.91 9.03C5.47 9.07 5.24 9.13 5.09 9.21C4.71 9.40 4.40 9.71 4.21 10.09C4.13 10.24 4.07 10.47 4.03 10.91C4.00 11.36 4 11.94 4 12.8V16.2C4 17.05 4.00 17.63 4.03 18.08C4.07 18.52 4.13 18.75 4.21 18.90C4.40 19.28 4.71 19.59 5.09 19.78C5.24 19.86 5.47 19.92 5.91 19.96C6.36 19.99 6.94 20 7.8 20H11.2C12.05 20 12.63 19.99 13.08 19.96C13.52 19.92 13.75 19.86 13.90 19.78C14.28 19.59 14.59 19.28 14.78 18.90C14.86 18.75 14.92 18.52 14.96 18.08C14.99 17.63 15 17.05 15 16.2V12.8C15 11.94 14.99 11.36 14.96 10.91C14.92 10.47 14.86 10.24 14.78 10.09C14.59 9.71 14.28 9.40 13.90 9.21C13.75 9.13 13.52 9.07 13.08 9.03C12.63 9.00 12.05 9 11.2 9H7.8C6.94 9 6.36 9.00 5.91 9.03Z" fill="currentColor"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.06 5.67C18.51 5.98 18.63 6.60 18.32 7.06L10.82 18.06C10.65 18.30 10.38 18.46 10.09 18.49C9.79 18.52 9.50 18.41 9.29 18.20L4.79 13.70C4.40 13.31 4.40 12.68 4.79 12.29C5.18 11.90 5.81 11.90 6.20 12.29L9.85 15.93L16.67 5.93C16.98 5.48 17.60 5.36 18.06 5.67Z" fill="currentColor"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7 2a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8.82a3 3 0 0 0-.879-2.12l-3.82-3.83A3 3 0 0 0 13.17 2H7Zm5 2H7a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9h-3a3 3 0 0 1-3-3V4Zm5.58 4H15a1 1 0 0 1-1-1V4.41L17.58 8Z" clip-rule="evenodd"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg>',
+  dots: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm7 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm7 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.29 18.70C8.90 18.31 8.90 17.68 9.29 17.29L14.58 12L9.29 6.70C8.90 6.31 8.90 5.68 9.29 5.29C9.68 4.90 10.31 4.90 10.70 5.29L16.70 11.29C16.89 11.48 17 11.73 17 12C17 12.26 16.89 12.51 16.70 12.70L10.70 18.70C10.31 19.09 9.68 19.09 9.29 18.70Z" fill="currentColor"/></svg>',
+  chevSmallDown: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.29 9.29a1 1 0 0 1 1.41 0L12 12.58l3.29-3.29a1 1 0 1 1 1.41 1.41l-4 4a1 1 0 0 1-1.41 0l-4-4a1 1 0 0 1 0-1.41Z" clip-rule="evenodd"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3C12.26 3 12.51 3.10 12.70 3.29L19.70 10.29C20.09 10.68 20.09 11.31 19.70 11.70C19.31 12.09 18.68 12.09 18.29 11.70L13 6.41V20C13 20.55 12.55 21 12 21C11.44 21 11 20.55 11 20V6.41L5.70 11.70C5.31 12.09 4.68 12.09 4.29 11.70C3.90 11.31 3.90 10.68 4.29 10.29L11.29 3.29C11.48 3.10 11.73 3 12 3Z" fill="currentColor"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 8C6 6.89 6.89 6 8 6H16C17.10 6 18 6.89 18 8V16C18 17.10 17.10 18 16 18H8C6.89 18 6 17.10 6 16V8Z" fill="currentColor"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.29 5.70C17.30 4.71 15.69 4.71 14.70 5.70L14.41 6.00L18.00 9.58L18.29 9.29C19.28 8.30 19.28 6.69 18.29 5.70ZM16.58 11L13.00 7.41L7.15 13.25C6.59 13.82 6.40 14.01 6.25 14.22C6.11 14.43 6.00 14.65 5.91 14.88C5.82 15.13 5.78 15.40 5.64 16.18L5.21 18.78L7.81 18.35C8.59 18.21 8.86 18.17 9.11 18.08C9.34 17.99 9.56 17.88 9.77 17.74C9.98 17.59 10.17 17.40 10.74 16.84L16.58 11ZM13.29 4.29C15.06 2.52 17.93 2.52 19.70 4.29C21.47 6.06 21.47 8.93 19.70 10.70L12.15 18.25C12.13 18.27 12.11 18.29 12.09 18.31C11.61 18.79 11.28 19.12 10.89 19.39C10.55 19.62 10.18 19.81 9.79 19.95C9.35 20.12 8.89 20.19 8.22 20.30C8.19 20.31 8.17 20.31 8.14 20.32L5.26 20.80C5.25 20.80 5.25 20.80 5.24 20.80C5.07 20.83 4.90 20.86 4.74 20.87C4.57 20.88 4.30 20.89 4.01 20.77C3.66 20.61 3.38 20.33 3.22 19.98C3.10 19.69 3.11 19.42 3.12 19.25C3.13 19.09 3.16 18.92 3.19 18.75C3.19 18.74 3.19 18.74 3.19 18.73L3.67 15.85C3.68 15.82 3.68 15.80 3.69 15.77C3.80 15.10 3.87 14.64 4.04 14.20C4.18 13.81 4.37 13.44 4.60 13.10C4.87 12.71 5.20 12.38 5.68 11.90C5.70 11.88 5.72 11.86 5.74 11.84L13.29 4.29Z" fill="currentColor"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.55 4C10.09 4 9.70 4.30 9.58 4.75L9.29 5.89H14.71L14.42 4.75C14.30 4.30 13.90 4 13.45 4H10.55ZM16.77 5.89L16.35 4.25C16.01 2.92 14.82 2 13.45 2H10.55C9.18 2 7.99 2.92 7.64 4.25L7.22 5.89H4C3.44 5.89 3 6.33 3 6.89C3 7.44 3.44 7.89 4 7.89H4.10L5.31 19.31C5.47 20.84 6.76 22 8.29 22H15.70C17.23 22 18.52 20.84 18.68 19.31L19.89 7.89H20C20.55 7.89 21 7.44 21 6.89C21 6.33 20.55 5.89 20 5.89H16.77ZM17.88 7.89H6.11L7.30 19.10C7.35 19.61 7.78 20 8.29 20H15.70C16.21 20 16.64 19.61 16.69 19.10L17.88 7.89ZM10 10C10.55 10 11 10.44 11 11V16C11 16.55 10.55 17 10 17C9.44 17 9 16.55 9 16V11C9 10.44 9.44 10 10 10ZM14 10C14.55 10 15 10.44 15 11V16C15 16.55 14.55 17 14 17C13.44 17 13 16.55 13 16V11C13 10.44 13.44 10 14 10Z"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3C12.55 3 13 3.44 13 4V12.58L15.29 10.29C15.68 9.90 16.31 9.90 16.70 10.29C17.09 10.68 17.09 11.31 16.70 11.70L12.70 15.70C12.31 16.09 11.68 16.09 11.29 15.70L7.29 11.70C6.90 11.31 6.90 10.68 7.29 10.29C7.68 9.90 8.31 9.90 8.70 10.29L11 12.58V4C11 3.44 11.44 3 12 3ZM4 14C4.55 14 5 14.44 5 15V15.2C5 16.05 5.00 16.63 5.03 17.08C5.07 17.52 5.13 17.75 5.21 17.90C5.40 18.28 5.71 18.59 6.09 18.78C6.24 18.86 6.47 18.92 6.91 18.96C7.36 18.99 7.94 19 8.8 19H15.2C16.05 19 16.63 18.99 17.08 18.96C17.52 18.92 17.75 18.86 17.90 18.78C18.28 18.59 18.59 18.28 18.78 17.90C18.86 17.75 18.92 17.52 18.96 17.08C18.99 16.63 19 16.05 19 15.2V15C19 14.44 19.44 14 20 14C20.55 14 21 14.44 21 15V15.24C21 16.04 21 16.71 20.95 17.25C20.90 17.81 20.81 18.33 20.56 18.81C20.18 19.56 19.56 20.18 18.81 20.56C18.33 20.81 17.81 20.90 17.25 20.95C16.71 21 16.04 21 15.24 21H8.75C7.95 21 7.28 21 6.74 20.95C6.18 20.90 5.66 20.81 5.18 20.56C4.43 20.18 3.81 19.56 3.43 18.81C3.18 18.33 3.09 17.81 3.04 17.25C2.99 16.71 2.99 16.04 3 15.24L3 15C3 14.44 3.44 14 4 14Z" fill="currentColor"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 12C13 11.44 12.55 11 12 11C11.44 11 11 11.44 11 12V16C11 16.55 11.44 17 12 17C12.55 17 13 16.55 13 16V12Z" fill="currentColor"/><path d="M12 2C6.47 2 2 6.47 2 12C2 17.52 6.47 22 12 22C17.52 22 22 17.52 22 12C22 6.47 17.52 2 12 2ZM4 12C4 7.58 7.58 4 12 4C16.41 4 20 7.58 20 12C20 16.41 16.41 20 12 20C7.58 20 4 16.41 4 12Z" fill="currentColor"/><path d="M12 9.30C12.63 9.30 13.15 8.78 13.15 8.15C13.15 7.51 12.63 7.00 12 7.00C11.36 7.00 10.85 7.51 10.85 8.15C10.85 8.78 11.36 9.30 12 9.30Z" fill="currentColor"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M11.56 3.5a1 1 0 0 0-.863.49l-.811 1.38A3.00 3.00 0 0 1 7.33 6.85l-1.59.013a1 1 0 0 0-.858.50l-.439.76a1 1 0 0 0-.004.99l.792 1.4a3 3 0 0 1 0 2.95l-.792 1.4a1 1 0 0 0 .004.99l.439.76a1 1 0 0 0 .858.50l1.59.013a3 3 0 0 1 2.56 1.48l.811 1.38a1 1 0 0 0 .863.49h.87a1 1 0 0 0 .862-.494l.812-1.38a3.00 3.00 0 0 1 2.56-1.48l1.59-.013a1 1 0 0 0 .86-.501l.438-.761a1 1 0 0 0 .004-.992l-.793-1.4a3 3 0 0 1 0-2.95l.793-1.4a1 1 0 0 0-.004-.992l-.439-.76a1 1 0 0 0-.858-.502l-1.59-.013a3 3 0 0 1-2.56-1.48L13.3 3.99a1 1 0 0 0-.862-.494h-.87ZM8.98 2.98A3.00 3.00 0 0 1 11.56 1.5h.87c1.06 0 2.04.564 2.58 1.48l.811 1.38a1 1 0 0 0 .855.49l1.59.013a3 3 0 0 1 2.57 1.50l.44.76a3 3 0 0 1 .011 2.97l-.792 1.4a1 1 0 0 0 0 .985l.792 1.40a3 3 0 0 1-.012 2.97l-.439.76a3.00 3.00 0 0 1-2.57 1.50l-1.59.012a1 1 0 0 0-.854.49l-.811 1.38a3.00 3.00 0 0 1-2.58 1.48h-.87a3.00 3.00 0 0 1-2.58-1.48l-.811-1.38a1 1 0 0 0-.855-.494l-1.59-.012a3.00 3.00 0 0 1-2.57-1.50l-.438-.76a3 3 0 0 1-.013-2.97l.793-1.4a1 1 0 0 0 0-.985l-.793-1.4a3 3 0 0 1 .013-2.97l.438-.761A3.00 3.00 0 0 1 5.71 4.87l1.59-.013a1 1 0 0 0 .855-.494l.81-1.38Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M12.00 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3ZM8.50 12a3.5 3.5 0 1 1 7 .001 3.5 3.5 0 0 1-7-.001Z" clip-rule="evenodd"/></svg>',
+  gauge: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M11.33 5a1 1 0 0 0-1 1v13h3.33V6a1 1 0 0 0-1-1h-1.33Zm4.33 14H18a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-2.34v10Zm0-12V6a3 3 0 0 0-3-3h-1.33a3 3 0 0 0-3 3v5H6a3 3 0 0 0-3 3v4a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-8a3 3 0 0 0-3-3h-2.34Zm-7.33 6H6a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h2.33v-6Z" clip-rule="evenodd"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 1C12.55 1 13 1.44 13 2V4C13 4.55 12.55 5 12 5C11.44 5 11 4.55 11 4V2C11 1.44 11.44 1 12 1ZM4.22 4.22C4.61 3.83 5.24 3.83 5.63 4.22L7.05 5.63C7.44 6.02 7.44 6.65 7.05 7.05C6.65 7.44 6.02 7.44 5.63 7.05L4.22 5.63C3.83 5.24 3.83 4.61 4.22 4.22ZM19.77 4.22C20.16 4.61 20.16 5.24 19.77 5.63L18.36 7.05C17.97 7.44 17.34 7.44 16.94 7.05C16.55 6.65 16.55 6.02 16.94 5.63L18.36 4.22C18.75 3.83 19.38 3.83 19.77 4.22ZM12 9C10.34 9 9 10.34 9 12C9 13.65 10.34 15 12 15C13.65 15 15 13.65 15 12C15 10.34 13.65 9 12 9ZM7 12C7 9.23 9.23 7 12 7C14.76 7 17 9.23 17 12C17 14.76 14.76 17 12 17C9.23 17 7 14.76 7 12ZM1 12C1 11.44 1.44 11 2 11H4C4.55 11 5 11.44 5 12C5 12.55 4.55 13 4 13H2C1.44 13 1 12.55 1 12ZM19 12C19 11.44 19.44 11 20 11H22C22.55 11 23 11.44 23 12C23 12.55 22.55 13 22 13H20C19.44 13 19 12.55 19 12ZM7.05 16.94C7.44 17.34 7.44 17.97 7.05 18.36L5.63 19.77C5.24 20.16 4.61 20.16 4.22 19.77C3.83 19.38 3.83 18.75 4.22 18.36L5.63 16.94C6.02 16.55 6.65 16.55 7.05 16.94ZM16.94 16.94C17.34 16.55 17.97 16.55 18.36 16.94L19.77 18.36C20.16 18.75 20.16 19.38 19.77 19.77C19.38 20.16 18.75 20.16 18.36 19.77L16.94 18.36C16.55 17.97 16.55 17.34 16.94 16.94ZM12 19C12.55 19 13 19.44 13 20V22C13 22.55 12.55 23 12 23C11.44 23 11 22.55 11 22V20C11 19.44 11.44 19 12 19Z" fill="currentColor"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.78 2.47C12.96 2.76 12.98 3.13 12.83 3.44C12.29 4.51 12 5.72 12 7.00C12 11.41 15.58 15 20 15L20.05 14.99C20.40 14.99 20.72 15.17 20.91 15.47C21.09 15.76 21.11 16.13 20.96 16.44C19.32 19.73 15.92 22 12 22C6.47 22 2 17.52 2 12C2 6.50 6.43 2.03 11.92 2.00C12.27 1.99 12.59 2.17 12.78 2.47ZM10.40 4.15C6.75 4.89 4 8.12 4 12C4 16.41 7.58 20 12 20C14.58 20 16.88 18.77 18.35 16.86C13.61 16.07 10 11.96 10 7.00C10 6.01 10.14 5.05 10.40 4.15Z" fill="currentColor"/></svg>',
+  monitor: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.16 3L17.83 3C18.36 2.99 18.82 2.99 19.19 3.03C19.59 3.06 19.98 3.13 20.36 3.32C20.92 3.61 21.38 4.07 21.67 4.63C21.86 5.01 21.93 5.40 21.96 5.80C22 6.17 22 6.63 22 7.16V13.33C22 13.86 22 14.32 21.96 14.69C21.93 15.09 21.86 15.48 21.67 15.86C21.38 16.42 20.92 16.88 20.36 17.17C19.98 17.36 19.59 17.43 19.19 17.46C18.82 17.5 18.36 17.5 17.83 17.5H16.5V20C16.5 20.55 16.55 21 15.5 21H8.5C7.94 21 7.5 20.55 7.5 20V17.5H6.16C5.63 17.5 5.17 17.5 4.80 17.46C4.40 17.43 4.01 17.36 3.63 17.17C3.07 16.88 2.61 16.42 2.32 15.86C2.13 15.48 2.06 15.09 2.03 14.69C1.99 14.32 1.99 13.86 2 13.33V7.16C1.99 6.63 1.99 6.17 2.03 5.80C2.06 5.40 2.13 5.01 2.32 4.63C2.61 4.07 3.07 3.61 3.63 3.32C4.01 3.13 4.40 3.06 4.80 3.03C5.17 2.99 5.63 2.99 6.16 3ZM9.5 17.5V19H14.5V17.5H9.5ZM4.96 5.02C4.69 5.04 4.59 5.08 4.54 5.10C4.35 5.20 4.20 5.35 4.10 5.54C4.08 5.59 4.04 5.69 4.02 5.96C4.00 6.25 4 6.62 4 7.2V13.3C4 13.87 4.00 14.24 4.02 14.53C4.04 14.80 4.08 14.90 4.10 14.95C4.20 15.14 4.35 15.29 4.54 15.39C4.59 15.41 4.69 15.45 4.96 15.47C5.25 15.49 5.62 15.5 6.2 15.5H17.8C18.37 15.5 18.74 15.49 19.03 15.47C19.30 15.45 19.40 15.41 19.45 15.39C19.64 15.29 19.79 15.14 19.89 14.95C19.91 14.90 19.95 14.80 19.97 14.53C19.99 14.24 20 13.87 20 13.3V7.2C20 6.62 19.99 6.25 19.97 5.96C19.95 5.69 19.91 5.59 19.89 5.54C19.79 5.35 19.64 5.20 19.45 5.10C19.40 5.08 19.30 5.04 19.03 5.02C18.74 5.00 18.37 5 17.8 5H6.2C5.62 5 5.25 5.00 4.96 5.02Z" fill="currentColor"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.16 3h9.67c.527 0 .982 0 1.35.03.39.033.78.104 1.16.297a3 3 0 0 1 1.31 1.31c.193.37.264.77.296 1.16.031.37.031.83.03 1.35v9.67c0 .527 0 .982-.03 1.35-.033.39-.104.78-.297 1.16a3 3 0 0 1-1.31 1.31c-.378.19-.772.26-1.16.296-.375.03-.83.03-1.35.031H7.16c-.527 0-.981 0-1.35-.03-.395-.033-.789-.104-1.16-.297a3 3 0 0 1-1.31-1.31c-.193-.378-.264-.772-.296-1.16A17.9 17.9 0 0 1 3 16.83V7.16c0-.527 0-.981.03-1.35.033-.395.10-.789.29-1.16a3 3 0 0 1 1.31-1.31c.378-.193.77-.264 1.16-.296C6.18 3 6.63 3 7.16 3ZM5.96 5.02c-.272.02-.373.06-.422.08a1 1 0 0 0-.437.43c-.025.05-.063.15-.085.42C5 6.25 5 6.62 5 7.2v6.38l.879-.879a3 3 0 0 1 4.24 0L16.41 19h.386c.577 0 .949 0 1.23-.024.27-.022.37-.06.42-.085a1 1 0 0 0 .437-.437c.025-.05.06-.15.08-.422C19 17.75 19 17.37 19 16.8V7.2c0-.577 0-.949-.024-1.23-.022-.272-.06-.373-.085-.422a1 1 0 0 0-.437-.437c-.05-.025-.15-.063-.422-.085C17.75 5 17.37 5 16.8 5H7.2c-.577 0-.949 0-1.23.024ZM13.58 19l-4.87-4.87a1 1 0 0 0-1.41 0L5 16.41v.386c0 .577 0 .949.02 1.23.022.27.06.37.085.42a1 1 0 0 0 .437.43c.05.02.15.06.422.08C6.25 19 6.62 19 7.2 19h6.38ZM14.5 8.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm-3 1a3 3 0 1 1 6 0 3 3 0 0 1-6 0Z" clip-rule="evenodd"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M2 12C2 6.47 6.47 2 12 2C17.52 2 22 6.47 22 12C22 17.52 17.52 22 12 22C6.47 22 2 17.52 2 12ZM11.98 4.00C11.97 4.00 11.95 4.01 11.92 4.03C11.79 4.11 11.57 4.32 11.32 4.77C11.08 5.21 10.85 5.80 10.65 6.53C10.31 7.75 10.08 9.29 10.01 11H13.98C13.91 9.29 13.68 7.75 13.34 6.53C13.14 5.80 12.91 5.21 12.67 4.77C12.42 4.32 12.20 4.11 12.07 4.03C12.04 4.01 12.02 4.00 12.01 4.00C12.00 4.00 12.00 4.00 11.99 4C11.99 4.00 11.99 4.00 11.98 4.00ZM8.01 11C8.08 9.13 8.33 7.41 8.72 6.00C8.87 5.45 9.04 4.94 9.24 4.48C6.48 5.49 4.43 7.99 4.06 11H8.01ZM4.06 13H8.01C8.09 15.17 8.42 17.15 8.93 18.68C9.02 18.96 9.13 19.24 9.24 19.51C6.48 18.50 4.43 16.00 4.06 13ZM10.01 13C10.09 14.99 10.39 16.75 10.82 18.04C11.07 18.80 11.35 19.34 11.61 19.67C11.74 19.83 11.84 19.92 11.91 19.96C11.95 19.98 11.97 19.99 11.98 19.99C11.99 20 11.99 20 11.99 20C11.99 20 12.00 20.00 12.01 19.99C12.02 19.99 12.04 19.98 12.08 19.96C12.15 19.92 12.25 19.83 12.38 19.67C12.64 19.34 12.92 18.80 13.17 18.04C13.60 16.75 13.90 14.99 13.98 13H10.01ZM15.98 13C15.90 15.17 15.57 17.15 15.07 18.68C14.97 18.96 14.86 19.24 14.75 19.51C17.51 18.50 19.56 16.00 19.93 13H15.98ZM19.93 11C19.56 7.99 17.51 5.49 14.75 4.48C14.95 4.94 15.12 5.45 15.27 6.00C15.66 7.41 15.91 9.13 15.98 11H19.93Z"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18.70 12.70a1 1 0 0 0 0-1.41l-5-5a1 1 0 1 0-1.41 1.41L15.58 11H6a1 1 0 1 0 0 2h9.58l-3.29 3.29a1 1 0 0 0 1.41 1.41l5-5Z" clip-rule="evenodd"/></svg>',
+  upgrade: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 12C4 7.58 7.58 4 12 4C16.41 4 20 7.58 20 12C20 16.41 16.41 20 12 20C7.58 20 4 16.41 4 12ZM12 2C6.47 2 2 6.47 2 12C2 17.52 6.47 22 12 22C17.52 22 22 17.52 22 12C22 6.47 17.52 2 12 2ZM16.20 10.79L12.70 7.29C12.31 6.90 11.68 6.90 11.29 7.29L7.79 10.79C7.40 11.18 7.40 11.81 7.79 12.20C8.18 12.59 8.81 12.59 9.20 12.20L11 10.41V16C11 16.55 11.44 17 12 17C12.55 17 13 16.55 13 16V10.41L14.79 12.20C15.18 12.59 15.81 12.59 16.20 12.20C16.59 11.81 16.59 11.18 16.20 10.79Z" fill="currentColor"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 4a4 4 0 0 0-4 4h8a4 4 0 0 0-4-4Zm-6 6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H6Zm0-2a6 6 0 1 1 12 0 3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3Zm4 6a2 2 0 1 1 3 1.73V17a1 1 0 1 1-2 0v-1.26A2 2 0 0 1 10 14Z" clip-rule="evenodd"/></svg>',
+  think: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg>',
+  k_code: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M14.44 7.10a1 1 0 0 1 .447 1.34l-4 8a1 1 0 1 1-1.78-.894l4-8a1 1 0 0 1 1.34-.447ZM6.6 7.2a1 1 0 0 1 .2 1.4L4.25 12l2.55 3.4a1 1 0 0 1-1.6 1.2l-3-4a1 1 0 0 1 0-1.2l3-4a1 1 0 0 1 1.4-.2Zm10.8 0a1 1 0 0 1 1.4.2l3 4a1 1 0 0 1 0 1.2l-3 4a1 1 0 0 1-1.6-1.2l2.55-3.4-2.55-3.4a1 1 0 0 1 .2-1.4Z" clip-rule="evenodd"/></svg>',
+  k_pdf: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.5 15.70V8.29C3.5 7.47 3.49 6.79 3.54 6.24C3.58 5.68 3.68 5.16 3.93 4.68L4.08 4.40C4.47 3.78 5.02 3.27 5.68 2.93L5.86 2.84C6.29 2.66 6.75 2.58 7.24 2.54C7.79 2.49 8.47 2.50 9.29 2.50H13.51C14.19 2.50 14.70 2.49 15.19 2.61L15.49 2.69C15.79 2.79 16.07 2.92 16.34 3.08L16.50 3.19C16.86 3.44 17.18 3.77 17.61 4.19L18.80 5.38L19.14 5.72C19.46 6.05 19.71 6.33 19.91 6.65L20.06 6.92C20.20 7.20 20.31 7.50 20.38 7.80L20.42 7.99C20.50 8.42 20.5 8.88 20.5 9.48V15.70C20.5 16.52 20.50 17.20 20.45 17.75C20.41 18.24 20.33 18.70 20.15 19.13L20.06 19.31C19.72 19.97 19.21 20.52 18.59 20.91L18.31 21.06C17.83 21.31 17.31 21.41 16.75 21.45C16.20 21.50 15.52 21.5 14.70 21.5H9.29C8.47 21.5 7.79 21.50 7.24 21.45C6.75 21.41 6.29 21.33 5.86 21.15L5.68 21.06C5.02 20.72 4.47 20.21 4.08 19.59L3.93 19.31C3.68 18.83 3.58 18.31 3.54 17.75C3.49 17.20 3.5 16.52 3.5 15.70ZM13 13C13.55 13 14 13.44 14 14C14 14.55 13.55 15 13 15H9C8.44 15 8 14.55 8 14C8 13.44 8.44 13 9 13H13ZM15 9.00C15.55 9.00 16 9.44 16 10C16 10.55 15.55 11 15 11H9C8.44 11 8 10.55 8 10C8 9.44 8.44 9.00 9 9.00H15ZM5.5 15.70C5.5 16.55 5.50 17.13 5.53 17.58C5.57 18.02 5.63 18.25 5.71 18.40L5.79 18.54C5.98 18.85 6.26 19.11 6.59 19.28L6.72 19.33C6.87 19.39 7.08 19.43 7.41 19.46C7.86 19.49 8.44 19.5 9.29 19.5H14.70C15.55 19.5 16.13 19.49 16.58 19.46C17.02 19.42 17.25 19.36 17.40 19.28L17.54 19.20C17.85 19.01 18.11 18.73 18.28 18.40L18.33 18.27C18.39 18.12 18.43 17.91 18.46 17.58C18.49 17.13 18.5 16.55 18.5 15.70V9.48C18.5 8.90 18.49 8.62 18.47 8.44L18.44 8.27C18.40 8.12 18.35 7.97 18.28 7.83L18.20 7.69C18.12 7.56 18.01 7.43 17.73 7.14L17.38 6.80L16.19 5.61C15.78 5.19 15.58 5.00 15.44 4.89L15.30 4.79C15.16 4.71 15.02 4.64 14.87 4.59L14.72 4.55C14.52 4.50 14.29 4.50 13.51 4.50H9.29C8.44 4.50 7.86 4.50 7.41 4.53C7.08 4.56 6.87 4.60 6.72 4.66L6.59 4.71C6.26 4.88 5.98 5.14 5.79 5.45L5.71 5.59C5.63 5.74 5.57 5.97 5.53 6.41C5.50 6.86 5.5 7.44 5.5 8.29V15.70Z" fill="currentColor"/></svg>',
+  k_image: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.83 5C9.09 5 8.50 5.59 8.50 6.33C8.50 7.06 9.09 7.66 9.83 7.66C10.57 7.66 11.16 7.06 11.16 6.33C11.16 5.59 10.57 5 9.83 5ZM6.50 6.33C6.50 4.49 7.99 3 9.83 3C11.67 3 13.16 4.49 13.16 6.33C13.16 8.17 11.67 9.66 9.83 9.66C7.99 9.66 6.50 8.17 6.50 6.33ZM13.37 11.42C14.37 9.89 16.62 9.91 17.59 11.46L20.68 16.41C21.93 18.40 20.49 21 18.14 21H5.78C3.24 21 1.85 18.02 3.48 16.07L6.21 12.81C7.13 11.72 8.79 11.62 9.83 12.59L11.34 14.00C11.45 14.11 11.64 14.08 11.72 13.95L13.37 11.42ZM15.89 12.52C15.70 12.21 15.25 12.20 15.05 12.51L13.40 15.05C12.63 16.22 11.00 16.41 9.98 15.46L8.47 14.06C8.26 13.86 7.93 13.88 7.75 14.10L5.02 17.35C4.47 18.00 4.93 19 5.78 19H18.14C18.92 19 19.40 18.13 18.98 17.47L15.89 12.52Z" fill="currentColor"/></svg>'
 };
+I.k_web = I.globe;
+I.k_doc = I.k_pdf;
 const KIND = { web: "Web page", image: "Image", pdf: "PDF", doc: "Document", code: "Code", file: "File" };
 const ARTS = new Map();
 let MD_ARTS = null;
@@ -746,15 +801,21 @@ function esc(s) {
 }
 const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));
 function modelOf(id) { return MODELS_BY_ID[id] || MODELS_BY_ID[DEFAULT_MODEL]; }
+// The efforts a model offers here: Ultracode only when the computer's Claude Code knows it.
+function effortsOf(m) {
+  return m.efforts.filter(e => e !== "ultracode" || !!(S.state && S.state.agent && S.state.agent.ultracode));
+}
 function effortFor(id) {
   const m = modelOf(id);
-  if (!m.efforts.length) return null;
+  const list = effortsOf(m);
+  if (!list.length) return null;
   const e = S.efforts[id];
-  return m.efforts.includes(e) ? e : m.def;
+  return list.includes(e) ? e : m.def;
 }
 function runLabel(model, effort) {
   const m = modelOf(model);
-  return effort ? `${m.name}, ${EFF_LABEL[effort].toLowerCase()} effort` : m.name;
+  if (effort === "ultracode") return `${m.name}, Ultracode`;
+  return effort && EFF_LABEL[effort] ? `${m.name}, ${EFF_LABEL[effort].toLowerCase()} effort` : m.name;
 }
 function fmtSize(n) {
   if (n < 1024) return n + " B";
@@ -885,7 +946,7 @@ function codeBlock(code, lang) {
     if (hit) { hit._used = true; return artCard(hit); }
   }
   const l = (lang || "").toLowerCase().replace(/[^\w+#.-]/g, "");
-  return `<div class="code"><div class="code-head"><span>${esc(l || "text")}</span><button type="button" data-copy-code>${I.copy}<span>Copy</span></button></div><pre><code${l ? ` class="language-${esc(l)}"` : ""}>${esc(code)}</code></pre></div>`;
+  return `<div class="code"><div class="code-head"><span>${esc(l || "text")}</span><button type="button" data-copy-code>${I.copy}<span>Copy code</span></button></div><pre><code${l ? ` class="language-${esc(l)}"` : ""}>${esc(code)}</code></pre></div>`;
 }
 function md(src) {
   const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
@@ -945,7 +1006,7 @@ function highlight(root) {
   });
 }
 
-const TICK = '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+const TICK = I.check.replace("<svg", '<svg class="tick"');
 const CIRC = 56.549;
 function permOf(id) { return PERM_MODES.find(x => x.id === id) || PERM_MODES[0]; }
 function agentNow() { return (S.state && S.state.agent) || null; }
@@ -963,7 +1024,7 @@ function appModels() { const i = appInfo(); return (i && i.models) || []; }
 function appModelNow() { return appModels().some(m => m.id === S.appModel && !m.locked) ? S.appModel : APP_DEFAULT; }
 function appModelName(id) {
   const m = appModels().find(x => x.id === id);
-  return m ? m.name : (appInfo() && appInfo().model) || "Claude";
+  return m ? m.name : (appInfo() && appInfo().model) || CFG.name;
 }
 // the model the next message goes to, on either plan
 function modelNow() { return freePlan() ? appModelNow() : paidModels().some(m => m.id === S.model) ? S.model : DEFAULT_MODEL; }
@@ -971,14 +1032,16 @@ function ctxOf(meta) { const c = meta && meta.context; return c && c.window > 0 
 function fmtTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n); }
 function ctxPct(c) { const f = c ? Math.min(1, c.used / c.window) : 0; return { f, text: !c ? "0%" : f * 100 < 1 ? "<1%" : Math.round(f * 100) + "%" }; }
 
+// The model switcher at the top, like ChatGPT's "ChatGPT 5 Thinking": the model, then the effort in grey. Its menu has both.
 function renderBar() {
+  const put = (id, v) => { if ($(id).textContent !== v) $(id).textContent = v; };
   if (freePlan()) {
     const id = appModelNow();
     const name = appModelName(id);
-    $("modelName").textContent = name;
+    put("modelName", name);
     $("modelBtn").setAttribute("aria-label", `Choose model. Now: ${name}`);
-    $("effortBtn").hidden = true;
-    // extended thinking, when the Claude app has the switch for it
+    // the free plan has no effort; extended thinking is a pill in the message box, when the Claude app has the switch for it
+    $("effortName").hidden = true;
     const i = appInfo();
     $("thinkBtn").hidden = !(i && typeof i.thinking === "boolean");
     $("thinkBtn").setAttribute("aria-pressed", String(!!S.think));
@@ -986,18 +1049,17 @@ function renderBar() {
   } else {
     const m = modelOf(modelNow());
     const e = effortFor(m.id);
-    $("modelName").textContent = m.name;
-    $("modelBtn").setAttribute("aria-label", `Choose model. Now: ${m.name}`);
-    // Haiku has no effort setting, so there is nothing to choose
-    $("effortBtn").hidden = !m.efforts.length;
+    put("modelName", m.name);
+    // a model with no effort setting has nothing after its name
+    $("effortName").hidden = !effortsOf(m).length;
     $("thinkBtn").hidden = true;
-    if (e) {
-      $("effortName").textContent = EFF_LABEL[e];
-      $("effortBtn").setAttribute("aria-label", `Choose effort. Now: ${EFF_LABEL[e]}`);
-    }
+    if (e) put("effortName", EFF_LABEL[e]);
+    $("modelBtn").setAttribute("aria-label", `Choose model and effort. Now: ${m.name}${e ? ", " + EFF_LABEL[e] : ""}`);
   }
   $("permBtn").hidden = !permsOk();
-  $("permName").textContent = permOf(permNow()).name;
+  put("permName", permOf(permNow()).name);
+  $("permBtn").setAttribute("aria-label", `Permissions: ${permOf(permNow()).name}`);
+  $("chatMore").hidden = !S.chatId;
   renderSwitchNote();
   renderCtx();
 }
@@ -1017,16 +1079,23 @@ function renderCtx() {
 
 function noteHtml() { return switchNote() ? `<div class="pick-note">${I.info}<span>${esc(switchNote())}</span></div>` : ""; }
 const APP = { loading: false, asked: 0 };
+// One row of a menu: a title, a line under it, and a tick on the chosen one.
+function pmRow(attrs, on, title, desc, extra) {
+  return `<button class="pm${on ? " on" : ""}" ${attrs} type="button" role="menuitemradio" aria-checked="${on}"><span class="tx"><b>${title}</b>${desc ? `<small>${desc}</small>` : ""}${extra || ""}</span>${TICK}</button>`;
+}
+// The model switcher's menu: the models, then (on a paid plan) the efforts of the one picked.
 function popModel() {
   if (freePlan()) {
     const cur = appModelNow();
     const now = appInfo() && appInfo().model;
-    const head = `<button class="pm${cur === APP_DEFAULT ? " on" : ""}" data-model="${APP_DEFAULT}" type="button"><b>The app's choice</b><small>${esc(now ? `Whatever the Claude app has picked: now ${now}` : "Whatever the Claude app has picked")}</small>${TICK}</button>`;
+    const head = `<div class="mh">Model</div>` + pmRow(`data-model="${APP_DEFAULT}"`, cur === APP_DEFAULT, "The app's choice", esc(now ? `Whatever the desktop app has picked: now ${now}` : "Whatever the desktop app has picked"));
     const list = appModels();
-    if (!list.length) return head + `<div class="pick-note">${I.info}<span>${APP.loading ? "Reading the models in the Claude app on your computer…" : "The Claude app's models show here once it has opened on your computer."}</span></div>`;
-    return head + list.map(x => `<button class="pm${x.id === cur ? " on" : ""}" data-model="${esc(x.id)}" type="button"${x.locked ? ' disabled aria-disabled="true"' : ""}><b>${esc(x.name)}</b><small>${esc(x.desc || "")}</small>${x.locked ? '<span class="tag">Needs a paid Claude plan</span>' : ""}${TICK}</button>`).join("");
+    if (!list.length) return head + `<div class="pick-note">${I.info}<span>${APP.loading ? "Reading the models in the desktop app on your computer…" : "The desktop app's models show here once it has opened on your computer."}</span></div>`;
+    return head + list.map(x => x.locked
+      ? `<button class="pm" data-model="${esc(x.id)}" type="button" role="menuitemradio" aria-checked="false" disabled aria-disabled="true"><span class="tx"><b>${esc(x.name)}</b><small>${esc(x.desc || "")}</small><span class="tag">${I.lock}Needs a paid plan</span></span>${TICK}</button>`
+      : pmRow(`data-model="${esc(x.id)}"`, x.id === cur, esc(x.name), esc(x.desc || ""))).join("");
   }
-  return paidModels().map(x => `<button class="pm${x.id === modelNow() ? " on" : ""}" data-model="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${x.tag ? `<span class="tag">${x.tag}</span>` : ""}${TICK}</button>`).join("") + noteHtml();
+  return `<div class="mh">Model</div>` + paidModels().map(x => pmRow(`data-model="${x.id}"`, x.id === modelNow(), x.name, x.desc, x.tag ? `<span class="tag">${x.tag}</span>` : "")).join("") + popEffort() + noteHtml();
 }
 // On the free plan the picker asks the computer to read the Claude app's model menu, when it hasn't for a while.
 async function refreshAppModels() {
@@ -1051,14 +1120,18 @@ async function refreshAppModels() {
   if (popOpen === "model") $("modelMenu").innerHTML = popModel();
   renderBar();
 }
+// Every effort the model has, Low to Max, and Ultracode when the computer can do it.
 function popEffort() {
   const m = modelOf(modelNow());
   const e = effortFor(m.id);
-  return `<div class="effort"><div class="effort-head"><b>Effort</b><small>How much ${m.name} thinks before answering</small></div><div class="stairs" role="radiogroup" aria-label="Effort">${EFF.map((x, k) => `<button type="button" role="radio" aria-checked="${x === e}" class="step${x === e ? " on" : ""}${k < EFF.indexOf(e) ? " f" : ""}" data-effort="${x}"><span class="bar"></span><span>${EFF_LABEL[x]}</span></button>`).join("")}</div></div>` + noteHtml();
+  const list = effortsOf(m);
+  if (!list.length) return "";
+  const ULTRA = "Extra high effort, and big tasks are split across many agents working at once. Uses much more of your plan.";
+  return `<hr><div class="mh">Effort</div>` + list.map(x => pmRow(`data-effort="${x}"`, x === e, EFF_LABEL[x], x === "ultracode" ? ULTRA : "")).join("");
 }
 function popPerm() {
   const cur = permNow();
-  return permsShown().map(x => `<button class="pm${x.id === cur ? " on" : ""}" data-perm="${x.id}" type="button"><b>${x.name}</b><small>${x.desc}</small>${TICK}</button>`).join("");
+  return `<div class="mh">Permissions</div>` + permsShown().map(x => pmRow(`data-perm="${x.id}"`, x.id === cur, x.name, x.desc)).join("");
 }
 function popCtx() {
   const c = S.ctx;
@@ -1085,8 +1158,9 @@ function renderSwitchNote() {
   return n;
 }
 
-// one popup open at a time, opened above its button when there is room and below it when there isn't
-const POPS = { model: ["modelBtn", "modelMenu", "right", popModel], effort: ["effortBtn", "effortMenu", "right", popEffort], perm: ["permBtn", "permMenu", "left", popPerm], ctx: ["ctxBtn", "ctxMenu", "right", popCtx] };
+// one popup open at a time: the model switcher's menu drops down from the top bar; the message box's open above it when
+// there is room and below it when there isn't. Each grows out of the corner nearest its button.
+const POPS = { model: ["modelBtn", "modelMenu", "left", popModel], perm: ["permBtn", "permMenu", "right", popPerm], ctx: ["ctxBtn", "ctxMenu", "right", popCtx] };
 let popOpen = null;
 function closePop() {
   if (!popOpen) return;
@@ -1111,9 +1185,10 @@ function placePop(btn, pop, align) {
   const up = h <= above || above >= below;
   pop.style.maxHeight = Math.max(140, Math.min(h, up ? above : below)) + "px";
   if (up) pop.style.bottom = vh - r.top + 8 + "px";
-  else pop.style.top = r.bottom + 8 + "px";
+  else pop.style.top = r.bottom + 4 + "px";
+  pop.style.transformOrigin = `${up ? "bottom" : "top"} ${align}`;
 }
-function openPop(name) {
+function openPop(name, keys) {
   if (popOpen === name) return closePop();
   closePop();
   const [b, m, align, html] = POPS[name];
@@ -1124,8 +1199,10 @@ function openPop(name) {
   popOpen = name;
   placePop($(b), pop, align);
   if (name === "model") refreshAppModels();
+  // opened from the keyboard: the chosen row has the focus, so the arrow keys and Enter work at once
+  if (keys) (pop.querySelector(".pm.on") || pop.querySelector("button:not([disabled])") || pop).focus();
 }
-for (const [name, [b]] of Object.entries(POPS)) $(b).onclick = e => { e.stopPropagation(); openPop(name); };
+for (const [name, [b]] of Object.entries(POPS)) $(b).onclick = e => { e.stopPropagation(); openPop(name, e.detail === 0); };
 function pick(change) {
   const had = switchNote();
   change();
@@ -1135,15 +1212,12 @@ function pick(change) {
 }
 $("modelMenu").addEventListener("click", e => {
   e.stopPropagation();
+  const eff = e.target.closest("[data-effort]");
+  if (eff) return pick(() => { S.efforts[modelNow()] = eff.dataset.effort; store.set("efforts", S.efforts); });
   const b = e.target.closest("[data-model]");
   if (!b || b.disabled) return;
   if (freePlan()) pick(() => { S.appModel = b.dataset.model; store.set("appModel", S.appModel); });
   else pick(() => { S.model = b.dataset.model; store.set("model", S.model); });
-});
-$("effortMenu").addEventListener("click", e => {
-  e.stopPropagation();
-  const b = e.target.closest("[data-effort]");
-  if (b) pick(() => { S.efforts[modelNow()] = b.dataset.effort; store.set("efforts", S.efforts); });
 });
 $("permMenu").addEventListener("click", e => {
   e.stopPropagation();
@@ -1156,14 +1230,23 @@ $("thinkBtn").onclick = e => {
   S.think = !S.think;
   store.set("think", S.think);
   renderBar();
-  toast(S.think ? "Extended thinking on: Claude thinks longer before answering." : "Extended thinking off.", 3000);
+  toast(S.think ? `Thinking on: ${CFG.name} thinks longer before answering.` : "Thinking off.", 3000);
 };
 window.addEventListener("resize", closePop);
 document.addEventListener("click", () => { closePop(); closeMenus(); closeProfile(); });
 document.addEventListener("keydown", e => {
+  // in an open menu, the arrow keys go up and down its rows
+  const menu = (e.key === "ArrowDown" || e.key === "ArrowUp") && document.activeElement && document.activeElement.closest(".pop:not([hidden]),.menu,.pmenu:not([hidden])");
+  if (menu) {
+    const rows = [...menu.querySelectorAll("button:not([disabled])")];
+    const k = rows.indexOf(document.activeElement);
+    if (rows.length) { e.preventDefault(); rows[(k + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length].focus(); }
+    return;
+  }
   if (e.key !== "Escape") return;
-  if (!$("pmenu").hidden) { closeProfile(); return; }
-  if (popOpen || document.querySelector(".menu")) { closePop(); closeMenus(); return; }
+  if (!$("pmenu").hidden) { closeProfile(); $("profileBtn").focus(); return; }
+  if (popOpen) { const b = $(POPS[popOpen][0]); closePop(); closeMenus(); b.focus(); return; }
+  if (document.querySelector(".menu")) { closeMenus(); return; }
   if (P.a) closePanel();
 });
 
@@ -1174,10 +1257,10 @@ function renderChrome() {
   const h = $("heroSub");
   if (updating()) h.textContent = `${runTitle(UP.data.run)}. Messages are paused until it's done.`;
   else if (st && !st.agent.online) h.innerHTML = `${esc(CFG.name)} is offline right now. Run <code>${esc(CFG.command)}</code> to bring it back online.`;
-  else if (st && st.agent.warning === "app_missing") h.innerHTML = `Install the Claude app on your computer from <a href="https://claude.ai/download" target="_blank" rel="noopener noreferrer">claude.ai/download</a> and sign in to it. ${esc(CFG.name)} types your messages into it.`;
+  else if (st && st.agent.warning === "app_missing") h.innerHTML = `Install the desktop app on your computer from <a href="https://claude.ai/download" target="_blank" rel="noopener noreferrer">claude.ai/download</a> and sign in to it. ${esc(CFG.name)} works through it on the free plan.`;
   else if (st && st.agent.warning) h.innerHTML = `${esc(CFG.name)} needs attention. Run <code>${esc(CFG.command)} logs</code> to see why.`;
   else h.innerHTML = "";
-  $("legal").textContent = "Claude can make mistakes. Check important info.";
+  $("legal").textContent = `${CFG.name} can make mistakes. Check important info.`;
   renderBar();
   renderProfile();
   updateSend();
@@ -1220,35 +1303,47 @@ async function loadChats() {
 }
 function closeMenus() {
   document.querySelectorAll(".menu").forEach(m => m.remove());
-  document.querySelectorAll(".more[aria-expanded=true]").forEach(b => b.setAttribute("aria-expanded", "false"));
+  document.querySelectorAll("[data-more][aria-expanded=true],#chatMore[aria-expanded=true]").forEach(b => b.setAttribute("aria-expanded", "false"));
 }
+// A chat's ⋯ menu, from its row in the sidebar or from the top bar: Rename and Delete.
+function chatMenu(btn, id, right, keys) {
+  const was = btn.getAttribute("aria-expanded") === "true";
+  closeMenus();
+  closePop();
+  if (was) return;
+  btn.setAttribute("aria-expanded", "true");
+  const menu = document.createElement("div");
+  menu.className = "menu";
+  menu.setAttribute("role", "menu");
+  menu.innerHTML = `<button type="button" role="menuitem" data-act="rename">${I.pencil}Rename</button><button type="button" role="menuitem" class="danger" data-act="delete">${I.trash}Delete</button>`;
+  menu.style.position = "fixed";
+  document.body.append(menu);
+  const r = btn.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  menu.style.top = r.bottom + 4 + "px";
+  menu.style.left = Math.max(8, Math.min(right ? r.right - w : r.left, window.innerWidth - w - 8)) + "px";
+  menu.style.transformOrigin = right ? "top right" : "top left";
+  menu.onclick = ev => {
+    ev.stopPropagation();
+    const act = ev.target.closest("[data-act]");
+    if (!act) return;
+    closeMenus();
+    if (act.dataset.act === "delete") return deleteChat(id);
+    // renaming happens in the chat's row, so the sidebar opens for it if it's closed
+    if (matchMedia("(max-width: 860px)").matches) $("app").classList.add("side-open");
+    else if (railed()) showSide();
+    renameChat(id);
+  };
+  if (keys) menu.querySelector("button").focus();
+}
+$("chatMore").onclick = e => { e.stopPropagation(); if (S.chatId) chatMenu($("chatMore"), S.chatId, true, e.detail === 0); };
 $("history").addEventListener("click", e => {
   const more = e.target.closest("[data-more]");
   const open = e.target.closest("[data-open]");
   if (more) {
     e.preventDefault();
     e.stopPropagation();
-    const was = more.getAttribute("aria-expanded") === "true";
-    closeMenus();
-    if (was) return;
-    more.setAttribute("aria-expanded", "true");
-    const id = more.dataset.more;
-    const menu = document.createElement("div");
-    menu.className = "menu";
-    menu.innerHTML = `<button type="button" data-act="rename">${I.pencil}Rename</button><button type="button" class="danger" data-act="delete">${I.trash}Delete</button>`;
-    const r = more.getBoundingClientRect();
-    menu.style.top = r.bottom + 4 + "px";
-    menu.style.left = Math.min(r.left, window.innerWidth - 170) + "px";
-    menu.style.position = "fixed";
-    menu.onclick = ev => {
-      ev.stopPropagation();
-      const act = ev.target.closest("[data-act]");
-      if (!act) return;
-      closeMenus();
-      if (act.dataset.act === "rename") renameChat(id);
-      else deleteChat(id);
-    };
-    document.body.append(menu);
+    chatMenu(more, more.dataset.more, false, e.detail === 0);
     return;
   }
   if (open) {
@@ -1305,7 +1400,7 @@ function filesHtml(files) {
 function userEl(m) {
   const el = document.createElement("div");
   el.className = "msg user";
-  el.innerHTML = filesHtml(m.meta && m.meta.files) + (m.content ? `<div class="bubble">${esc(m.content)}</div><div class="ufoot"><button type="button" data-copy-msg title="Copy" aria-label="Copy message">${I.copy}</button></div>` : "");
+  el.innerHTML = filesHtml(m.meta && m.meta.files) + (m.content ? `<div class="bubble${/\n/.test(m.content.trim()) ? " multi" : ""}">${esc(m.content)}</div><div class="ufoot"><button type="button" data-copy-msg title="Copy" aria-label="Copy message">${I.copy}</button></div>` : "");
   el._raw = m.content || "";
   return el;
 }
@@ -1389,18 +1484,27 @@ function botEl(m) {
   if (rest.length) html += `<div class="arts">${rest.map(artCard).join("")}</div>`;
   if (meta.error) html += `<div class="note ${meta.error === "Stopped." ? "soft" : "err"}">${meta.error === "Stopped." ? "You stopped this reply." : esc(meta.error)}</div>`;
   if (meta.denials) html += `<div class="note soft">Safety checks blocked ${meta.denials === 1 ? "an action" : meta.denials + " actions"} during this reply.</div>`;
-  const lbl = meta.modelName ? `${meta.modelName} · Claude app` : runLabel(meta.model || modelNow(), meta.effort);
+  const lbl = meta.modelName || runLabel(meta.model || modelNow(), meta.effort);
   html += `<div class="foot">${m.content ? `<button type="button" data-copy-msg title="Copy" aria-label="Copy reply">${I.copy}</button>` : ""}<span class="lbl">${esc(lbl)}</span></div>`;
   el.innerHTML = html;
   el._raw = m.content || "";
   highlight(el);
   return el;
 }
+// A bubble whose text wraps onto more lines gets more room around it, as in ChatGPT.
+function fitBubbles(root) {
+  (root || $("threadInner")).querySelectorAll(".bubble").forEach(b => {
+    if (!b.offsetHeight) return;
+    const pad = b.classList.contains("multi") ? 24 : 12;
+    b.classList.toggle("multi", b.offsetHeight - pad > 30 || /\n/.test(b.textContent.trim()));
+  });
+}
 function renderThread(messages) {
   const t = $("threadInner");
   t.innerHTML = "";
   for (const m of messages) t.append(m.role === "user" ? userEl(m) : botEl(m));
   $("main").classList.toggle("is-empty", !messages.length && !S.live);
+  fitBubbles(t);
   S.ctx = null;
   for (const m of messages) if (m.role === "assistant" && ctxOf(m.meta)) S.ctx = ctxOf(m.meta);
   renderCtx();
@@ -1482,8 +1586,13 @@ function autoScroll(force) {
   if (force || S.stick) thread.scrollTop = thread.scrollHeight;
   checkJump();
 }
+let threadW = 0;
 if (window.ResizeObserver) {
-  const ro = new ResizeObserver(() => { if (S.stick) thread.scrollTop = thread.scrollHeight; checkJump(); });
+  const ro = new ResizeObserver(() => {
+    if (thread.clientWidth !== threadW) { threadW = thread.clientWidth; fitBubbles(); }
+    if (S.stick) thread.scrollTop = thread.scrollHeight;
+    checkJump();
+  });
   ro.observe(thread);
   ro.observe($("threadInner"));
 }
@@ -1575,6 +1684,22 @@ function newChat(push) {
   $("input").focus();
 }
 $("newChat").onclick = () => { newChat(true); $("app").classList.remove("side-open"); };
+// ChatGPT's shortcuts, shown next to the two in the sidebar: Ctrl+Shift+O (⇧⌘O on a Mac) for a new chat, Ctrl+K (⌘K) to search
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+document.querySelectorAll("kbd[data-keys]").forEach(k => { k.textContent = k.dataset.keys === "k" ? (MAC ? "⌘K" : "Ctrl K") : (MAC ? "⇧⌘O" : "Ctrl Shift O"); });
+document.addEventListener("keydown", e => {
+  if (!(MAC ? e.metaKey : e.ctrlKey) || e.altKey || document.querySelector("dialog[open]")) return;
+  const k = (e.key || "").toLowerCase();
+  if (k === "o" && e.shiftKey) {
+    e.preventDefault();
+    newChat(true);
+  } else if (k === "k" && !e.shiftKey) {
+    e.preventDefault();
+    if (matchMedia("(max-width: 860px)").matches) $("app").classList.add("side-open");
+    else if (railed()) showSide();
+    $("search").focus();
+  }
+});
 // the logo starts a new chat; in the rail it opens the sidebar
 $("brand").onclick = e => { e.preventDefault(); if (railed()) showSide(); else newChat(true); };
 window.addEventListener("popstate", () => {
@@ -1605,9 +1730,15 @@ function updateSend() {
   btn.disabled = !has;
 }
 const input = $("input");
+// The message box is one row, like ChatGPT's: +, the text, the pills and send. When the text needs a second line, or files are
+// attached, it opens into two rows (the text on top, the buttons under it), and stays that way until it's empty again.
 function grow() {
+  const box = $("composer");
+  const tall = S.files.length > 0 || (!!input.value && (box.classList.contains("tall") || input.value.includes("\n")));
+  box.classList.toggle("tall", tall);
   input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + "px";
+  if (!tall && input.scrollHeight > 36) { box.classList.add("tall"); input.style.height = "auto"; }
+  input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.25) + "px";
 }
 input.addEventListener("input", () => { grow(); updateSend(); });
 input.addEventListener("keydown", e => {
@@ -1657,6 +1788,7 @@ function addPasted(text) {
 }
 function renderChips() {
   $("chips").innerHTML = S.files.map((f, k) => `<span class="chip">${I.file}<span>${esc(f.name)}</span><small>${fmtSize(f.size)}</small><button type="button" data-rm="${k}" aria-label="Remove ${esc(f.name)}">${I.x}</button></span>`).join("");
+  grow();
   updateSend();
 }
 $("chips").addEventListener("click", e => {
@@ -1676,6 +1808,8 @@ input.addEventListener("paste", e => {
   if (t && t.length > 4000) { e.preventDefault(); addPasted(t); toast("Long paste added as a text file."); }
 });
 const comp = $("composer");
+// a click anywhere in the box that isn't a button puts the cursor in the text
+comp.addEventListener("click", e => { if (e.target === comp || e.target.matches(".c-lead,.c-trail")) input.focus(); });
 comp.addEventListener("dragover", e => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); comp.classList.add("drag"); } });
 comp.addEventListener("dragleave", () => comp.classList.remove("drag"));
 comp.addEventListener("drop", e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); comp.classList.remove("drag"); addFiles([...e.dataTransfer.files]); });
@@ -1698,6 +1832,7 @@ async function send() {
   const userNode = userEl({ content: text, meta: { files: files.map(f => ({ name: f.name, size: f.size })) } });
   $("threadInner").append(userNode);
   liveStart(null);
+  fitBubbles(userNode);
   S.stick = true;
   autoScroll(true);
   updateSend();
@@ -1817,13 +1952,14 @@ function showRemote(q) {
   if (R.q && R.q.id === q.id && R.q.at === q.at && !$("remote").hidden) return;
   R.q = q;
   R.busy = false;
-  $("rName").textContent = q.kind === "permission" ? "Claude Code" : "Claude app on your computer";
+  $("rName").textContent = q.kind === "permission" ? CFG.name : "Desktop app on your computer";
   let html;
   if (q.kind === "permission") {
-    html = `<h3>${esc(q.title)}</h3>${q.detail ? `<pre>${esc(q.detail)}</pre>` : ""}<p class="rnote">Claude Code is waiting for your answer on ${esc(CFG.name)}. It carries on once you choose.</p><div class="rbtns"><button class="btn ghost" type="button" data-ranswer="deny">Deny</button><button class="btn primary" type="button" data-ranswer="allow">Allow</button></div>`;
+    html = `<h3>${esc(q.title)}</h3>${q.detail ? `<pre>${esc(q.detail)}</pre>` : ""}<p class="rnote">${esc(CFG.name)} is asking, and waits for your answer. It carries on once you choose.</p><div class="rbtns"><button class="btn ghost" type="button" data-ranswer="deny">Deny</button><button class="btn primary" type="button" data-ranswer="allow">Allow</button></div>`;
   } else {
-    const shot = q.image ? `<button class="rshot" type="button" data-rshot title="Click to click there on your computer"><img src="data:image/jpeg;base64,${q.image}" alt="${esc(q.text || q.title)}" draggable="false"></button>` : `<pre>${esc(q.text || q.title)}</pre>`;
-    html = `<h3>${esc(q.title)}</h3>${shot}<p class="rnote">The Claude app on your computer is asking. Click the window above, or a button here.</p><div class="rbtns">${(q.buttons || []).map((b, i) => `<button class="btn ${/^(allow|approve|yes|ok|continue)/i.test(b.label) ? "primary" : "ghost"}" type="button" data-rbutton="${i}">${esc(b.label)}</button>`).join("")}</div>`;
+    // a picture of the window when the computer could take one; otherwise what it says
+    const shot = q.image ? `<button class="rshot" type="button" data-rshot title="Click to click there on your computer"><img src="data:image/jpeg;base64,${q.image}" alt="${esc(q.text || q.title)}" draggable="false"></button>` : q.text && q.text !== q.title ? `<pre>${esc(q.text)}</pre>` : "";
+    html = `<h3>${esc(q.title)}</h3>${shot}<p class="rnote">${q.image ? "The desktop app on your computer is asking. Click the window above, or a button here." : "The desktop app on your computer is asking. Pick an answer here, and it's picked there."}</p><div class="rbtns">${(q.buttons || []).map((b, i) => `<button class="btn ${/^(allow|approve|yes|ok|continue)/i.test(b.label) ? "primary" : "ghost"}" type="button" data-rbutton="${i}">${esc(b.label)}</button>`).join("")}</div>`;
   }
   $("rBody").innerHTML = html;
   $("remote").hidden = false;
@@ -2052,19 +2188,21 @@ function renderProfile() {
   const email = (st && st.email) || "";
   $("avatar").textContent = (email[0] || CFG.name[0] || "?");
   $("whoName").textContent = email ? email.split("@")[0] : CFG.name;
+  // the plan, as ChatGPT shows it ("Free", "Plus"); being offline is said too, being online isn't
   const plan = planLabel();
-  $("whoSub").textContent = !st ? "" : `${plan ? plan + " · " : ""}${st.agent.online ? "Online" : "Offline"}`;
+  $("whoSub").textContent = !st ? "" : [plan, st.agent.online ? "" : "Offline"].filter(Boolean).join(" · ");
 }
 function profileMenu() {
   const st = S.state || {};
   const u = UP.data;
   const wk = windowOf("five_hour") || windowOf("seven_day");
   const chip = wk && !wk.reset ? `<span class="chip-r">${Math.round(wk.pct)}%</span>` : "";
-  return `<div class="hdr">${esc(st.email || CFG.name)}</div>` +
+  const online = st.agent ? (st.agent.online ? "Online" : "Offline") : "";
+  return `<div class="hdr">${esc(st.email || CFG.name)}${online ? `<small>${esc(CFG.name)} · ${online}</small>` : ""}</div>` +
     `<button type="button" role="menuitem" data-pm="usage">${I.gauge}<span>Plan usage</span>${chip}</button>` +
     `<button type="button" role="menuitem" data-pm="settings">${I.gear}<span>Settings</span></button>` +
-    (updateAvailable(u) ? `<button type="button" role="menuitem" data-pm="updates">${I.up}<span>Update available</span><span class="chip-r up">v${esc(u.latest)}</span></button>` : "") +
-    `<hr><div class="row" style="padding:0 4px 0 10px;height:38px;gap:10px;flex-wrap:nowrap"><span style="color:var(--text-2);display:flex">${I.sun.replace("<svg", '<svg style="width:18px;height:18px"')}</span><span>Theme</span><span class="themes">${THEMES.map(([k, label, ic]) => `<button type="button" data-theme-set="${k}" title="${label}" aria-label="${label}">${ic}</button>`).join("")}</span></div>`;
+    (updateAvailable(u) ? `<button type="button" role="menuitem" data-pm="updates">${I.upgrade}<span>Update available</span><span class="chip-r up">v${esc(u.latest)}</span></button>` : "") +
+    `<hr><div class="row th-row">${I.sun}<span>Theme</span><span class="themes" role="group" aria-label="Theme">${THEMES.map(([k, label, ic]) => `<button type="button" data-theme-set="${k}" title="${label}" aria-label="${label}">${ic}</button>`).join("")}</span></div>`;
 }
 function closeProfile() {
   $("pmenu").hidden = true;
@@ -2098,7 +2236,7 @@ const CREDIT_STATE = {
   out: ["Used up", "There are no usage credits left, so reaching a plan limit stops replies until it resets."]
 };
 const CREDIT_WHY = {
-  overage_not_provisioned: "They aren't set up on your Claude account.",
+  overage_not_provisioned: "They aren't set up on your account.",
   org_level_disabled: "Your organization has turned them off.",
   org_service_level_disabled: "Your organization has turned them off.",
   org_level_disabled_until: "Your organization's spending cap is reached until it resets.",
@@ -2112,7 +2250,7 @@ const U = { refreshing: false, saving: false, resetting: "" };
 function useCredits() { return !(S.state && S.state.prefs && S.state.prefs.useCredits === false); }
 function creditsHtml(l) {
   const c = l && l.credits;
-  const [label, text] = c ? CREDIT_STATE[c.state] || CREDIT_STATE.off : ["Not reported yet", "Claude Code says whether usage credits are on with the replies to your messages."];
+  const [label, text] = c ? CREDIT_STATE[c.state] || CREDIT_STATE.off : ["Not reported yet", `${CFG.name} finds out whether they're on with its next reply.`];
   const why = c && c.state === "off" && CREDIT_WHY[c.reason] ? " " + CREDIT_WHY[c.reason] : "";
   const resets = c && c.resetsAt && c.state !== "on" ? ` Their period resets ${relTime(c.resetsAt)}.` : "";
   const on = useCredits();
@@ -2148,15 +2286,15 @@ function resetsHtml() {
     const detail = [`Clears your ${clearsText(x.clears)}`, left, refill, ends].filter(Boolean).join(" · ");
     return `<div class="reset-row"><div class="t"><span>${esc(x.label || "Free reset")}</span><small>${esc(detail)}</small></div>${x.can ? `<button type="button" class="btn ghost" data-reset="${esc(x.program)}" data-grant="${esc(x.id)}" data-clears="${esc(clearsText(x.clears))}"${U.resetting ? " disabled" : ""}>${U.resetting === x.id ? "Using…" : "Use one"}</button>` : `<small class="muted">${esc(why)}</small>`}</div>`;
   }).join("");
-  return `<div class="credits"><div class="mt-top"><b>Free limit resets</b></div><p>Claude gives you these for free. Each one clears a usage limit straight away, so you can keep going without waiting for it to reset.</p>${rows}</div>`;
+  return `<div class="credits"><div class="mt-top"><b>Free limit resets</b></div><p>Your plan comes with these for free. Each one clears a usage limit straight away, so you can keep going without waiting for it to reset.</p>${rows}</div>`;
 }
 const RESET_SAID = {
   reset: c => `Done: your ${c} ${/ and /.test(c) ? "are" : "is"} cleared.`,
   already_used: () => "That reset was already used.",
   not_limited: () => "You're not at a limit, so there's nothing to reset yet.",
   cooldown: () => "A reset was used recently. Try again a bit later.",
-  ineligible: () => "Claude says this reset can't be used on your account right now.",
-  unavailable: () => "Claude says resets aren't available right now.",
+  ineligible: () => "This reset can't be used on your account right now.",
+  unavailable: () => "Resets aren't available right now.",
   error: () => "That didn't go through. Try again in a moment."
 };
 async function useReset(btn) {
@@ -2177,7 +2315,7 @@ async function useReset(btn) {
   else loadState().then(renderLimitNote);
 }
 // What Claude's own names for its promotional credits are, in words. iguana_necktie is the Claude Code cloud-session credit.
-const PROMO_NAMES = { iguana_necktie: "Claude Code cloud credits" };
+const PROMO_NAMES = { iguana_necktie: "Cloud session credits" };
 function money(minor, currency) {
   try { return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD" }).format(minor / 100); } catch { return (minor / 100).toFixed(2) + " " + (currency || ""); }
 }
@@ -2188,7 +2326,7 @@ function balanceHtml() {
   const b = st.credits;
   const link = '<a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">claude.ai</a>';
   if (!b || (!b.extra && !b.balance && !b.dollars)) {
-    const why = b && b.error === "expired" ? "Your Claude sign-in on the computer needs renewing; that happens with your next message." : b && b.error === "signin" ? "Claude Code on your computer isn't signed in with a Claude account." : U.refreshing ? "Reading your balance…" : "Claude didn't give your balance this time.";
+    const why = b && b.error === "expired" ? "The sign-in on your computer needs renewing; that happens with your next message." : b && b.error === "signin" ? "Your computer isn't signed in to your plan. Run claude auth login there." : U.refreshing ? "Reading your balance…" : "Your balance couldn't be read this time.";
     return `<p class="fine" style="margin:0">${esc(why)} It's always on ${link}.</p>`;
   }
   const rows = [];
@@ -2204,18 +2342,18 @@ function balanceHtml() {
   }
   if (!promos.length && !(b.dollars || []).length) rows.push(["Promotional credits", "None right now"]);
   if (b.extra) rows.push(["Spent this month", b.extra.used === null ? "—" : money(b.extra.used, cur) + (b.extra.limit === null ? (b.extra.enabled ? " · no limit" : "") : ` of ${money(b.extra.limit, cur)}`)]);
-  return `<div class="bal">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><p class="fine" style="margin:8px 0 0">From your Claude account${b.error ? ", as last read" : ""} · ${new Date(b.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Top up or change the limit on ${link}.</p>`;
+  return `<div class="bal">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><p class="fine" style="margin:8px 0 0">From your account${b.error ? ", as last read" : ""} · ${new Date(b.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Top up or change the limit on ${link}.</p>`;
 }
 function renderUsage() {
   const l = S.state && S.state.limits;
   const body = $("usageBody");
   const offline = !!(S.state && !S.state.agent.online);
   const free = freePlan();
-  $("usageSub").textContent = U.refreshing ? "Updating…" : l ? `${free ? "Your free plan, from the Claude app" : "From your Claude plan"} · updated ${new Date(l.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  $("usageSub").textContent = U.refreshing ? "Updating…" : l ? `${free ? "Your free plan, from the desktop app" : "From your plan"} · updated ${new Date(l.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
   const shown = l ? METERS.filter(([k]) => l.windows[k]) : [];
   let html = "";
   if (!shown.length) {
-    html = U.refreshing ? '<div class="wait" style="margin:0"><span class="spin"></span><span>Reading your plan usage…</span></div>' : `<p style="margin:0 0 6px;color:var(--text-2)">No reading yet.</p><p class="fine" style="margin-top:0">${esc(CFG.name)} shows how much of your Claude plan you've used once ${free ? "the Claude app has opened on your computer" : "Claude Code reports it, which happens with every reply"}.</p>`;
+    html = U.refreshing ? '<div class="wait" style="margin:0"><span class="spin"></span><span>Reading your plan usage…</span></div>' : `<p style="margin:0 0 6px;color:var(--text-2)">No reading yet.</p><p class="fine" style="margin-top:0">${esc(CFG.name)} shows how much of your plan you've used once ${free ? "the desktop app has opened on your computer" : "it has answered a message; every reply brings a new reading"}.</p>`;
   } else {
     html = `<div class="meters">${shown.map(([k, label, sub]) => {
       const w = l.windows[k];
@@ -2230,7 +2368,7 @@ function renderUsage() {
   // the free plan has no usage credits; its resets still show
   html += free ? resetsHtml() : creditsHtml(l);
   if (offline) html += `<div class="note soft">${esc(CFG.name)} is offline, so this is the last reading. Run <code>${esc(CFG.command)}</code> on your computer for a fresh one.</div>`;
-  else html += `<p class="fine">Read ${free ? "from the Claude app" : "by Claude Code"} on your computer each time you open this, and after every reply.</p>`;
+  else html += `<p class="fine">Read on your computer each time you open this, and after every reply.</p>`;
   body.innerHTML = html;
 }
 function openUsage() {
@@ -2293,6 +2431,13 @@ $("usageDlg").addEventListener("click", e => { if (e.target === $("usageDlg")) $
 function renderLimitNote() {
   const note = $("cNote");
   if (switchNote()) return;
+  // Stop was pressed on the Claude app's window on the computer: it's left alone until it's allowed again, from here
+  const ai = freePlan() && appInfo();
+  if (ai && ai.paused) {
+    note.innerHTML = `${esc(CFG.name)} stopped using the desktop app on your computer, because Stop was pressed there. <button type="button" class="note-link" data-resume${APP.resuming ? " disabled" : ""}>${APP.resuming ? "Allowing it…" : `Let ${esc(CFG.name)} use it again`}</button>`;
+    note.className = "c-note warn grow";
+    return;
+  }
   const l = S.state && S.state.limits;
   const c = l && l.credits;
   const at = l && l.resetsAt ? " · resets " + relTime(l.resetsAt) : "";
@@ -2314,9 +2459,23 @@ function renderLimitNote() {
   if (reset) note.insertAdjacentHTML("beforeend", ` · <button type="button" class="note-link" data-reset="${esc(reset.program)}" data-grant="${esc(reset.id)}" data-clears="${esc(clearsText(reset.clears))}"${U.resetting ? " disabled" : ""}>${U.resetting ? "Using a free reset…" : "Use a free reset"}</button>`);
   note.className = text ? "c-note warn grow" : "c-note grow";
 }
-$("cNote").addEventListener("click", e => {
+$("cNote").addEventListener("click", async e => {
   const r = e.target.closest("[data-reset]");
   if (r) useReset(r);
+  if (e.target.closest("[data-resume]") && !APP.resuming) {
+    APP.resuming = true;
+    renderLimitNote();
+    try {
+      await apiJson("/api/app/resume", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const ai = appInfo();
+      if (ai) ai.paused = false;
+      toast(`${CFG.name} can use the desktop app again.`);
+    } catch (err) {
+      toast(err.message || "Couldn't reach your computer. Try again in a moment.");
+    }
+    APP.resuming = false;
+    renderLimitNote();
+  }
 });
 // a time of day, or a day and time when it's further off
 function clock(sec) {
@@ -2329,7 +2488,7 @@ function clock(sec) {
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SET = { tab: "general", name: undefined, saving: "", saved: "", address: "", confirm: "", err: "", busy: false, justUpdated: false };
-const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.up], ["delete", "Delete site", I.trash]];
+const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.upgrade], ["delete", "Delete site", I.trash]];
 
 // Every setting here takes effect when it's changed: no Save button. Only a name being typed is held, until Enter or leaving
 // the field.
@@ -2365,8 +2524,10 @@ function renderSettings() {
   const u = UP.data;
   $("setTitle").textContent = "Settings";
   $("setSub").textContent = location.host;
-  const nav = TABS.map(([k, label, ic]) => `<button type="button" data-tab-set="${k}" class="${SET.tab === k ? "on" : ""}${k === "delete" ? " danger" : ""}">${ic}<span>${label}</span>${k === "updates" && updateAvailable(u) ? '<i class="badge"></i>' : ""}</button>`).join("");
-  $("setBody").innerHTML = `<div class="set"><nav class="set-nav" aria-label="Settings sections">${nav}</nav><div class="set-body" id="setPane">${paneHtml()}</div></div>`;
+  // as in ChatGPT: the close button above the tabs, and the section's name at the top of it
+  const nav = TABS.map(([k, label, ic]) => `<button type="button" data-tab-set="${k}" class="${SET.tab === k ? "on" : ""}${k === "delete" ? " danger" : ""}"${SET.tab === k ? ' aria-current="page"' : ""}>${ic}<span>${label}</span>${k === "updates" && updateAvailable(u) ? '<i class="badge"></i>' : ""}</button>`).join("");
+  const name = (TABS.find(([k]) => k === SET.tab) || TABS[0])[1];
+  patchHtml($("setBody"), `<div class="set"><nav class="set-nav" aria-label="Settings sections"><button type="button" class="icon-btn set-x" data-act="hide" aria-label="Close settings">${I.x}</button>${nav}</nav><div class="set-body" id="setPane"><h2 class="pane-title">${name}</h2>${paneHtml()}</div></div>`);
   renderFoot();
 }
 
@@ -2390,7 +2551,7 @@ function paneHtml() {
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
-    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. A new one is used as soon as you pick it.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
+    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. A new one is used as soon as you pick it.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
   }
   if (SET.tab === "address") {
     const h = hostParts();
@@ -2399,7 +2560,7 @@ function paneHtml() {
   }
   if (SET.tab === "updates") return updatesHtml();
   const ok = SET.confirm === CFG.name;
-  return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the folder Claude works in are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
+  return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the working folder are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
 }
 
 function updatesHtml() {
@@ -2410,7 +2571,7 @@ function updatesHtml() {
   if (updateAvailable(u)) {
     return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}${questionsHtml(u)}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and you can close this while it runs.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
   }
-  const earlier = (u.history || []).length ? `<details class="earlier"><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
+  const earlier = (u.history || []).length ? `<details class="earlier" data-k="history"${UP.open.history ? " open" : ""}><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
   return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(newerThan(CFG.version, u.current) ? CFG.version : u.current))}${updateAvailable(u) ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
 }
 // What a new version asks, answered here before it's installed. The answers are kept by the site and given to the new version
@@ -2430,14 +2591,12 @@ function questionsHtml(u) {
 // This computer's own settings (the same ones `<command> edit` asks about), changed straight away: whether you pay for Claude,
 // starting at login (a startup item), and the working folder.
 const PC = { busy: "", err: "" };
-const PLAN_KINDS = [["paid", "I pay for Claude"], ["free", "Free plan"]];
+const PLAN_KINDS = [["paid", "Paid plan"], ["free", "Free plan"]];
 function appStatus() {
   const i = appInfo();
-  if (i && i.kind === "app") return "Connected to the Claude app on your computer.";
-  if (i && i.kind === "browser") return "Using Claude in a browser window of its own on your computer, in place of the Claude app.";
-  if (i && i.found === "app") return "The Claude app opens on your computer when you send a message.";
-  if (i && i.found === "browser") return "The Claude app isn't installed, so a browser window of its own, signed in to claude.ai, is used instead.";
-  return "Install the Claude app on your computer from claude.ai/download and sign in to it.";
+  if (i && i.kind === "app") return "Connected to the desktop app on your computer.";
+  if (i && i.found === "app") return "The desktop app opens on your computer when you send a message.";
+  return "Install the desktop app on your computer from claude.ai/download and sign in to it.";
 }
 function computerHtml() {
   const a = S.state && S.state.agent;
@@ -2446,16 +2605,16 @@ function computerHtml() {
   const why = !a || !a.online ? `${esc(CFG.name)} is offline, so these can't be changed right now.` : !c ? `Update ${esc(CFG.name)} to change these here, or run <code>${esc(CFG.command)} edit</code> on your computer.` : "";
   const plan = (c && c.plan) || (a && a.plan) || "paid";
   const canPlan = !!c && !!c.plan;
-  const planSec = `<div class="sec"><h3>Your Claude plan</h3><div class="field"><div class="seg" role="group" aria-label="Your Claude plan">${PLAN_KINDS.map(([k, label]) => `<button type="button" data-pc="plan" data-value="${k}" class="${plan === k ? "on" : ""}" aria-pressed="${plan === k}"${canPlan && PC.busy !== "plan" ? "" : " disabled"}>${label}</button>`).join("")}</div><small>${plan === "free" ? `Claude Code needs a paid plan, so replies come from the Claude app on your computer: each message is typed into it, and the reply read back as it's written. ${esc(appStatus())}` : "Replies come from Claude Code on your computer, with your Claude plan (Pro, Max, Team or Enterprise)."}${c && !c.plan ? ` Update ${esc(CFG.name)} to change this here.` : ""}${PC.busy === "plan" ? ' <b class="ok-text">Switching…</b>' : ""}</small></div></div>`;
-  const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in${plan === "free" ? " and can open the Claude app when a message comes in" : ""}.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
-  const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>${plan === "free" ? "Where files you attach are kept on your computer." : "Where Claude Code works and where files you attach go."} Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
+  const planSec = `<div class="sec"><h3>Your plan</h3><div class="field"><div class="seg" role="group" aria-label="Your plan">${PLAN_KINDS.map(([k, label]) => `<button type="button" data-pc="plan" data-value="${k}" class="${plan === k ? "on" : ""}" aria-pressed="${plan === k}"${canPlan && PC.busy !== "plan" ? "" : " disabled"}>${label}</button>`).join("")}</div><small>${plan === "free" ? `On the free plan, ${esc(CFG.name)} works through the desktop app on your computer: each message is typed into it, and the reply read back as it's written. ${esc(appStatus())}` : `${esc(CFG.name)} answers from your computer, with your paid plan (Pro, Max, Team or Enterprise).`}${c && !c.plan ? ` Update ${esc(CFG.name)} to change this here.` : ""}${PC.busy === "plan" ? ' <b class="ok-text">Switching…</b>' : ""}</small></div></div>`;
+  const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in${plan === "free" ? " and can open the desktop app when a message comes in" : ""}.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
+  const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>${plan === "free" ? "Where files you attach are kept on your computer." : `Where ${esc(CFG.name)} works and where files you attach go.`} Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
   return `${planSec}<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
 }
 // The switch moves at once; if the computer says no, it moves back and says why.
 async function setComputer(key, value) {
   const a = S.state && S.state.agent;
   if (!a || !a.computer || (key === "workspace" && (!value || value === a.computer.workspace)) || (key === "plan" && value === a.computer.plan)) return;
-  if (key === "plan" && !confirm(value === "free" ? `Switch to the free plan? Replies will come from the Claude app on your computer instead of Claude Code.` : `Switch to your paid Claude plan? Replies will come from Claude Code on your computer. It has to be installed and signed in there.`)) return;
+  if (key === "plan" && !confirm(value === "free" ? `Switch to the free plan? ${CFG.name} will answer through the desktop app on your computer.` : `Switch to your paid plan? ${CFG.name} will answer with your plan, from your computer, so it has to be signed in there.`)) return;
   const before = { ...a.computer };
   a.computer = { ...a.computer, [key]: value };
   if (key === "workspace") PC.ws = value;
@@ -2499,7 +2658,6 @@ function applySite(site) {
   if (S.state) S.state.site = site;
   CFG.name = site.name;
   document.title = S.chat && S.chat.title ? `${S.chat.title} · ${CFG.name}` : CFG.name;
-  $("topTitle").textContent = CFG.name;
   $("brand").setAttribute("aria-label", CFG.name);
   const mark = $("brand").firstElementChild;
   const want = site.logo ? `<img src="/logo?v=${esc(site.v)}" alt="">` : DEFAULT_MARK;
@@ -2663,7 +2821,7 @@ function progressHtml(run) {
   const done = plan.filter(({ key }) => stepState(run, key) === "done").length;
   const cur = plan.find(({ key }) => stepState(run, key) === "active") || plan[Math.min(done, plan.length - 1)];
   const pct = plan.length ? Math.max(4, Math.round(((done + 0.5) / plan.length) * 100)) : 50;
-  return `<div class="prog"><div class="mt-bar"><i style="width:${pct}%"></i></div><div class="prog-step"><span class="spin"></span><span>${esc(cur ? cur.label : "Working")}</span><small>${Math.min(done + 1, plan.length)} of ${plan.length}</small></div></div><details class="earlier"><summary>All steps</summary>${stepsHtml(run)}</details>`;
+  return `<div class="prog"><div class="mt-bar"><i style="width:${pct}%"></i></div><div class="prog-step"><span class="spin"></span><span>${esc(cur ? cur.label : "Working")}</span><small>${Math.min(done + 1, plan.length)} of ${plan.length}</small></div></div><details class="earlier" data-k="steps"${UP.open.steps ? " open" : ""}><summary>All steps</summary>${stepsHtml(run)}</details>`;
 }
 function runNotes(run) {
   if ((run.kind || "update") !== "update") return "";
@@ -2675,11 +2833,38 @@ function runTitle(run) {
   return { update: `Updating to v${run.to}`, settings: "Saving your changes", move: "Moving to a new address", delete: "Deleting the site" }[run.kind || "update"] || "Working";
 }
 
+// Puts new markup into a part of the page without rebuilding what didn't change. Panels that are drawn again every second
+// or so while something runs (the update checklist) keep what you opened open, keep their spinners turning and don't flash.
+// What's open in a <details> is yours: redrawing never opens or closes one that's already there.
+function patchHtml(el, html) {
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  morphKids(el, t.content);
+}
+function morphKids(a, b) {
+  const an = [...a.childNodes];
+  const bn = [...b.childNodes];
+  for (let i = 0; i < bn.length; i++) {
+    const x = an[i];
+    const y = bn[i];
+    if (!x) { a.appendChild(y); continue; }
+    if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName || (x.nodeType === 1 && x.id !== y.id)) { a.replaceChild(y, x); continue; }
+    if (x.nodeType !== 1) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; continue; }
+    const keep = n => x.nodeName === "DETAILS" && n === "open";
+    for (const at of [...x.attributes]) if (!y.hasAttribute(at.name) && !keep(at.name)) x.removeAttribute(at.name);
+    for (const at of [...y.attributes]) if (x.getAttribute(at.name) !== at.value && !keep(at.name)) x.setAttribute(at.name, at.value);
+    morphKids(x, y);
+  }
+  for (let i = an.length - 1; i >= bn.length; i--) a.removeChild(an[i]);
+}
+
 function renderJob() {
   const run = upRun() || UP.gone;
   const kind = run.kind || "update";
-  const title = $("setTitle");
-  const sub = $("setSub");
+  // only written when they change, so nothing redraws while the panel is asked again every second and a half
+  const keepText = el => ({ set textContent(v) { if (el.textContent !== v) el.textContent = v; } });
+  const title = keepText($("setTitle"));
+  const sub = keepText($("setSub"));
   const dismiss = `<button class="btn ghost" type="button" data-act="dismiss">Close</button>`;
   const info = run.info || {};
   const newLink = info.site ? `<div class="linkbox"><span>${esc(info.site)}</span><button class="btn ghost" type="button" data-copy-link="${esc(info.site)}">${I.copy}<span>Copy</span></button></div>` : "";
@@ -2693,7 +2878,7 @@ function renderJob() {
     } else {
       title.textContent = "The site is deleted";
       sub.textContent = "";
-      html = `<p style="margin:0;color:var(--text-2)">${esc(CFG.name)} and its chats are gone, and <code>${esc(CFG.command)}</code> has stopped. Your files in the folder Claude worked in are still there. Run the setup again whenever you want a new site.</p>`;
+      html = `<p style="margin:0;color:var(--text-2)">${esc(CFG.name)} and its chats are gone, and <code>${esc(CFG.command)}</code> has stopped. Your files in the working folder are still there. Run the setup again whenever you want a new site.</p>`;
     }
   } else if (run.state === "running") {
     title.textContent = runTitle(run);
@@ -2715,7 +2900,7 @@ function renderJob() {
         // the steps are done, but the site hasn't answered as the new version yet: the bar keeps going until it does
         title.textContent = `Updating to v${to}`;
         sub.textContent = run.from ? `From v${run.from}` : "";
-        html = `<div class="prog"><div class="mt-bar"><i style="width:96%"></i></div><div class="prog-step"><span class="spin"></span><span>Making sure the new version is live</span><small>almost done</small></div></div><details class="earlier"><summary>All steps</summary>${stepsHtml(run)}</details>`;
+        html = `<div class="prog"><div class="mt-bar"><i style="width:96%"></i></div><div class="prog-step"><span class="spin"></span><span>Making sure the new version is live</span><small>almost done</small></div></div><details class="earlier" data-k="steps"${UP.open.steps ? " open" : ""}><summary>All steps</summary>${stepsHtml(run)}</details>`;
       } else {
         title.textContent = `Updated to v${to}`;
         sub.textContent = "Your chats are all still here.";
@@ -2727,9 +2912,14 @@ function renderJob() {
     sub.textContent = "";
     html = stepsHtml(run) + `<div class="note err">${esc(run.message || "Something went wrong.")}</div>${kind === "move" && run.step === "cleanup" && info.site ? `<p class="fine">Your new site works. Open it from here:</p>${newLink}` : '<p class="fine">Your chats are safe.</p>'}<div class="dlg-actions">${kind === "update" && UP.data && UP.data.available ? `<button class="btn primary" type="button" data-act="retry"${UP.data.blocked ? " disabled" : ""}>Try again</button>` : ""}${dismiss}</div>`;
   }
-  $("setBody").innerHTML = `<div class="dlg-body">${html}</div>`;
+  patchHtml($("setBody"), `<div class="dlg-body">${html}</div>`);
   $("setFoot").hidden = true;
 }
+
+// What's opened in the update panel stays open, whatever it's redrawn as next.
+$("setBody").addEventListener("toggle", e => {
+  if (e.target.matches && e.target.matches("details[data-k]")) UP.open[e.target.dataset.k] = e.target.open;
+}, true);
 
 /* ---------- following a job from any device ---------- */
 const OPEN_LABEL = { update: "Updating", settings: "Saving", move: "Moving", delete: "Deleting" };
@@ -2749,9 +2939,12 @@ function renderPill() {
   else if (run && run.state === "done" && run.kind !== "settings" && !liveAt(run.to)) { text = "Finishing…"; short = "…"; cls += " busy"; }
   else if (run && run.state === "done" && UP.seen === run.id && !pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
   else if (pageIsStale() && !reloadAsked()) { text = "Updated · Reload"; short = "Reload"; }
-  else if (updateAvailable(u)) { text = "Update available"; short = "Update"; }
+  // on a phone, an update waiting is just the icon, as ChatGPT keeps its top bar to ☰, the model and one button
+  else if (updateAvailable(u)) { text = "Update"; short = ""; }
   b.hidden = !text;
-  b.className = cls;
+  b.className = cls + (short ? "" : " solo");
+  b.title = text;
+  b.setAttribute("aria-label", text);
   $("pillText").textContent = text;
   $("pillShort").textContent = short;
 }

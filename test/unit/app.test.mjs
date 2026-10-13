@@ -35,21 +35,57 @@ test("the usage chart and token counting are gone", () => {
   assert.doesNotMatch(readFileSync(join(ROOT, "site", "worker.js"), "utf8"), /recordUsage|buildUsage|\/api\/usage/);
 });
 
-test("the model and effort choosers sit under the message box, show their current choice, and Haiku has no effort chooser", () => {
-  // the buttons are in the bar under the text, not in the top bar, and show the model and effort rather than a fixed label
-  assert.match(html, /<div class="c-row">[\s\S]*id="modelBtn"[\s\S]*id="effortBtn"[\s\S]*id="ctxBtn"[\s\S]*id="sendBtn"/);
-  assert.doesNotMatch(html, /pickerBtn|picker-btn|renderPickerBtn/);
-  assert.match(script, /\$\("modelName"\)\.textContent = m\.name/);
-  assert.match(script, /\$\("effortName"\)\.textContent = EFF_LABEL\[e\]/);
-  // Haiku is the model without efforts, and its chooser is hidden rather than shown empty
-  assert.match(script, /id: "claude-haiku-5-5"[^\n]*efforts: \[\]/);
-  assert.match(script, /\$\("effortBtn"\)\.hidden = !m\.efforts\.length/);
+test("the model switcher is at the top, like ChatGPT's: the model and its effort, and every model has every effort", () => {
+  // one button in the top bar with the model, then the effort in grey; no effort button or stairs anywhere else
+  assert.match(html, /<header class="top">[\s\S]*?<button class="ms" id="modelBtn"[^>]*><span id="modelName">[^<]*<\/span><span class="sub" id="effortName">[\s\S]*?<\/header>/);
+  assert.doesNotMatch(html, /id="effortBtn"|id="effortMenu"|class="stairs"|pickerBtn|picker-btn|renderPickerBtn|id="topTitle"/);
+  assert.match(script, /put\("modelName", m\.name\)/);
+  assert.match(script, /put\("effortName", EFF_LABEL\[e\]\)/);
+  // a model with no effort setting has nothing after its name; the free plan has no effort at all
+  assert.match(script, /\$\("effortName"\)\.hidden = !effortsOf\(m\)\.length/);
+  assert.match(lift("renderBar"), /if \(freePlan\(\)\) \{[\s\S]*?\$\("effortName"\)\.hidden = true;/);
+  // Claude Code gives every model every effort now, Haiku 5.5 included; Ultracode only when the computer's Claude Code knows it
+  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF", "medium"]]);
+  assert.match(script, /const EFF = \["low", "medium", "high", "xhigh", "max", "ultracode"\];/);
+  assert.match(script, /e !== "ultracode" \|\| !!\(S\.state && S\.state\.agent && S\.state\.agent\.ultracode\)/);
   assert.doesNotMatch(html, /answers without an effort setting/);
 });
 
-test("the bar has add file and the permission mode on the left, no Claude / Claude Code switch, and no record button", () => {
-  const left = /<div class="c-row">([\s\S]*?)<div class="c-right">/.exec(html)[1];
-  assert.ok(left.indexOf('id="attachBtn"') < left.indexOf('id="permBtn"'));
+test("the model switcher's menu has an Effort section with every level, and Ultracode only when the computer has it", () => {
+  const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
+  const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
+  const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
+  const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, plan: "paid", ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
+  let menu = ctx.popEffort();
+  assert.match(menu, /^<hr><div class="mh">Effort<\/div>/, "under the models, after a line");
+  assert.deepEqual([...menu.matchAll(/data-effort="(\w+)"/g)].map(m => m[1]), ["low", "medium", "high", "xhigh", "max", "ultracode"]);
+  assert.match(menu, /data-effort="medium"[^>]*aria-checked="true"/, "the model's default is ticked");
+  assert.match(menu, /<b>Extra high<\/b>/);
+  assert.match(menu, /<b>Ultracode<\/b><small>Extra high effort, and big tasks are split across many agents working at once\. Uses much more of your plan\.<\/small>/);
+  ctx.S.efforts["claude-opus-5-5"] = "ultracode";
+  assert.match(ctx.popEffort(), /data-effort="ultracode"[^>]*aria-checked="true"/);
+  ctx.S.state.agent.ultracode = false;
+  menu = ctx.popEffort();
+  assert.doesNotMatch(menu, /ultracode/i, "a computer whose Claude Code doesn't know it");
+  assert.match(menu, /data-effort="medium"[^>]*aria-checked="true"/, "and a stored Ultracode falls back to the default");
+  // a pick there changes the effort of the model that's picked, and the switcher shows it
+  assert.match(script, /const eff = e\.target\.closest\("\[data-effort\]"\);\n  if \(eff\) return pick\(\(\) => \{ S\.efforts\[modelNow\(\)\] = eff\.dataset\.effort;/);
+  assert.match(lift("popModel"), /popEffort\(\) \+ noteHtml\(\)/);
+});
+
+test("the message box is one row like ChatGPT's: + on the left, the permission pill, ring and send on the right; no mode switch and no record button", () => {
+  const lead = /<div class="c-lead">([\s\S]*?)<\/div>/.exec(html)[1];
+  assert.ok(lead.indexOf('id="attachBtn"') >= 0 && lead.indexOf('id="attachBtn"') < lead.indexOf('id="thinkBtn"'), "+, then the free plan's Thinking pill");
+  const trail = /<div class="c-trail">([\s\S]*?)<\/form>/.exec(html)[1];
+  const at = id => trail.indexOf(`id="${id}"`);
+  assert.ok(at("permBtn") >= 0 && at("permBtn") < at("ctxBtn") && at("ctxBtn") < at("sendBtn"), "the permission pill, the context ring, then send");
+  assert.match(html, /<textarea id="input" rows="1" placeholder="Ask anything"/);
+  assert.match(html, /\.composer\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;grid-template-areas:"lead main trail";[^}]*min-height:56px;padding:10px;border-radius:28px/);
+  assert.match(html, /\.composer\.tall\{grid-template-areas:"chips chips chips" "main main main" "lead \. trail"/);
+  // the free plan's extended thinking is a pill of its own, not the reasoning block's class (which pushed it out of line)
+  assert.match(html, /<button type="button" class="c-pill" id="thinkBtn" aria-pressed="false" hidden>/);
+  assert.match(html, /\.msg \.think\{/);
   // everything runs as Claude Code (or, on the free plan, in the Claude app): there's nothing to switch between
   assert.doesNotMatch(html, /data-mode=|id="modes"|MODE_NAME|modeNow|Plain chat with Claude/);
   assert.doesNotMatch(html, /record|dictat|microphone|id="mic/i);
@@ -62,12 +98,122 @@ test("the bar has add file and the permission mode on the left, no Claude / Clau
   assert.doesNotMatch(script, /bypassPermissions/);
 });
 
-test("on a phone the permission mode gets a row of its own at the bottom of the box", () => {
-  // the mode control is its own group, a sibling of add file and the right-hand controls, so CSS can move just it
-  assert.match(html, /<\/button>\s*<input type="file" id="fileInput" multiple hidden>\s*<div class="c-modes">\s*<button type="button" class="c-btn" id="permBtn"[\s\S]*?<div class="c-right">/);
-  const phone = /@media \(max-width:700px\)\{([\s\S]*?)\n\}/.exec(html)[1];
-  assert.match(phone, /\.c-modes\{order:3;flex:1 1 100%/, "after everything else, taking a whole row");
-  assert.match(phone, /\.c-right\{order:2\}/);
+test("the message box grows to two rows only when the text wraps or files are attached, and goes back to one row once it's empty", () => {
+  const cls = new Set();
+  const box = { classList: { contains: c => cls.has(c), toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)), add: c => cls.add(c) } };
+  const input = { value: "", scrollHeight: 24, style: {} };
+  const ctx = { $: () => box, input, S: { files: [] }, window: { innerHeight: 900 } };
+  vm.runInNewContext(lift("grow") + "this.grow = grow;", ctx);
+  ctx.grow();
+  assert.equal(cls.has("tall"), false, "empty");
+  input.value = "hi";
+  ctx.grow();
+  assert.equal(cls.has("tall"), false, "one line");
+  input.value = "a line long enough to wrap";
+  input.scrollHeight = 48;
+  ctx.grow();
+  assert.equal(cls.has("tall"), true, "wraps");
+  input.scrollHeight = 28;
+  ctx.grow();
+  assert.equal(cls.has("tall"), true, "stays open while there's text, so it doesn't jump back and forth");
+  assert.equal(input.style.height, "28px");
+  input.value = "";
+  input.scrollHeight = 24;
+  ctx.grow();
+  assert.equal(cls.has("tall"), false, "cleared");
+  ctx.S.files = [{ name: "a.txt" }];
+  ctx.grow();
+  assert.equal(cls.has("tall"), true, "attached files show above the text");
+  ctx.S.files = [];
+  input.value = "a\nb";
+  ctx.grow();
+  assert.equal(cls.has("tall"), true, "a line break");
+  // a phone keeps the same one row: nothing moves the controls onto rows of their own
+  assert.doesNotMatch(html, /c-modes|c-right|c-row|@media \(max-width:700px\)/);
+  assert.match(lift("renderChips"), /grow\(\);/);
+});
+
+test("the colours are ChatGPT's, and the two dark blocks (System when the computer is dark, and Dark) are the same", () => {
+  const light = /:root\{\n([\s\S]*?)\n\}/.exec(html)[1];
+  const system = /@media \(prefers-color-scheme:dark\)\{\n  :root:not\(\[data-theme="light"\]\)\{\n([\s\S]*?)\n  \}\n\}/.exec(html)[1];
+  const forced = /:root\[data-theme="dark"\]\{\n([\s\S]*?)\n\}/.exec(html)[1];
+  const tidy = b => b.split("\n").map(l => l.trim()).join("\n");
+  assert.equal(tidy(system), tidy(forced));
+  // a few of the values that make it look like ChatGPT: the page, the sidebar, the text, the user's bubble, send
+  for (const v of ["--surface:#ffffff", "--surface-2:#f9f9f9", "--text:#0d0d0d", "--text-2:#5d5d5d", "--user:rgba(233,233,233,.5)", "--solid:#000000", "--solid-off:#d7d7d7"]) assert.ok(light.includes(v), v);
+  for (const v of ["--surface:#212121", "--surface-2:#181818", "--text:#ffffff", "--composer:#303030", "--user:rgba(50,50,50,.85)", "--solid:#ffffff", "--solid-off:#676767"]) assert.ok(forced.includes(v), v);
+  // every variable used in light is set again for dark
+  const names = b => [...b.matchAll(/(--[\w-]+):/g)].map(m => m[1]).sort();
+  assert.deepEqual(names(forced), names(light).filter(n => n !== "--mono"));
+  // OpenAI's syntax colours, through highlight.js's classes
+  assert.match(html, /\.hljs-keyword,[^{]*\{color:var\(--hl-2\)\}/);
+  assert.match(html, /\.hljs-string,[^{]*\{color:var\(--hl-3\)\}/);
+  assert.match(html, /\.hljs-title,[^{]*\{color:var\(--hl-1\)\}/);
+  assert.match(html, /\.hljs-number,[^{]*\{color:var\(--hl-5\)\}/);
+});
+
+test("the icons are ChatGPT's filled 24px glyphs, drawn at 20px", () => {
+  const icons = /const I = \{\n([\s\S]*?)\n\};/.exec(script)[1];
+  const lines = icons.split(",\n");
+  assert.ok(lines.length >= 25);
+  for (const l of lines) assert.match(l, /^  \w+: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">/, l.slice(0, 40));
+  assert.doesNotMatch(icons, /stroke-width/);
+  // and the ones in the page itself: the sidebar, the top bar, the message box
+  for (const id of ["hideSide", "newChat", "openSide", "attachBtn", "sendBtn", "jump", "chatMore"]) {
+    assert.match(html, new RegExp(`id="${id}"[^>]*>(?:<i></i>)?<svg viewBox="0 0 24 24" fill="currentColor"`), id);
+  }
+});
+
+test("the page calls its assistant by the site's name, never Claude", () => {
+  assert.ok(script.includes('$("legal").textContent = `${CFG.name} can make mistakes. Check important info.`;'));
+  const ui = html.split("\n").filter(l => !/^\s*(\/\/|\/\*)/.test(l)).join("\n"); // what shows, not the notes in the code
+  assert.doesNotMatch(ui, /Claude can make mistakes|Claude Code is waiting|Claude thinks longer|Claude gives you|Claude says|folder Claude work|Claude Code decides|· Claude app`/);
+  // nothing that shows says Claude at all: the desktop app, your plan and your account need no product name, and the
+  // links to claude.ai keep saying where to go
+  const shown = ui.replace(/claude\.ai|ClaudeConnect|claude-[a-z0-9-]+|claude auth login/g, "");
+  assert.deepEqual(shown.split("\n").filter(l => /Claude/.test(l)).map(l => l.trim().slice(0, 80)), []);
+  // a model the Claude app hasn't named yet shows as the site, the way ChatGPT's switcher says "ChatGPT"
+  assert.match(lift("appModelName"), /\|\| CFG\.name;/);
+  // locked models in the free plan's menu say what they need without the product's name
+  assert.match(lift("popModel"), /Needs a paid plan/);
+});
+
+test("the top bar has the model switcher, the update button and the chat's ⋯; the sidebar has ChatGPT's shortcuts", () => {
+  const top = /<header class="top">([\s\S]*?)<\/header>/.exec(html)[1];
+  const at = id => top.indexOf(`id="${id}"`);
+  assert.ok(at("openSide") < at("modelBtn") && at("modelBtn") < at("updatePill") && at("updatePill") < at("chatMore"));
+  // the update button is a plain one in the top bar (ChatGPT's ghost button), and only an icon on a phone
+  assert.match(lift("renderPill"), /else if \(updateAvailable\(u\)\) \{ text = "Update"; short = ""; \}/);
+  assert.match(html, /\.pill\.solo\{width:40px;padding:0;justify-content:center\}/);
+  // the chat's ⋯ is there in a chat, with the same Rename and Delete as its row in the sidebar
+  assert.match(lift("renderBar"), /\$\("chatMore"\)\.hidden = !S\.chatId;/);
+  assert.match(script, /\$\("chatMore"\)\.onclick = e => \{ e\.stopPropagation\(\); if \(S\.chatId\) chatMenu\(\$\("chatMore"\), S\.chatId, true, e\.detail === 0\); \};/);
+  assert.match(script, /chatMenu\(more, more\.dataset\.more, false, e\.detail === 0\);/);
+  // Ctrl+Shift+O (⇧⌘O) starts a chat and Ctrl+K (⌘K) searches, shown next to the two in the sidebar
+  assert.match(html, /<kbd data-keys="shift\+o" aria-hidden="true">Ctrl Shift O<\/kbd>/);
+  assert.match(html, /<kbd data-keys="k" aria-hidden="true">Ctrl K<\/kbd>/);
+  assert.match(script, /if \(k === "o" && e\.shiftKey\) \{\n    e\.preventDefault\(\);\n    newChat\(true\);/);
+  assert.match(script, /\} else if \(k === "k" && !e\.shiftKey\) \{[\s\S]*?\$\("search"\)\.focus\(\);/);
+});
+
+test("a message, a reply and a code block are laid out like ChatGPT's", () => {
+  // a bubble that wraps gets more room around its text
+  const els = [];
+  const bubble = (h, multi, text) => { const c = new Set(multi ? ["multi"] : []); const b = { offsetHeight: h, textContent: text || "x", classList: { contains: k => c.has(k), toggle: (k, on) => (on ? c.add(k) : c.delete(k)) }, c }; els.push(b); return b; };
+  const one = bubble(36), two = bubble(72), back = bubble(48, true), hidden = bubble(0);
+  const ctx = { $: () => ({ querySelectorAll: () => els }) };
+  vm.runInNewContext(lift("fitBubbles") + "fitBubbles();", ctx);
+  assert.equal(one.c.has("multi"), false);
+  assert.equal(two.c.has("multi"), true);
+  assert.equal(back.c.has("multi"), false, "a bubble of one line with the wider padding goes back to the narrow one");
+  assert.equal(hidden.c.has("multi"), false, "not measured while it isn't shown");
+  assert.match(html, /\.bubble\{max-width:70%;background:var\(--user\);padding:6px 16px;border-radius:18px;[^}]*line-height:24px\}/);
+  assert.match(html, /\.bubble\.multi\{padding:12px 16px\}/);
+  // the code block's header is the block's own colour and says "Copy code"
+  assert.match(script, /<button type="button" data-copy-code>\$\{I\.copy\}<span>Copy code<\/span><\/button>/);
+  assert.match(html, /\.code-head\{position:sticky;top:0;[^}]*background:var\(--code\)/);
+  // tables have no box around them, just lines between the rows
+  assert.match(html, /\.md \.table\{overflow-x:auto;margin:2em 0\}/);
 });
 
 test("there is no pencil in the top corner", () => {
@@ -287,8 +433,10 @@ test("bringing chats over from claude.ai's export is gone, and chats brought ove
 // The model picker and the bar, lifted out with stand-ins for what they read.
 function picker(state, extra = {}) {
   const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
-  const ctx = { EFF: [], TICK: "", I: { info: "" }, APP_DEFAULT: "app-default", APP: { loading: false }, DEFAULT_MODEL: "claude-opus-5-5", S: { model: "claude-fable-5-1", appModel: "app-default", state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
-  vm.runInNewContext(`const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "freePlan", "fableOk", "paidModels", "appInfo", "appModels", "appModelNow", "appModelName", "modelNow", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
+  const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
+  const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
+  const ctx = { TICK: "", I: { info: "", lock: "" }, APP_DEFAULT: "app-default", APP: { loading: false }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", appModel: "app-default", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "freePlan", "fableOk", "paidModels", "appInfo", "appModels", "appModelNow", "appModelName", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
   return ctx;
 }
 
@@ -297,6 +445,8 @@ test("Fable 5.1 is only in the model picker when there are usage credits to spen
   let p = picker({ agent: { online: true, plan: "paid" }, fable: { available: true } });
   assert.match(p.popModel(), /<b>Fable 5\.1<\/b>[\s\S]*?<span class="tag">Uses usage credits<\/span>/);
   assert.equal(p.modelNow(), "claude-fable-5-1");
+  // the models, then the picked model's efforts, as one menu
+  assert.match(p.popModel(), /^<div class="mh">Model<\/div>[\s\S]*data-model="claude-haiku-5-5"[\s\S]*<div class="mh">Effort<\/div>[\s\S]*data-effort="max"/);
   for (const why of ["out", "off", "none", "site", "unknown"]) {
     p = picker({ agent: { online: true, plan: "paid" }, fable: { available: false, why } });
     assert.doesNotMatch(p.popModel(), /Fable/, why);
@@ -311,14 +461,15 @@ test("on the free plan the model picker lists the Claude app's own models, and n
   const p = picker({ agent: { online: true, plan: "free", app }, fable: { available: true } }, { appModel: "claude-opus-5-5" });
   const menu = p.popModel();
   assert.doesNotMatch(menu, /Fable|Haiku/, "Claude Code's models aren't these");
+  assert.doesNotMatch(menu, /data-effort|Effort/, "and the free plan has no effort");
   assert.match(menu, /data-model="app-default"[\s\S]*now Sonnet 5\.5/);
-  assert.match(menu, /data-model="claude-opus-5-5" type="button" disabled aria-disabled="true"><b>Opus 5\.5<\/b>[\s\S]*Needs a paid Claude plan/);
+  assert.match(menu, /data-model="claude-opus-5-5" type="button" role="menuitemradio" aria-checked="false" disabled aria-disabled="true"><span class="tx"><b>Opus 5\.5<\/b>[\s\S]*?<span class="tag">Needs a paid plan<\/span>/);
   assert.equal(p.modelNow(), "app-default", "a locked model picked before isn't sent");
   p.S.appModel = "claude-sonnet-5-5";
   assert.equal(p.modelNow(), "claude-sonnet-5-5");
   // before the app has said what it has, the picker says where they come from, and asks the computer to read them
   const empty = picker({ agent: { online: true, plan: "free", app: null }, fable: {} });
-  assert.match(empty.popModel(), /The Claude app's models show here once it has opened on your computer/);
+  assert.match(empty.popModel(), /The desktop app's models show here once it has opened on your computer/);
   assert.match(lift("openPop"), /if \(name === "model"\) refreshAppModels\(\);/);
   assert.match(lift("refreshAppModels"), /apiJson\("\/api\/app\/refresh"/);
 });
@@ -348,7 +499,7 @@ test("there's no setting for the credit balance or for which chats are listed; t
   assert.match(pc, /data-pc="autostart"/);
   assert.match(pc, /Makes it a startup item on this computer/);
   assert.match(pc, /id="fWs"/);
-  assert.match(script, /const PLAN_KINDS = \[\["paid", "I pay for Claude"\], \["free", "Free plan"\]\];/);
+  assert.match(script, /const PLAN_KINDS = \[\["paid", "Paid plan"\], \["free", "Free plan"\]\];/);
   // switching the plan is confirmed, since it changes where replies come from
   assert.match(lift("setComputer"), /if \(key === "plan" && !confirm\(/);
 });
@@ -384,7 +535,10 @@ test("something waiting on the computer shows over the page, escaped, and the an
   vm.runInNewContext(lift("showRemote") + lift("hideRemote") + "this.showRemote = showRemote; this.hideRemote = hideRemote;", ctx);
   ctx.showRemote({ id: "a1", kind: "permission", title: "Run a command", detail: "rm -rf <build>", at: 1 });
   assert.equal(els.remote.hidden, false);
-  assert.equal(els.rName.textContent, "Claude Code");
+  // the question comes from the site's own assistant, by the site's name
+  assert.equal(els.rName.textContent, "Site");
+  assert.match(els.rBody.innerHTML, /<p class="rnote">Site is asking, and waits for your answer\./);
+  assert.doesNotMatch(els.rBody.innerHTML, /Claude/);
   assert.match(els.rBody.innerHTML, /<pre>rm -rf &lt;build><\/pre>/);
   assert.match(els.rBody.innerHTML, /data-ranswer="deny">Deny<\/button><button class="btn primary" type="button" data-ranswer="allow">Allow<\/button>/);
   ctx.hideRemote("someone-else");
@@ -393,7 +547,7 @@ test("something waiting on the computer shows over the page, escaped, and the an
   assert.equal(els.remote.hidden, true);
   // the Claude app's window: a picture to click, and its buttons
   ctx.showRemote({ id: "s1", kind: "screen", title: "Allow Claude to read <x>?", image: "QUJD", buttons: [{ label: "Deny" }, { label: "Allow once" }], at: 2 });
-  assert.equal(els.rName.textContent, "Claude app on your computer");
+  assert.equal(els.rName.textContent, "Desktop app on your computer", "a window of the desktop app, which you answer as if you were at it");
   assert.match(els.rBody.innerHTML, /<button class="rshot" type="button" data-rshot[^>]*><img src="data:image\/jpeg;base64,QUJD"/);
   assert.match(els.rBody.innerHTML, /data-rbutton="0">Deny<\/button><button class="btn primary" type="button" data-rbutton="1">Allow once<\/button>/);
   assert.match(els.rBody.innerHTML, /Allow Claude to read &lt;x>\?/);
