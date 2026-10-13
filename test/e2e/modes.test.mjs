@@ -66,6 +66,33 @@ test("every permission mode is passed on, anything else falls back, and there is
 });
 const pick = r => ({ mode: r.mode, perm: r.perm });
 
+test("every model takes every effort, and Ultracode goes to a computer that knows it, or becomes Extra high", async t => {
+  const { s, agent } = await ready(t, { caps: ["update", "admin", "limits", "modes", "history", "ultracode"] });
+  assert.equal((await s.api("/api/state")).body.agent.ultracode, true);
+  const run = async body => {
+    const sent = await sendAs(s, body);
+    const r = await agent.next(m => m.type === "run");
+    agent.send({ type: "done", runId: r.runId, chatId: r.chatId, text: "ok", started: true, tools: [] });
+    await sent.text();
+    return [r.model, r.effort];
+  };
+  for (const model of ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]) {
+    for (const effort of ["low", "medium", "high", "xhigh", "max", "ultracode"]) assert.deepEqual(await run({ model, effort }), [model, effort]);
+  }
+  assert.deepEqual(await run({ model: "claude-haiku-5-5", effort: "turbo" }), ["claude-haiku-5-5", null], "an effort that doesn't exist isn't passed on");
+
+  const old = await startSite({ appVersion: "1.3.1" });
+  t.after(() => old.stop());
+  await old.claim();
+  const oldAgent = await connectAgent(old);
+  assert.equal((await old.api("/api/state")).body.agent.ultracode, false);
+  const sent = await old.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "hi", model: "claude-opus-5-5", effort: "ultracode" }) });
+  const r = await oldAgent.next(m => m.type === "run");
+  assert.equal(r.effort, "xhigh", "Ultracode is Extra high plus workflows: without them it's Extra high");
+  oldAgent.send({ type: "done", runId: r.runId, chatId: r.chatId, text: "ok", started: true, tools: [] });
+  await sent.text();
+});
+
 test("asking first is passed on when the computer can ask on the site", async t => {
   const { s, agent } = await ready(t, { caps: ["update", "admin", "limits", "modes", "history", "ask"] });
   assert.equal((await s.api("/api/state")).body.agent.ask, true);
@@ -231,7 +258,15 @@ test("the reply says how full the context is, from the last request and the mode
   assert.deepEqual(done.message.meta.context, { used: 410, window: 200000 });
 });
 
-test("a real agent says it can do modes", async t => {
-  const { site } = await boot(t);
-  assert.equal((await site.api("/api/state")).body.agent.modes, true);
+test("a real agent says it can do modes and Ultracode, and passes Ultracode to Claude Code as an effort", async t => {
+  const { site, chat, runWith } = await boot(t);
+  const st = (await site.api("/api/state")).body.agent;
+  assert.equal(st.modes, true);
+  assert.equal(st.ultracode, true, "this Claude Code is new enough");
+  await chat({ text: "ultra run", effort: "ultracode" });
+  assert.equal(flag(await runWith("ultra run"), "--effort"), "ultracode");
+  await chat({ text: "haiku run", model: "claude-haiku-5-5", effort: "max" });
+  const args = await runWith("haiku run");
+  assert.equal(flag(args, "--model"), "claude-haiku-5-5");
+  assert.equal(flag(args, "--effort"), "max");
 });

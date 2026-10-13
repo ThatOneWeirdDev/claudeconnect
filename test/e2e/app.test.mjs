@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { startSite } from "../helpers/site.mjs";
 import { makeComputer } from "../helpers/computer.mjs";
-import { startFakeClaude, findChromium, closeBrowser } from "../helpers/fake-claude-app.mjs";
+import { startFakeClaude, findChromium, closeBrowser, fakeClaudeApp, freePort } from "../helpers/fake-claude-app.mjs";
+import { attachTo } from "../helpers/browser.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const CHROME = await findChromium();
@@ -30,10 +31,12 @@ async function boot(t, more = {}) {
   const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9", oldVersion: "2.0.0" });
   const cfg = JSON.parse(pc.read("config.json"));
   cfg.plan = "free";
+  cfg.appPort = await freePort();
   writeFileSync(join(pc.dir, "config.json"), JSON.stringify(cfg));
-  // no Claude app here: the browser window takes its place, headless for the tests, and kept off the internet
-  const quiet = "--disable-background-networking --disable-component-update --disable-sync --disable-default-apps --no-pings";
-  const env = { ...pc.env, CLAUDECONNECT_APP_URL: fake.url, CLAUDECONNECT_CLAUDE_APP: "", CLAUDECONNECT_BROWSER: CHROME, CLAUDECONNECT_BROWSER_ARGS: `--headless=new --no-sandbox --disable-gpu ${quiet}`, ...more };
+  // the Claude app: a headless Chromium on the claude.ai stand-in, started by the agent with its debugging port
+  const app = await fakeClaudeApp(pc.dir, fake.url, CHROME);
+  // the stand-in driver: the real one goes through macOS or Windows accessibility, which a test here can't
+  const env = { ...pc.env, CLAUDECONNECT_APP_URL: fake.url, CLAUDECONNECT_CLAUDE_APP: app, CLAUDECONNECT_APP_DRIVER: "cdp", ...more };
   const agent = spawn(process.execPath, [join(pc.dir, "agent.mjs"), "run"], { env, stdio: "ignore" });
   t.after(async () => {
     agent.kill("SIGKILL");
@@ -43,7 +46,7 @@ async function boot(t, more = {}) {
     await fake.close();
   });
   await until(async () => (await site.api("/api/state")).body.agent.online, "the agent to connect");
-  return { site, pc, fake };
+  return { site, pc, fake, port: cfg.appPort };
 }
 
 async function chat(site, body, onEvent) {
@@ -77,15 +80,20 @@ test("on the free plan, a message is typed into the Claude app with its model an
   assert.equal(st.history, false, "no Claude Code chats on the free plan");
   assert.equal(st.modes, false, "no Claude Code permission modes either");
 
-  // the model picker asks for the app's own models
+  // asking for the app's models doesn't open the app: they're read after a message, while it's open anyway
   assert.equal((await site.post("/api/app/refresh")).status, 200);
+  await sleep(1500);
+  assert.equal(fake.state.conversations.size, 0);
+  assert.ok(!((await site.api("/api/state")).body.agent.app || { models: [] }).models.length, "nothing read, nothing opened");
+  const hi = await chat(site, { text: "hello there" });
+  assert.equal(hi.find(e => e.type === "done").message.meta.error, null);
   const app = await until(async () => {
     const a = (await site.api("/api/state")).body.agent.app;
     return a && a.models.length ? a : null;
   }, "the app's models");
   assert.deepEqual(app.models.map(m => [m.id, m.name, m.locked]), [["claude-sonnet-5-5", "Sonnet 5.5", false], ["claude-haiku-5-5", "Haiku 5.5", false], ["claude-opus-5-5", "Opus 5.5", true]]);
   assert.equal(app.thinking, false);
-  assert.equal(app.kind, "browser", "a browser window in place of the Claude app");
+  assert.equal(app.kind, "app", "the Claude app, started with its debugging connection");
 
   const events = await chat(site, { text: "first question\nwith two lines", model: "claude-haiku-5-5", think: true });
   const statuses = events.filter(e => e.type === "status").map(e => e.text);
@@ -105,8 +113,8 @@ test("on the free plan, a message is typed into the Claude app with its model an
   // the next message in the chat carries on in the same conversation in the app
   const again = await chat(site, { chatId, text: "make a table please" });
   assert.match(again.find(e => e.type === "done").message.content, /\| Name \| Count \|\n\| --- \| --- \|\n\| apples \| 3 \|/);
-  assert.equal(fake.state.conversations.size, 1);
-  assert.equal([...fake.state.conversations.values()][0].chat_messages.length, 2);
+  assert.equal(fake.state.conversations.size, 2, "one for the first chat, one for this one");
+  assert.equal([...fake.state.conversations.values()][1].chat_messages.length, 2);
 
   // a model that needs a paid plan isn't sent
   const locked = await chat(site, { chatId, text: "locked model", model: "claude-opus-5-5" });
@@ -147,7 +155,7 @@ test("a window in the Claude app that waits for an answer shows on the site, and
   assert.ok(q, "the window was shown");
   assert.ok(left.some(e => e.type === "remote_done" && e.id === q.remote.id), "and taken down");
   const done = left.find(e => e.type === "done").message;
-  assert.equal(done.meta.error, "Nobody answered the Claude app's question in time, so it was closed and the reply stopped. Send again to carry on.");
+  assert.equal(done.meta.error, "Nobody answered the desktop app's question in time, so it was closed and the reply stopped. Send again to carry on.");
   assert.doesNotMatch(done.content, /Allow once/);
 });
 
@@ -155,6 +163,15 @@ test("out of free messages, stopping, and a signed-out app each say so", { skip:
   const { site, fake } = await boot(t);
   const out = await chat(site, { text: "you are out of messages" });
   assert.equal(out.find(e => e.type === "done").message.meta.error, "You're out of free messages until 4:00 PM");
+  // nothing more is typed into the app until then: the site says so straight away
+  const held = await until(async () => {
+    const r = await site.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "one more?", model: "app-default" }) });
+    return r.status === 409 ? r.json() : (await r.text(), null);
+  }, "the next message to be held");
+  assert.equal(held.code, "limit");
+  assert.ok(held.resetsAt > Date.now() / 1000, "with when it resets");
+  // the limit's over (the app would say so by taking a message)
+  await site.setLimits({ status: "allowed", windows: {} });
 
   const stopped = await chat(site, { text: "write slowly please" }, async (ev, all) => {
     if (ev.type === "delta" || ev.type === "replace") {
@@ -171,5 +188,48 @@ test("out of free messages, stopping, and a signed-out app each say so", { skip:
 
   fake.state.signedIn = false;
   const signedOut = await chat(site, { text: "anyone there?" });
-  assert.equal(signedOut.find(e => e.type === "done").message.meta.error, "Sign in to Claude in the Claude app on your computer, then send again.");
+  assert.equal(signedOut.find(e => e.type === "done").message.meta.error, "Sign in to the desktop app on your computer, then send again.");
+});
+
+test("a Stop button on the Claude app's own window takes it back at once, and it's left alone until the site lets it use it again", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const { site, fake, port } = await boot(t);
+  let app = null;
+  t.after(() => app && app.close());
+  let sawBar = false;
+  const events = await chat(site, { text: "write slowly please" }, async ev => {
+    if ((ev.type !== "delta" && ev.type !== "replace") || app) return;
+    // the person at the computer sees the bar on the app's window, and clicks its Stop button
+    app = await attachTo(port);
+    sawBar = !!(await app.boxOf("Test Site is reading the reply in the desktop app"));
+    const stop = await app.boxOf("Stop Test Site");
+    assert.ok(stop, "the bar has a Stop button");
+    await app.clickAt(stop);
+  });
+  assert.ok(sawBar, "while it uses the app, the app's window says so");
+  const done = events.find(e => e.type === "done").message;
+  assert.match(done.meta.error, /You took back the desktop app on your computer, so Test Site stopped using it/);
+  assert.match(done.content, /^You/, "what had arrived of the reply is kept");
+  // it let go: the bar is gone, and nothing was clicked after Stop (the reply in the app carries on by itself)
+  await until(async () => !(await app.boxOf("Stop Test Site")) && !(await app.boxOf("Stopping…")), "the bar to go");
+  const st = await until(async () => {
+    const a = (await site.api("/api/state")).body.agent.app;
+    return a && a.paused ? a : null;
+  }, "the site to know it was stopped");
+  assert.equal(st.paused, true);
+
+  // while it's stopped, a message isn't typed into the app: it says why straight away
+  const sent = fake.state.conversations.size;
+  const waits = await chat(site, { text: "are you there?" });
+  assert.match(waits.find(e => e.type === "done").message.meta.error, /won't touch the app again until you let it/);
+  assert.equal(fake.state.conversations.size, sent, "nothing new in the app");
+
+  // the site lets it use the app again, and the next message goes through
+  assert.equal((await site.post("/api/app/resume")).status, 200);
+  await until(async () => (await site.api("/api/state")).body.agent.app.paused === false, "the computer to be allowed again");
+  const again = await chat(site, { text: "hello again" });
+  const ok = again.find(e => e.type === "done").message;
+  assert.equal(ok.meta.error, null);
+  assert.match(ok.content, /You said: hello again/);
+  // once it's done with the app (the reply, then a look at the app's model menu, which it hadn't read yet), the bar goes
+  await until(async () => !(await app.boxOf("Stop Test Site")), "the bar to go once it's done");
 });

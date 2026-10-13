@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup</title>
+<style>
+:root{--bg:#ffffff;--side:#f9f9f9;--card:#ffffff;--line:#0d0d0d1a;--line-2:#0d0d0d0d;--text:#0d0d0d;--text-2:#5d5d5d;--text-3:#8f8f8f;--hover:#0d0d0d0d;--btn:#0d0d0d;--btn-text:#ffffff;--soft:#f4f4f4;--ok:#10a37f;--err:#e02e2a;--err-bg:#fdecec;--warn-bg:#fff6e5;--warn:#8a5a00;--link:#2964aa;--focus:#0d0d0d33;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#212121;--side:#181818;--card:#212121;--line:#ffffff1a;--line-2:#ffffff0d;--text:#ececec;--text-2:#b4b4b4;--text-3:#8f8f8f;--hover:#ffffff0f;--btn:#ffffff;--btn-text:#0d0d0d;--soft:#303030;--ok:#10a37f;--err:#f87171;--err-bg:#3b1f1f;--warn-bg:#3a2f16;--warn:#f5c565;--link:#7ab7ff;--focus:#ffffff40;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.5 ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--link)}
+.app{display:grid;grid-template-columns:260px 1fr;min-height:100%}
+aside{background:var(--side);padding:14px 10px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line-2)}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 18px}
+.brand .logo{width:28px;height:28px;border-radius:8px;background:var(--btn);color:var(--btn-text);display:grid;place-items:center;font-weight:700;font-size:15px;overflow:hidden}
+.brand .logo img{width:100%;height:100%;object-fit:cover}
+.brand b{font-weight:600;font-size:15px}
+.brand small{display:block;color:var(--text-3);font-size:12px}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:14px;color:var(--text-2)}
+.steps li.now{background:var(--hover);color:var(--text);font-weight:500}
+.steps li.done{color:var(--text-2)}
+.steps .ic{width:18px;height:18px;flex:none;display:grid;place-items:center}
+.steps .ic svg{width:16px;height:16px}
+.steps li.done .ic{color:var(--ok)}
+.steps li.bad .ic{color:var(--err)}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--text);animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+main{display:flex;justify-content:center;padding:48px 24px 64px;overflow:auto}
+.col{width:100%;max-width:640px}
+h1{font-size:28px;line-height:34px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+.lede{color:var(--text-2);margin:0 0 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 1px 2px #0000000a}
+.card h2{font-size:20px;line-height:28px;margin:0 0 6px;font-weight:600}
+.card .help{color:var(--text-2);margin:0 0 18px;font-size:15px}
+.card .help:empty{display:none}
+.notes{margin:0 0 16px;padding:0;list-style:none;color:var(--text-2);font-size:14px}
+.notes li{padding:3px 0}
+.notes li::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--text-3);margin:0 9px 2px 2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+button,.btn{font:inherit;font-size:15px;font-weight:500;border-radius:999px;padding:10px 18px;border:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;line-height:20px}
+button:hover,.btn:hover{background:var(--hover)}
+button.primary,.btn.primary{background:var(--btn);color:var(--btn-text);border-color:var(--btn)}
+button.primary:hover,.btn.primary:hover{opacity:.85;background:var(--btn)}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,.btn:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input[type=text]{width:100%;font:inherit;font-size:16px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--text);outline:none}
+input[type=text]:focus{border-color:var(--text-3)}
+label.field{display:block;font-size:14px;font-weight:500;margin:0 0 6px}
+.choices{display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+.choice{display:flex;gap:12px;align-items:flex-start;text-align:left;border-radius:14px;padding:12px 14px;width:100%}
+.choice.on{border-color:var(--text);box-shadow:0 0 0 1px var(--text) inset}
+.choice b{font-weight:500;display:block}
+.choice small{color:var(--text-2);font-size:13px;display:block}
+.choice .dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--text-3);flex:none;margin-top:3px}
+.choice.on .dot{border:5px solid var(--text)}
+.alert{border-radius:12px;padding:10px 14px;font-size:14px;margin:0 0 14px;background:var(--warn-bg);color:var(--warn)}
+.alert.err{background:var(--err-bg);color:var(--err)}
+.howto{margin:0 0 18px;padding:0;list-style:none;counter-reset:s}
+.howto li{position:relative;padding:0 0 16px 40px;counter-increment:s}
+.howto li::before{content:counter(s);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-size:13px;font-weight:600}
+.howto b{font-weight:600}
+.howto .path{display:inline-block;background:var(--soft);border-radius:6px;padding:0 6px;font-size:14px}
+.card-note{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 18px;font-size:14px;color:var(--text-2)}
+.card-note b{color:var(--text)}
+.wait{display:flex;align-items:center;gap:10px;color:var(--text-2);font-size:15px}
+.big-ok{width:44px;height:44px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;margin-bottom:14px}
+.big-ok svg{width:24px;height:24px}
+.linkbox{display:flex;align-items:center;gap:8px;background:var(--soft);border-radius:12px;padding:10px 12px;margin:0 0 16px;font-size:14px;word-break:break-all}
+details.log{margin-top:22px;font-size:13px;color:var(--text-2)}
+details.log summary{cursor:pointer;width:max-content;padding:4px 0;list-style:none}
+details.log summary::-webkit-details-marker{display:none}
+details.log summary::before{content:"›";display:inline-block;margin-right:6px;transition:transform .15s}
+details.log[open] summary::before{transform:rotate(90deg)}
+details.log pre{background:var(--soft);border-radius:12px;padding:12px 14px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:8px 0 0}
+.done-q{color:var(--text-2);font-size:14px;margin:0 0 6px}
+.done-q b{color:var(--text);font-weight:500}
+@media (max-width:760px){.app{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line-2)}.steps{display:flex;gap:4px;overflow:auto}.steps li{white-space:nowrap}main{padding:28px 16px 48px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><span class="logo" id="logo">C</span><span><b id="brandName">Setup</b><small id="brandVer"></small></span></div>
+    <ol class="steps" id="steps" aria-label="Steps"></ol>
+  </aside>
+  <main>
+    <div class="col">
+      <h1 id="title">Setting up</h1>
+      <p class="lede" id="lede">Answer a few questions here. Everything else happens by itself.</p>
+      <section class="card" id="card" aria-live="polite"></section>
+      <details class="log" id="logBox"><summary>Details</summary><pre id="log"></pre></details>
+    </div>
+  </main>
+</div>
+<script>
+(() => {
+const CFG = __SETUP__;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+const ICON = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+  ext: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>'
+};
+document.title = `Set up ${CFG.title}`;
+$("brandName").textContent = CFG.title;
+$("brandVer").textContent = CFG.version ? `Version ${CFG.version}` : "";
+$("logo").textContent = (CFG.title || "C").trim().charAt(0).toUpperCase();
+if (CFG.logo) $("logo").innerHTML = `<img alt="" src="${esc(CFG.logo)}">`;
+$("title").textContent = `Set up ${CFG.title}`;
+
+// Everything the setup has said, in order; the page is drawn from it, so a reload shows the same thing.
+const S = { steps: [], notes: [], since: [], ask: null, answered: [], special: null, end: null, log: [], after: 0, lost: 0, sending: false, pick: null };
+
+function apply(ev) {
+  if (ev.type === "step") {
+    for (const s of S.steps) if (s.state === "now") s.state = "done";
+    S.steps.push({ text: ev.text, state: "now" });
+    S.notes = [];
+    S.since = [];
+    S.answered = [];
+    if (S.special && S.special.type !== "done") S.special = null;
+  } else if (ev.type === "note") {
+    if (ev.text) S.notes.push(ev.text);
+    S.log.push(ev.text);
+  } else if (ev.type === "log") {
+    S.log.push(ev.text);
+    S.since.push(ev.text);
+  } else if (ev.type === "ask") {
+    S.ask = ev;
+    S.pick = ev.def != null ? String(ev.def) : null;
+  } else if (ev.type === "answered") {
+    if (S.ask && S.ask.id === ev.id) {
+      S.answered.push({ title: S.ask.title, value: shown(S.ask, ev.value) });
+      S.ask = null;
+    }
+    S.since = [];
+  } else if (ev.type === "access_status") {
+    S.access = { ok: !!ev.ok, text: ev.text || "" };
+  } else if (["access", "online", "done", "fatal", "cancelled"].includes(ev.type)) {
+    if (ev.type === "done" || ev.type === "fatal" || ev.type === "cancelled") {
+      S.end = ev;
+      for (const s of S.steps) if (s.state === "now") s.state = ev.type === "done" ? "done" : "bad";
+    }
+    S.special = ev;
+  }
+}
+// how an answer reads back: "Yes", the choice's name, the file's name
+function shown(q, v) {
+  if (q.kind === "yesno") return /^y/i.test(v) ? (q.yes || "Yes") : (q.no || "No");
+  if (q.kind === "choice") { const o = (q.options || []).find(o => String(o.value) === String(v)); return o ? o.label : v; }
+  if (q.kind === "image") return v ? (/^(default|none)$/i.test(v) ? "The built-in one" : v.split(/[\\/]/).pop().replace(/^[0-9a-f]{8}-/, "")) : (q.keepLabel || "Kept as it is");
+  if (q.kind === "continue" || q.kind === "access") return "";
+  return v || (q.def ? String(q.def) : "");
+}
+
+function stepsHtml() {
+  return S.steps.map(s => `<li class="${s.state}"${s.state === "now" ? ' aria-current="step"' : ""}><span class="ic">${s.state === "done" ? ICON.check : s.state === "bad" ? ICON.x : s.state === "now" ? (S.ask || S.special ? '<span class="spin" style="animation:none;border-top-color:var(--text-3)"></span>' : '<span class="spin"></span>') : ""}</span><span>${esc(s.text)}</span></li>`).join("");
+}
+function notesHtml() {
+  const a = S.answered.filter(x => x.value).map(x => `<p class="done-q">${esc(x.title)} <b>${esc(x.value)}</b></p>`).join("");
+  return a + (S.notes.length ? `<ul class="notes">${S.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : "");
+}
+// what the setup printed since the last question was answered: when the same question comes again, it's why
+function warnHtml() {
+  const lines = S.since.map(l => l.trim()).filter(l => l && !/^\d+\.\s/.test(l));
+  return lines.length ? `<div class="alert">${lines.map(esc).join("<br>")}</div>` : "";
+}
+
+function askHtml(q) {
+  const head = `<h2>${esc(q.title)}</h2><p class="help">${esc(q.help || "")}</p>`;
+  if (q.kind === "yesno") {
+    const yesFirst = !/^n/i.test(String(q.def || "y"));
+    const yes = `<button type="button" class="${yesFirst ? "primary" : ""}" data-answer="y">${esc(q.yes || "Yes")}</button>`;
+    const no = `<button type="button" class="${yesFirst ? "" : "primary"}" data-answer="n">${esc(q.no || "No")}</button>`;
+    return head + warnHtml() + `<div class="row">${yesFirst ? yes + no : no + yes}</div>`;
+  }
+  if (q.kind === "choice") {
+    return head + warnHtml() + `<div class="choices" role="radiogroup">${(q.options || []).map(o => `<button type="button" class="choice${String(o.value) === S.pick ? " on" : ""}" role="radio" aria-checked="${String(o.value) === S.pick}" data-pick="${esc(o.value)}"><span class="dot"></span><span><b>${esc(o.label)}</b>${o.desc ? `<small>${esc(o.desc)}</small>` : ""}</span></button>`).join("")}</div><div class="row"><button type="button" class="primary" data-send-pick${S.pick == null ? " disabled" : ""}>${esc(q.button || "Continue")}</button></div>`;
+  }
+  if (q.kind === "image") {
+    return head + warnHtml() + `<input type="file" id="file" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg" hidden><div class="row"><button type="button" class="primary" data-file>Choose an image…</button><button type="button" data-answer="">${esc(q.keepLabel || "Skip")}</button>${q.current ? `<button type="button" data-answer="default">Use the built-in one</button>` : ""}</div><p class="help" style="margin:14px 0 0;font-size:13px">PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB.</p>`;
+  }
+  if (q.kind === "continue") return head + notesHtml() + `<div class="row"><button type="button" class="primary" data-answer="">${esc(q.button || "Continue")}</button>${q.link ? `<a class="btn" href="${esc(q.link)}" target="_blank" rel="noopener noreferrer">${esc(q.linkLabel || "Open")} ${ICON.ext}</a>` : ""}${q.skip ? `<button type="button" class="btn" data-answer="s">${esc(q.skip)}</button>` : ""}</div>`;
+  if (q.kind === "access") return accessHtml(q);
+  // text
+  return head + warnHtml() + `<form data-text><label class="field" for="text">${esc(q.label || q.title)}</label><input type="text" id="text" autocomplete="off" spellcheck="false" value="${esc(q.def || "")}" placeholder="${esc(q.placeholder || "")}"><div class="row" style="margin-top:14px"><button type="submit" class="primary">${esc(q.button || "Continue")}</button></div></form>`;
+}
+
+// Cloudflare Access: the one step that happens in Cloudflare's dashboard, explained in full, credit card included.
+function accessHtml(q) {
+  const st = S.access || {};
+  const line = st.text ? `<div class="wait" style="margin:0 0 18px">${st.ok ? `<span style="color:var(--ok)">${ICON.check}</span>` : '<span class="spin"></span>'}<span>${esc(st.text)}</span></div>` : "";
+  return `<h2>${esc(q.title || "Lock it to your account")}</h2>
+  <p class="help">Until this is done, the site shows a locked page to everyone, you included. It takes about two minutes, once.</p>
+  <ol class="howto">
+    <li><b>Turn on Cloudflare Zero Trust</b> (skip this if you've done it before on this Cloudflare account). Open <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">Zero Trust</a>, pick any <b>team name</b> (your name works), choose the <b>Zero Trust Free</b> plan, and add a card when it asks (see below).</li>
+    <li><b>Turn on Access for your site.</b> <a href="${esc(q.accessPage)}" target="_blank" rel="noopener noreferrer">Open your site's settings</a> (<span class="path">Workers &amp; Pages</span> → <span class="path">${esc(q.worker || "your site")}</span> → <span class="path">Settings</span> → <span class="path">Domains &amp; Routes</span>). On the <span class="path">workers.dev</span> row, choose <b>Enable Cloudflare Access</b>. You can close the box it shows; there's nothing to copy.</li>
+    <li><b>Check that only you are allowed in.</b> Choose <b>Manage Cloudflare Access</b>: it should let in only your own email address. Use the workers.dev row, not the Worker's <b>Access</b> tab, which blocks the connection your computer needs.</li>
+    <li><b>Claim your site.</b> Press the button below. Your one-time claim link opens; sign in with the same email. That makes the site yours.</li>
+  </ol>
+  <div class="card-note"><b>About the card.</b> To turn on Zero Trust, Cloudflare asks for a payment card, even on the Free plan. Choose <b>Zero Trust Free</b>: it's $0, and Cloudflare says you won't be charged for it. Think of the card as Cloudflare checking you're a real person. You'd only ever pay if you upgraded to a paid plan yourself, and you never need to: the Free plan covers up to 50 people, and this is just you.</div>
+  ${line}
+  <div class="row"><button type="button" class="primary" data-claim="${esc(q.claimLink)}">Access is on. Open my claim link ${ICON.ext}</button><a class="btn" href="${esc(q.accessPage)}" target="_blank" rel="noopener noreferrer">Site settings ${ICON.ext}</a></div>`;
+}
+
+function render() {
+  $("steps").innerHTML = stepsHtml();
+  const card = $("card");
+  let html = "";
+  const e = S.end;
+  if (e && e.type === "done") {
+    html = `<div class="big-ok">${ICON.check}</div><h2>${esc(e.title || "All set")}</h2><p class="help">${esc(e.text || "")}</p>${e.site ? `<div class="linkbox">${esc(e.site)}</div><div class="row"><a class="btn primary" href="${esc(e.site)}" target="_blank" rel="noopener noreferrer">Open ${esc(CFG.title)} ${ICON.ext}</a></div>` : ""}${e.extra ? `<p class="help" style="margin:16px 0 0;font-size:14px">${esc(e.extra)}</p>` : ""}<p class="help" style="margin:16px 0 0;font-size:13px">You can close this tab.</p>`;
+  } else if (e && e.type === "fatal") {
+    html = `<h2>Setup stopped</h2><div class="alert err">${esc(e.text)}</div><p class="help">Nothing else was changed. Run the setup again when you're ready.</p>`;
+  } else if (e && e.type === "cancelled") {
+    html = `<h2>Setup cancelled</h2><p class="help">Run it again whenever you like.</p>`;
+  } else if (S.ask) {
+    html = (S.ask.kind === "continue" ? "" : notesHtml()) + askHtml(S.ask);
+  } else if (S.special && S.special.type === "online") {
+    html = `<h2>${esc(S.special.title || "Almost there")}</h2>${notesHtml()}<div class="wait"><span class="spin"></span><span>${esc(S.special.text || "")}</span></div>`;
+  } else {
+    const cur = S.steps.find(s => s.state === "now");
+    html = `<h2>${esc(cur ? cur.text : "Starting")}</h2>${notesHtml()}<div class="wait"><span class="spin"></span><span>Working on it…</span></div>`;
+  }
+  if (S.lost >= 3 && !e) html = `<h2>Lost touch with the setup</h2><p class="help">It runs in the terminal window you started it from. If you closed that, run the setup again.</p>`;
+  if (card.__html !== html) {
+    card.__html = html;
+    card.innerHTML = html;
+    const t = $("text");
+    if (t) { t.focus(); t.select(); }
+    else { const b = card.querySelector("button.primary:not([disabled])"); if (b && S.ask) b.focus({ preventScroll: true }); }
+  }
+  const log = S.log.join("\n");
+  if ($("log").textContent !== log) {
+    const pre = $("log");
+    const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+    pre.textContent = log;
+    if (atEnd) pre.scrollTop = pre.scrollHeight;
+  }
+  $("logBox").hidden = !S.log.length;
+}
+
+async function post(path, body) {
+  const r = await fetch(`${path}?k=${encodeURIComponent(CFG.key)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return r.json().catch(() => ({}));
+}
+async function answer(value) {
+  if (!S.ask || S.sending) return;
+  S.sending = true;
+  for (const b of $("card").querySelectorAll("button,input")) b.disabled = true;
+  try { await post("/answer", { id: S.ask.id, value }); } catch {}
+  S.sending = false;
+}
+
+$("card").addEventListener("click", async ev => {
+  const a = ev.target.closest("[data-answer]");
+  if (a) return answer(a.dataset.answer);
+  const p = ev.target.closest("[data-pick]");
+  if (p) {
+    S.pick = p.dataset.pick;
+    for (const c of $("card").querySelectorAll(".choice")) { const on = c.dataset.pick === S.pick; c.classList.toggle("on", on); c.setAttribute("aria-checked", String(on)); }
+    const go = $("card").querySelector("[data-send-pick]");
+    if (go) go.disabled = false;
+    return;
+  }
+  if (ev.target.closest("[data-send-pick]") && S.pick != null) return answer(S.pick);
+  if (ev.target.closest("[data-file]")) return $("file").click();
+  const c = ev.target.closest("[data-claim]");
+  if (c) {
+    window.open(c.dataset.claim, "_blank", "noopener");
+    return answer("");
+  }
+});
+$("card").addEventListener("change", async ev => {
+  if (ev.target.id !== "file" || !ev.target.files[0]) return;
+  const f = ev.target.files[0];
+  if (f.size > 512 * 1024) { S.since = ["That image is bigger than 512 KB. Pick a smaller one."]; $("card").__html = ""; return render(); }
+  const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.readAsDataURL(f); });
+  const up = await post("/upload", { name: f.name, data }).catch(() => ({}));
+  if (up.path) answer(up.path);
+});
+$("card").addEventListener("submit", ev => {
+  ev.preventDefault();
+  answer($("text").value);
+});
+
+async function loop() {
+  for (;;) {
+    try {
+      const r = await fetch(`/events?after=${S.after}&k=${encodeURIComponent(CFG.key)}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      S.lost = 0;
+      for (const ev of j.events) { apply(ev); S.after = Math.max(S.after, ev.n); }
+      render();
+      if (S.end) return;
+    } catch {
+      S.lost++;
+      render();
+      if (S.end) return;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+}
+render();
+loop();
+})();
+</script>
+</body>
+</html>

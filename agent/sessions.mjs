@@ -63,6 +63,8 @@ export function toolLabel(name, input) {
       return "Updated its plan";
     case "Skill":
       return "Used the " + cut(input.skill || input.name || "", 40) + " skill";
+    case "Workflow":
+      return "Ran a multi-agent workflow";
     default:
       return name && name.startsWith("mcp__") ? "Used " + name.split("__").slice(1).join(" › ") : "Used " + name;
   }

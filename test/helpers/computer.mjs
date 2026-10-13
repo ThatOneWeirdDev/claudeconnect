@@ -147,7 +147,8 @@ export function makeComputer({ site, oldVersion = "1.1.5", githubUrl }) {
   mkdirSync(join(home, "ws"), { recursive: true });
   makeFakes(bin);
   // the previous version, as an earlier install would have left it
-  for (const f of ["agent.mjs", "sessions.mjs", "app.mjs", "permit.mjs"]) copyFileSync(join(ROOT, "agent", f), join(dir, f));
+  // everything in agent/, flattened, as the installer does
+  for (const f of readdirSync(join(ROOT, "agent"))) copyFileSync(join(ROOT, "agent", f), join(dir, f));
   copyFileSync(join(ROOT, "ClaudeConnect.mjs"), join(dir, "ClaudeConnect.mjs"));
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ version: oldVersion, files: {} }));
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "claudeconnect", private: true, type: "module" }));

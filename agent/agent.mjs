@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import http from "node:http";
 import os from "node:os";
 import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID } from "./sessions.mjs";
-import { createApp, resetsFrom, claudeAppPath, browserPath } from "./app.mjs";
+import { createApp, resetsFrom, claudeAppPath } from "./app.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -43,6 +43,8 @@ if (!cfg.id) {
   } catch {}
 }
 const NAME = cfg.displayName || "ClaudeConnect";
+// the site's name as it is now, for what the running program says: a rename on the site changes cfg.displayName
+const siteName = () => cfg.displayName || "ClaudeConnect";
 const COMMAND = cfg.command || "ClaudeConnect";
 const SLUG = String(cfg.name || "claudeconnect").replace(/[^a-z0-9-]/gi, "").toLowerCase() || "claudeconnect";
 // Both can be changed from the site while this runs (Settings → General → This computer).
@@ -264,7 +266,7 @@ if (cmd === "status") {
   console.log(`Version: ${VERSION}`);
   console.log(`Site: ${cfg.site}`);
   console.log(`Workspace: ${WORKSPACE}`);
-  console.log(`Replies come from: ${PLAN === "free" ? "the Claude app (free plan)" : "Claude Code (your Claude plan)"}`);
+  console.log(`Plan: ${PLAN === "free" ? "free, through the desktop app" : "paid"}`);
   console.log(`Starts at login: ${existsSync(startupPaths().file) ? "yes" : "no"}`);
   process.exit(0);
 }
@@ -412,16 +414,22 @@ let WARNING_CODE = "";
 
 async function checkClaude() {
   if (PLAN === "free") {
-    // no Claude Code needed: the Claude app (or a browser to fall back on) is
-    const found = claudeAppPath() || browserPath();
-    WARNING = found ? "" : "The Claude app isn't installed. Install it from claude.ai/download and sign in.";
-    WARNING_CODE = found ? "" : "app_missing";
+    // no Claude Code needed: the Claude app is, and on macOS the permission to use it (Accessibility)
+    const c = await app().check(false).catch(() => ({ ok: !!claudeAppPath(), code: claudeAppPath() ? "" : "app_missing" }));
+    const why = {
+      app_missing: "The desktop app isn't installed. Install it from claude.ai/download and sign in.",
+      app_permission: `${siteName()} needs permission to use the desktop app: on the Mac, open System Settings → Privacy & Security → Accessibility and switch on node (${c.path || process.execPath}).`,
+      app_helper: `${siteName()} couldn't start its helper for the desktop app${c.message ? ": " + c.message : "."}`,
+      app_unsupported: "The free plan works through the desktop app, which runs on macOS and Windows."
+    };
+    WARNING_CODE = c.ok ? "" : c.code || "app_missing";
+    WARNING = WARNING_CODE ? why[WARNING_CODE] || "" : "";
     return;
   }
   CLAUDE = findClaude();
   if (!CLAUDE) {
     CLAUDE_VERSION = "";
-    WARNING = "Claude Code isn't installed. Run the setup again to install it.";
+    WARNING = "The paid plan's command-line tool isn't installed. Run the setup again to install it.";
     WARNING_CODE = "not_installed";
     return;
   }
@@ -437,13 +445,13 @@ async function checkClaude() {
     method = JSON.parse(a.stdout).authMethod || "";
   } catch {}
   if (method === "none" || (a.code === 1 && !method)) {
-    WARNING = "Claude Code isn't signed in. Run: claude auth login";
+    WARNING = "This computer isn't signed in to your plan. Run: claude auth login";
     WARNING_CODE = "signed_out";
   } else if (method && method !== "claude.ai" && method !== "oauth_token") {
-    WARNING = "Claude Code is signed in with an API key instead of your plan. Run: claude auth login";
+    WARNING = "This computer is signed in with an API key instead of your plan. Run: claude auth login";
     WARNING_CODE = "api_key";
   } else if (CLAUDE_VERSION && !versionAtLeast(CLAUDE_VERSION, "2.1.284")) {
-    WARNING = `Claude Code ${CLAUDE_VERSION} is too old for the newest models. Run: claude update`;
+    WARNING = `The command-line tool here (${CLAUDE_VERSION}) is too old for the newest models. Run: claude update`;
     WARNING_CODE = "outdated";
   } else {
     WARNING = "";
@@ -595,7 +603,7 @@ function inlineFiles(saved) {
   let out = "";
   const unread = saved.filter(f => f.text === null);
   for (const f of saved) if (f.text !== null) out += `\n\n<file name="${f.name.replace(/"/g, "'")}">\n${f.text}\n</file>`;
-  if (unread.length) out += "\n\n(Also attached, but they couldn't be added in the Claude app: " + unread.map(f => f.name).join(", ") + ")";
+  if (unread.length) out += "\n\n(Also attached, but they couldn't be added here: " + unread.map(f => f.name).join(", ") + ")";
   return out;
 }
 
@@ -789,13 +797,14 @@ function limitsFrom(info) {
 }
 
 // `built`: a reading already in this shape (the Claude app's, from claude.ai's own usage numbers)
-function noteLimits(info, built) {
+function noteLimits(info, built, now) {
   const got = built ? info : limitsFrom(info);
   if (!got) return;
   // every event describes the whole current state, apart from windows it didn't see this time
   LIMITS = { ...got, windows: { ...((LIMITS && LIMITS.windows) || {}), ...got.windows } };
   clearTimeout(limitsTimer);
-  limitsTimer = setTimeout(() => LIMITS && send({ type: "limits", limits: LIMITS }), 400);
+  if (now) send({ type: "limits", limits: LIMITS });
+  else limitsTimer = setTimeout(() => LIMITS && send({ type: "limits", limits: LIMITS }), 400);
 }
 
 let probing = false;
@@ -924,7 +933,9 @@ async function setComputer(m) {
     PLAN = cfg.plan = v.plan;
     saveConfig();
     SUB.at = 0;
-    log(PLAN === "free" ? "Replies now come from the Claude app on this computer." : "Replies now come from Claude Code, with your Claude plan.");
+    // what was read about the other plan's limits doesn't apply anymore
+    LIMITS = null;
+    log(PLAN === "free" ? `Now on the free plan: ${siteName()} works through the desktop app on this computer.` : "Now on the paid plan.");
     // the checks can take a while; the site is answered first, and told what they found after
     checkClaude()
       .catch(() => {})
@@ -1170,7 +1181,7 @@ async function handleRun(m) {
     if (refused) {
       result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: refused };
     } else if (!CLAUDE) {
-      result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: `${NAME} is missing a piece it needs to answer. Run the setup again to fix it, then restart ${COMMAND}.` };
+      result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: `${siteName()} is missing a piece it needs to answer. Run the setup again to fix it, then restart ${COMMAND}.` };
     } else {
       const saved = saveFiles(m.files, m.chatId, where);
       const prompt = composePrompt(m.prompt, saved);
@@ -1232,7 +1243,7 @@ async function handleAppRun(m) {
   const t0 = Date.now();
   procs.set(m.runId, { stopped: false, child: null, chatId: m.chatId, app: true });
   const beat = setInterval(() => send({ type: "beat", runId: m.runId, chatId: m.chatId }), 15000);
-  log(`Message received, typing it into the Claude app${m.model && m.model !== "app-default" ? ` (${m.model})` : ""}`);
+  log(`Message received, typing it into the desktop app${m.model && m.model !== "app-default" ? ` (${m.model})` : ""}`);
   let res;
   try {
     const saved = saveFiles(m.files, m.chatId);
@@ -1244,11 +1255,16 @@ async function handleAppRun(m) {
   const rec = procs.get(m.runId) || {};
   procs.delete(m.runId);
   const error = rec.stopped || res.stopped ? "Stopped." : res.error || null;
+  // Out of free messages, as the app said, until when it said: the site holds new messages until then. A reply that went
+  // through means they're back.
+  // (before the reply's end, so the site knows by the time it can send again)
+  if (res.code === "limit" && res.resetsAt) noteLimits({ windows: {}, status: "rejected", resetsAt: res.resetsAt, overageStatus: "rejected" }, true, true);
+  else if (!error && LIMITS && LIMITS.status === "rejected") noteLimits({ windows: {}, status: "allowed", resetsAt: null }, true, true);
   send({ type: "done", runId: m.runId, chatId: m.chatId, text: res.text || "", thinking: res.thinking || "", thinkingMs: 0, artifacts: [], error, started: !!res.started, tools: [], sync: null, context: null, cost: null, denials: 0, model: res.model || m.model, modelName: res.modelName || "", ms: Date.now() - t0 });
-  log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s, from the Claude app`);
+  log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s, from the desktop app`);
   // the app's models and the plan's usage, as they are now
   setTimeout(() => {
-    app().readModels().catch(() => {}).finally(() => reportApp(false));
+    app().readModels(false).catch(() => {}).finally(() => reportApp(false));
     appUsage().catch(() => {});
   }, 500);
 }
@@ -1256,7 +1272,8 @@ async function handleAppRun(m) {
 // claude.ai's usage reading, through the app: the same windows Plan usage shows for Claude Code.
 async function appUsage() {
   const u = await app().usage().catch(() => null);
-  if (!u) return;
+  // the real app's usage can't be read from outside it: the site is told so, rather than left waiting
+  if (!u) return send({ type: "credits", credits: { error: "unavailable" } });
   if (u.limits) noteLimits(u.limits, true);
   send({ type: "credits", credits: u.resets && u.resets.length ? { resets: u.resets } : { error: u.error === "signin" ? "signin" : "unavailable" } });
 }
@@ -1366,7 +1383,7 @@ async function runJob(m, script, args, what) {
 }
 
 async function startUpdate(m) {
-  await runJob(m, join(HERE, "ClaudeConnect.mjs"), ["--remote-update", "--update-id", String(m.id), "--expect", String(m.to || "")], `Updating to ${m.to || "the newest version"}. This will restart ${NAME}.`);
+  await runJob(m, join(HERE, "ClaudeConnect.mjs"), ["--remote-update", "--update-id", String(m.id), "--expect", String(m.to || "")], `Updating to ${m.to || "the newest version"}. This will restart ${siteName()}.`);
 }
 
 const ADMIN_OPS = { settings: "Changing this site's settings", move: "Moving this site to a new address", delete: "Deleting this site" };
@@ -1448,6 +1465,13 @@ function onMessage(raw) {
   } else if (m.type === "stop") stopRun(m);
   else if (m.type === "remote_answer") remoteAnswer(m).catch(e => log("Couldn't pass on the answer:", e.message || e));
   else if (m.type === "app_refresh") refreshApp();
+  else if (m.type === "app_resume") {
+    // Stop was pressed on the Claude app's window, and now it's allowed again from the site
+    if (PLAN === "free") {
+      app().resume();
+      reportApp(true);
+    }
+  }
   else if (m.type === "token") saveSignIn(m.token, m.exp);
   else if (m.type === "update") startUpdate(m).catch(e => log("Update failed to start:", e.message || e));
   else if (m.type === "admin") startAdmin(m).catch(e => log("Couldn't start that:", e.message || e));
@@ -1474,8 +1498,8 @@ function refreshApp() {
   if (PLAN !== "free" || refreshing) return;
   refreshing = true;
   app()
-    .readModels()
-    .catch(e => log("Couldn't read the Claude app's models:", e.message || e))
+    .readModels(true)
+    .catch(e => log("Couldn't read the desktop app's models:", e.message || e))
     .finally(() => {
       refreshing = false;
       reportApp(true);
@@ -1484,7 +1508,8 @@ function refreshApp() {
 
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `app` the Claude app.
 function helloMessage() {
-  const caps = ["update", "admin", "limits", "computer", "plan", "remote", "resets", ...(PLAN === "paid" ? ["modes", "history", "credits", ...(CAN_ASK ? ["ask"] : [])] : ["app"])];
+  // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
+  const caps = ["update", "admin", "limits", "computer", "plan", "remote", "resets", ...(PLAN === "paid" ? ["modes", "history", "credits", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") ? ["ultracode"] : [])] : ["app"])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] };
 }
 
@@ -1516,7 +1541,7 @@ async function connect() {
     return;
   }
   if (pf === "net") {
-    if (!quiet) log(`Couldn't reach ${NAME}. It'll keep trying in the background.`);
+    if (!quiet) log(`Couldn't reach ${siteName()}. It'll keep trying in the background.`);
     quiet = true;
     return retry();
   }
@@ -1544,11 +1569,11 @@ async function connect() {
       log(`Another copy of ${COMMAND} connected, so this one stepped aside. Retrying in a minute.`);
       backoff = 60000;
     } else if (ev && ev.code === 4002) {
-      if (!quiet) log(`Another computer is connected to ${NAME} right now. This one will take over when it goes offline.`);
+      if (!quiet) log(`Another computer is connected to ${siteName()} right now. This one will take over when it goes offline.`);
       quiet = true;
       backoff = 60000;
     } else if (!opened) {
-      if (!quiet) log(`Couldn't reach ${NAME}. It'll keep trying in the background.`);
+      if (!quiet) log(`Couldn't reach ${siteName()}. It'll keep trying in the background.`);
       quiet = true;
     }
     else log("Connection dropped. Reconnecting.");
@@ -1605,7 +1630,7 @@ function retry() {
   }), wait);
 }
 
-log(`${NAME} ${VERSION} starting on ${os.hostname()}. ${PLAN === "free" ? "Replies come from the Claude app." : `Working folder: ${WORKSPACE}`}`);
+log(`${NAME} ${VERSION} starting on ${os.hostname()}. ${PLAN === "free" ? "On the free plan, through the desktop app." : `Working folder: ${WORKSPACE}`}`);
 connect().catch(e => {
   log("Connection problem:", e.message || e);
   retry();

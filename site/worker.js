@@ -9,7 +9,9 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 const CHUNK = 400000;
 const ISS_RE = /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/;
-const ALL_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+// "ultracode" is xhigh effort plus Claude Code's multi-agent workflows for the reply (`--effort ultracode`). A Claude Code
+// too old to know it ignores it and uses its default effort.
+const ALL_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultracode"];
 // Every message runs as Claude Code ("code") on a paid plan, or in the Claude app ("app") on the free plan. In Claude Code, the
 // permission mode says how freely it acts: "auto" is whatever the computer is set to (normally auto), "plan" only plans, and
 // "default" asks on the site before anything that needs permission (only when the computer can ask, cap "ask").
@@ -18,7 +20,7 @@ const MODELS = {
   "claude-fable-5-1": { name: "Fable 5.1", efforts: ALL_EFFORTS },
   "claude-opus-5-5": { name: "Opus 5.5", efforts: ALL_EFFORTS },
   "claude-sonnet-5-5": { name: "Sonnet 5.5", efforts: ALL_EFFORTS },
-  "claude-haiku-5-5": { name: "Haiku 5.5", efforts: [] }
+  "claude-haiku-5-5": { name: "Haiku 5.5", efforts: ALL_EFFORTS }
 };
 const DEFAULT_MODEL = "claude-opus-5-5";
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,14 +52,15 @@ function cleanComputer(v) {
   return Object.keys(out).length ? out : null;
 }
 
-// What the computer says about the Claude app on the free plan: whether it's connected (to the app, or a browser window in its
+// What the computer says about the Claude app on the free plan: whether it's connected (older computers could also use a browser window in its
 // place), the models in its model menu, and whether extended thinking is on there.
 const APP_MODEL_ID = /^claude-[a-z0-9-]{1,40}$/;
 function cleanApp(v) {
   if (!v || typeof v !== "object") return null;
   const str = (x, n) => (typeof x === "string" ? x.replace(/\s+/g, " ").trim().slice(0, n) : "");
   const models = (Array.isArray(v.models) ? v.models.slice(0, 12) : []).filter(x => x && typeof x.id === "string" && APP_MODEL_ID.test(x.id) && str(x.name, 40)).map(x => ({ id: x.id, name: str(x.name, 40), desc: str(x.desc, 120), locked: x.locked === true }));
-  return { kind: ["app", "browser"].includes(v.kind) ? v.kind : "", found: ["app", "browser"].includes(v.found) ? v.found : "", models, thinking: typeof v.thinking === "boolean" ? v.thinking : null, model: str(v.model, 40), at: Date.now() };
+  // paused: Stop was pressed on the app's window, and it's left alone until it's allowed again (POST /api/app/resume)
+  return { kind: ["app", "browser"].includes(v.kind) ? v.kind : "", found: ["app", "browser"].includes(v.found) ? v.found : "", models, thinking: typeof v.thinking === "boolean" ? v.thinking : null, model: str(v.model, 40), paused: v.paused === true, at: Date.now() };
 }
 
 // A question for the person, from the computer while a reply runs: Claude Code asking permission ("permission"), or a window
@@ -67,11 +70,11 @@ function cleanRemote(m) {
   if (!m || typeof m !== "object" || typeof m.id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(m.id)) return null;
   const str = (x, n) => (typeof x === "string" ? x.slice(0, n) : "");
   const num = (x, max) => (Number.isFinite(x) ? Math.max(0, Math.min(max, Math.round(x))) : 0);
-  if (m.kind === "permission") return { id: m.id, kind: "permission", tool: str(m.tool, 80), title: str(m.title, 200) || "Claude Code is asking for permission", detail: str(m.detail, 6000), at: Date.now() };
+  if (m.kind === "permission") return { id: m.id, kind: "permission", tool: str(m.tool, 80), title: str(m.title, 200) || "Asking for permission", detail: str(m.detail, 6000), at: Date.now() };
   if (m.kind !== "screen") return null;
   const image = typeof m.image === "string" && m.image.length <= 3000000 && /^[A-Za-z0-9+/=]+$/.test(m.image) ? m.image : "";
   const buttons = (Array.isArray(m.buttons) ? m.buttons.slice(0, 12) : []).filter(b => b && typeof b.label === "string" && b.label.trim()).map(b => ({ label: b.label.trim().slice(0, 60), x: num(b.x, 10000), y: num(b.y, 10000), w: num(b.w, 10000), h: num(b.h, 10000) }));
-  return { id: m.id, kind: "screen", title: str(m.title, 200) || "Claude is asking", text: str(m.text, 1000), image, w: num(m.w, 10000), h: num(m.h, 10000), buttons, at: Date.now() };
+  return { id: m.id, kind: "screen", title: str(m.title, 200) || "The desktop app is asking", text: str(m.text, 1000), image, w: num(m.w, 10000), h: num(m.h, 10000), buttons, at: Date.now() };
 }
 // A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
 // an open page within about a minute and a half; a page opened after a long gap waits for the answer instead of showing the old one.
@@ -84,7 +87,7 @@ const CHAT_LIST_MAX = 3000;
 // What Fable 5.1 says when the account has no usage credits for it.
 const NO_CREDITS = {
   out: "You have no usage credits left! Fable 5.1 only runs on usage credits. Add some on claude.ai (Settings → Usage), or pick another model.",
-  off: "You have no usage credits! They aren't turned on for your Claude account, and Fable 5.1 only runs on them. Turn them on at claude.ai (Settings → Usage), or pick another model.",
+  off: "You have no usage credits! They aren't turned on for your account, and Fable 5.1 only runs on them. Turn them on at claude.ai (Settings → Usage), or pick another model.",
   none: "You have no usage credits! Fable 5.1 only runs on usage credits. Add some on claude.ai (Settings → Usage), or pick another model."
 };
 const NO_CREDITS_ERROR = /usage credits|out of credits|extra usage|overage|credit balance|insufficient (?:credit|balance|funds)/i;
@@ -857,7 +860,12 @@ export class ChatgqlHub extends DurableObject {
     const opened = this.agentInfo(ws).since || Date.now();
     ws.serializeAttachment({ id: this.agentInfo(ws).id || "", since: Date.now(), version: String(m.agent || "").slice(0, 32), caps, computer, warning: m.warning ? String(m.warning).slice(0, 40) : "" });
     await this.ctx.storage.delete("lastSeen");
-    await this.ctx.storage.put("plan", computer && computer.plan === "free" ? "free" : "paid");
+    const plan = computer && computer.plan === "free" ? "free" : "paid";
+    // A different plan from before: what was read for the other one (its limits, credits and resets, the app's models) is
+    // about another account or another way of answering, and doesn't apply anymore.
+    const before = await this.ctx.storage.get("plan");
+    if (before && before !== plan) await this.ctx.storage.delete(["limits", "credits", "app", "limitsAsk"]);
+    await this.ctx.storage.put("plan", plan);
     await this.giveAnswers(ws, m.agent);
     const run = await this.ctx.storage.get("update");
     // An update that looked stuck or failed is still a success if the new version turns up within the hour.
@@ -911,6 +919,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/remote" && method === "POST") return this.answerRemote(req);
     if (p === "/api/app/refresh" && method === "POST") return this.refreshApp();
+    if (p === "/api/app/resume" && method === "POST") return this.resumeApp();
     if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
@@ -983,6 +992,7 @@ export class ChatgqlHub extends DurableObject {
             // how freely Claude Code acts, and whether it can ask you here first
             modes: paid && caps.includes("modes"),
             ask: paid && caps.includes("ask"),
+            ultracode: paid && caps.includes("ultracode"),
             remote: caps.includes("remote"),
             history: paid && caps.includes("history"),
             credits: paid && (info.computer && typeof info.computer.credits === "boolean" ? info.computer.credits : caps.includes("credits")),
@@ -1010,7 +1020,14 @@ export class ChatgqlHub extends DurableObject {
       if (!w || !Number.isFinite(w.pct) || !Number.isFinite(w.resetsAt)) continue;
       windows[key] = { pct: Math.max(0, Math.min(999, Math.round(w.pct))), resetsAt: Math.round(w.resetsAt) };
     }
-    if (!Object.keys(windows).length) return;
+    if (!Object.keys(windows).length) {
+      // No percentages: the Claude app's own notice on the free plan, which only says you're out, and until when (or, after a
+      // reply goes through, that you aren't anymore). The percentages read before stay as they were.
+      const prev = await this.ctx.storage.get("limits");
+      if (raw.status === "rejected" && Number.isFinite(raw.resetsAt)) await this.ctx.storage.put("limits", { ...(prev || {}), at: Date.now(), windows: (prev && prev.windows) || {}, status: "rejected", resetsAt: Math.round(raw.resetsAt), notice: true });
+      else if (raw.status === "allowed" && prev && prev.status === "rejected") await this.ctx.storage.put("limits", { ...prev, at: Date.now(), status: "allowed", resetsAt: null });
+      return;
+    }
     const status = LIMIT_STATUS.includes(raw.status) ? raw.status : "allowed";
     const rec = { at: Date.now(), windows, status };
     // the window that is limiting right now, and when it resets
@@ -1238,12 +1255,53 @@ export class ChatgqlHub extends DurableObject {
     return json({ ok: true });
   }
 
+  // A chat that began with Claude Code (before a switch to the free plan) has no conversation in the Claude app: its earlier
+  // messages go along with the next one, so the app's reply isn't missing them. The computer only uses them when it starts a new
+  // conversation in the app for this chat. The latest ones, up to about 6000 characters.
+  earlierContext(chatId, exceptId) {
+    const rows = this.sql.exec("SELECT id, role, content, meta FROM messages WHERE chat_id = ? ORDER BY created", chatId).toArray().filter(r => r.id !== exceptId);
+    const modeOf = r => {
+      try {
+        return JSON.parse(r.meta || "{}").mode || "code";
+      } catch {
+        return "code";
+      }
+    };
+    if (!rows.some(r => modeOf(r) !== "app")) return "";
+    const parts = [];
+    let size = 0;
+    for (const r of [...rows].reverse()) {
+      const text = String(r.content || "").trim();
+      if (!text) continue;
+      const line = `${r.role === "user" ? "Me" : "You"}: ${text.length > 2000 ? text.slice(0, 2000) + " …" : text}`;
+      if (size + line.length > 6000) break;
+      parts.unshift(line);
+      size += line.length;
+    }
+    return parts.join("\n\n");
+  }
+
+  // On the free plan, after Stop was pressed on the Claude app's window: let the computer use the app again.
+  async resumeApp() {
+    const ws = this.agent();
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
+    if (!(this.agentInfo(ws).caps || []).includes("app")) return json({ error: "Your computer is on the paid plan, so there's no desktop app to use.", code: "not_app" }, 409);
+    const app = await this.ctx.storage.get("app");
+    if (app) await this.ctx.storage.put("app", { ...app, paused: false });
+    try {
+      this.sendAgent(ws, { type: "app_resume" });
+    } catch {
+      return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
+    }
+    return json({ ok: true });
+  }
+
   // On the free plan: have the computer read the Claude app's model menu (opening the app if it has to). The answer arrives
   // as the app's details in the page's state.
   async refreshApp() {
     const ws = this.agent();
     if (!ws) return json({ error: `${this.siteName()} is offline. Start ${commandName(this.env)} on your computer first.`, code: "offline" }, 503);
-    if (!(this.agentInfo(ws).caps || []).includes("app")) return json({ error: "Your computer isn't using the Claude app.", code: "not_app" }, 409);
+    if (!(this.agentInfo(ws).caps || []).includes("app")) return json({ error: "Your computer is on the paid plan, so there's no desktop app to use.", code: "not_app" }, 409);
     if (Date.now() - (this.appAsked || 0) < 15000) return json({ ok: true, wait: true });
     this.appAsked = Date.now();
     try {
@@ -1715,10 +1773,16 @@ export class ChatgqlHub extends DurableObject {
       effort = null;
       mode = "app";
       perm = "auto";
-      thinking = typeof b.think === "boolean" ? b.think : null;
+      // only when the app's own switch has been read: otherwise the site's guess would turn off what you set in the app
+      thinking = typeof b.think === "boolean" && typeof app.thinking === "boolean" ? b.think : null;
+      // out of free messages, as the app said: nothing is typed into it until they're back
+      const l = await this.limitsView();
+      if (l && l.limited) return json({ error: "You're out of free messages for now, so this wasn't sent. They come back when your limit resets: Plan usage says when.", code: "limit", resetsAt: l.resetsAt || null }, 409);
     } else {
       model = MODELS[b.model] ? b.model : DEFAULT_MODEL;
       effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
+      // a computer whose Claude Code doesn't know ultracode gets the effort it stands on
+      if (effort === "ultracode" && !caps.includes("ultracode")) effort = "xhigh";
       mode = "code";
       perm = PERMS.includes(b.perm) && (b.perm !== "default" || caps.includes("ask")) ? b.perm : "auto";
       thinking = null;
@@ -1739,7 +1803,7 @@ export class ChatgqlHub extends DurableObject {
     const ts = new TransformStream();
     this.runs.set(runId, { writer: ts.writable.getWriter(), chatId: chat.id, text: "", thinking: "", thinkingMs: 0, tools: [], parts: [], model, effort, mode, perm, closed: false, status: "", heard: false, timer: null, remote: null, at: Date.now() });
     this.push(runId, { type: "meta", chat: { id: chat.id, title: chat.title }, user: userMsg, runId });
-    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, ...(thinking === null ? {} : { thinking }), files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
+    this.sendAgent(ws, { type: "run", runId, chatId: chat.id, sessionId: chat.session_id, resume: !!chat.started, prompt: text, model, effort, mode, perm, ...(thinking === null ? {} : { thinking }), ...(free ? { context: this.earlierContext(chat.id, userMsg.id) } : {}), files: files.map(f => ({ name: f.name.slice(0, 200), type: String(f.type || ""), data: f.data })) });
     this.armRun(runId, 30000, `${this.siteName()} didn't respond. Make sure ${commandName(this.env)} is running, then send again.`);
     return new Response(ts.readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
   }
