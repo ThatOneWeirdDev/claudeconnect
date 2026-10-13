@@ -1541,7 +1541,7 @@ async function connect() {
     return;
   }
   if (pf === "net") {
-    if (!quiet) log(`Couldn't reach ${NAME}. It'll keep trying in the background.`);
+    if (!quiet) log(`Couldn't reach ${siteName()}. It'll keep trying in the background.`);
     quiet = true;
     return retry();
   }
@@ -1569,11 +1569,11 @@ async function connect() {
       log(`Another copy of ${COMMAND} connected, so this one stepped aside. Retrying in a minute.`);
       backoff = 60000;
     } else if (ev && ev.code === 4002) {
-      if (!quiet) log(`Another computer is connected to ${NAME} right now. This one will take over when it goes offline.`);
+      if (!quiet) log(`Another computer is connected to ${siteName()} right now. This one will take over when it goes offline.`);
       quiet = true;
       backoff = 60000;
     } else if (!opened) {
-      if (!quiet) log(`Couldn't reach ${NAME}. It'll keep trying in the background.`);
+      if (!quiet) log(`Couldn't reach ${siteName()}. It'll keep trying in the background.`);
       quiet = true;
     }
     else log("Connection dropped. Reconnecting.");

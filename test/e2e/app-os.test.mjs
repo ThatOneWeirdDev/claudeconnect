@@ -54,7 +54,8 @@ async function boot(t, more = {}) {
     state: () => JSON.parse(readFileSync(join(fake, "app.json"), "utf8")),
     control: o => writeFileSync(join(fake, "control.json"), JSON.stringify(o)),
     bar: () => (existsSync(join(fake, "bar.json")) ? JSON.parse(readFileSync(join(fake, "bar.json"), "utf8")) : { shown: false }),
-    pressStop: () => writeFileSync(join(fake, "bar-press"), "")
+    pressStop: () => writeFileSync(join(fake, "bar-press"), ""),
+    dir: fake
   };
   return { site, pc, app };
 }
@@ -96,7 +97,7 @@ test("through accessibility: the message goes in the app's box, the model and th
   assert.equal(done.content, "You said: hello there\n\nModel: Sonnet 5.5\n\n" + REST);
   assert.ok(hi.some(e => e.type === "delta" || e.type === "replace"), "it streams");
   assert.ok(barSeen && barSeen.shown, "the Stop bar is on the screen while it uses the app");
-  assert.equal(barSeen.text, "Test Site is reading the reply in the Claude app");
+  assert.equal(barSeen.text, "Test Site is reading the reply in the desktop app");
   assert.equal(barSeen.label, "Stop Test Site");
   await until(async () => !app.bar().shown, "the bar to go once it's done");
 
@@ -180,22 +181,24 @@ test("through accessibility: out of messages, stopping from the site, signed out
   assert.equal(msg.meta.error, "Stopped.");
   assert.ok(app.state().log.some(x => x.press === "stop"), "the app's own stop button was pressed");
 
-  // the app wasn't running: it's started, behind your other windows
+  // the app wasn't running: it's started, behind your other windows (once the look at its model menu after the last reply is done)
+  await until(async () => (((await site.api("/api/state")).body.agent.app || {}).models || []).length, "the models to be read");
+  await until(async () => !app.bar().shown, "the bar to go");
   app.control({ running: false });
   await sleep(200);
   const opened = await chat(site, { text: "are you up?" });
-  assert.ok(opened.some(e => e.type === "status" && e.text === "Opening the Claude app"));
+  assert.ok(opened.some(e => e.type === "status" && e.text === "Opening the desktop app"));
   assert.equal(opened.find(e => e.type === "done").message.meta.error, null);
   assert.equal(app.state().launches, 1);
 
   app.control({ signedIn: false });
   await sleep(200);
   const signedOut = await chat(site, { text: "anyone there?" });
-  assert.equal(signedOut.find(e => e.type === "done").message.meta.error, "Sign in to the Claude app on your computer, then send again.");
+  assert.equal(signedOut.find(e => e.type === "done").message.meta.error, "Sign in to the desktop app on your computer, then send again.");
   app.control({ signedIn: true, trusted: false });
   await sleep(200);
   const denied = await chat(site, { text: "hello?" });
-  assert.match(denied.find(e => e.type === "done").message.meta.error, /needs your permission to use the Claude app\. On your Mac, open System Settings → Privacy & Security → Accessibility/);
+  assert.match(denied.find(e => e.type === "done").message.meta.error, /needs your permission to use the desktop app\. On your Mac, open System Settings → Privacy & Security → Accessibility/);
 });
 
 test("through accessibility: Stop on the bar takes the app back at once, and it's left alone until the site allows it again", async t => {
@@ -209,7 +212,7 @@ test("through accessibility: Stop on the bar takes the app back at once, and it'
     }
   });
   const done = events.find(e => e.type === "done").message;
-  assert.match(done.meta.error, /You took back the Claude app on your computer, so Test Site stopped using it/);
+  assert.match(done.meta.error, /You took back the desktop app on your computer, so Test Site stopped using it/);
   assert.match(done.content, /^You said: write slowly please/, "what had arrived of the reply is kept");
   assert.equal(app.bar().shown, false, "the bar is gone");
   const pressesAfter = app.state().log.length;
@@ -225,4 +228,22 @@ test("through accessibility: Stop on the bar takes the app back at once, and it'
   const ok = again.find(e => e.type === "done").message;
   assert.equal(ok.meta.error, null);
   assert.match(ok.content, /^You said: hello again/);
+
+  // Stop pressed after the reply is in, while it takes a last look at the app's menu: that counts too
+  await until(async () => !app.bar().shown, "the bar to go");
+  app.control({ slow: 400 });
+  await site.post("/api/app/refresh");
+  await until(async () => app.bar().shown, "the bar for the look at the models");
+  app.pressStop();
+  await until(async () => (await site.api("/api/state")).body.agent.app.paused === true, "the late Stop to count");
+  app.control({ slow: 0 });
+  assert.equal((await site.post("/api/app/resume")).status, 200);
+  await until(async () => (await site.api("/api/state")).body.agent.app.paused === false, "allowed again");
+
+  // no bar on the screen, no using the app
+  writeFileSync(join(app.dir, "bar-fail"), "");
+  const before = app.state().log.length;
+  const nobar = await chat(site, { text: "and now?" });
+  assert.match(nobar.find(e => e.type === "done").message.meta.error, /^The Stop bar couldn't be shown on your computer, so Test Site didn't use the desktop app\./);
+  assert.equal(app.state().log.length, before, "nothing done in the app");
 });

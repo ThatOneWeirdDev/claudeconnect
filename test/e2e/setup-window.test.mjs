@@ -66,8 +66,8 @@ async function setUp(t, extraEnv = {}, args = []) {
 test("the setup window asks everything a first install needs, explains Cloudflare Access and its card, and ends with the site's address", { skip: !CHROME && "needs a Chromium" }, async t => {
   const s = await setUp(t);
   // the plan: paying for Claude
-  let text = await s.card("Do you pay for Claude?");
-  assert.match(text, /Claude Code on this computer answers your messages/);
+  let text = await s.card("Do you have a paid plan?");
+  assert.match(text, /your site answers with your plan, from this computer/);
   await s.click('[data-answer="y"]');
 
   // a name the site can't use is said, and asked again
@@ -120,18 +120,18 @@ test("on the free plan the setup window asks for the Claude app until it's insta
   const app = join(mkdtempSync(join(tmpdir(), "cc-gui-app-")), "Claude");
   t.after(() => rmSync(app, { force: true }));
   const s = await setUp(t, { CLAUDECONNECT_CLAUDE_APP: app, CLAUDECONNECT_APP_DRIVER: "cdp" }, ["--name", "Free Site", "--no-autostart"]);
-  await s.card("Do you pay for Claude?");
+  await s.card("Do you have a paid plan?");
   await s.click('[data-answer="n"]');
-  let text = await s.card("Install the Claude app");
-  assert.match(text, /Download the Claude app/);
+  let text = await s.card("Install the desktop app");
+  assert.match(text, /Download the desktop app/);
   // checked again without it: still not there
   await s.click('[data-answer=""]');
-  await s.card("The Claude app isn't there yet");
+  await s.card("The desktop app isn't there yet");
   // installed now
   writeFileSync(app, "");
   await s.click('[data-answer=""]');
   // what using the app this way can mean for the Claude account, before anything is done with it
-  text = await s.card("Before the Claude app is used for you");
+  text = await s.card("Before the desktop app is used for you");
   assert.match(text, /could be limited or closed/);
   assert.match(text, /Stop bar/);
   await s.click('[data-answer="y"]');

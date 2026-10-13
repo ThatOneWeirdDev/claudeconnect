@@ -2672,6 +2672,8 @@ async function saveSite(what, body) {
   renderSettings();
   try {
     applySite(await apiJson("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+    // what names the site (the line under the message box, the hero) follows a rename at once
+    renderChrome();
     SET.saved = what;
     if (what === "name") SET.name = undefined;
   } catch (e) {

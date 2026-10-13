@@ -52,7 +52,7 @@ namespace ClaudeConnect
         public Regex NameRe, AnyRe, NotRe, ValueRe, ClsRe, UrlRe;
         public string Within;
         public bool Last, Count, Skip, Tree, Focused;
-        public int Limit = 50, Lines = 0, ValueMax = 2000;
+        public int Limit = 50, Lines = 0, ValueMax = 2000, TreeMax = 4000;
     }
 
     class Hit
@@ -67,7 +67,9 @@ namespace ClaudeConnect
         const uint MARK = 0x43434f4e;
         static JavaScriptSerializer Json = new JavaScriptSerializer();
         static TextWriter Out;
+        // handles last two generations, so one given out just before a new generation starts still works
         static Dictionary<string, AutomationElement> Handles = new Dictionary<string, AutomationElement>();
+        static Dictionary<string, AutomationElement> Older = new Dictionary<string, AutomationElement>();
         static Dictionary<string, string> HandleRoles = new Dictionary<string, string>();
         static int Next = 1;
         static IntPtr Hwnd = IntPtr.Zero;
@@ -354,9 +356,15 @@ namespace ClaudeConnect
             return v;
         }
 
+        static void NewGeneration()
+        {
+            if (Handles.Count < 10000) return;
+            Older = Handles;
+            Handles = new Dictionary<string, AutomationElement>();
+            HandleRoles.Clear();
+        }
         static string HandleFor(AutomationElement e, string role)
         {
-            if (Handles.Count > 20000) { Handles.Clear(); HandleRoles.Clear(); }
             string h = "h" + (Next++);
             Handles[h] = e;
             HandleRoles[h] = role;
@@ -365,7 +373,7 @@ namespace ClaudeConnect
         static AutomationElement Resolve(string h)
         {
             AutomationElement e = null;
-            if (h == null || !Handles.TryGetValue(h, out e)) Fail("stale-handle", "That part of the app is gone.");
+            if (h == null || (!Handles.TryGetValue(h, out e) && !Older.TryGetValue(h, out e))) Fail("stale-handle", "That part of the app is gone.");
             try
             {
                 ControlType ct = e.Current.ControlType;
@@ -433,6 +441,7 @@ namespace ClaudeConnect
             if (q.ContainsKey("limit")) c.Limit = Convert.ToInt32(q["limit"]);
             if (q.ContainsKey("lines")) c.Lines = Convert.ToInt32(q["lines"]);
             if (q.ContainsKey("valueMax")) c.ValueMax = Convert.ToInt32(q["valueMax"]);
+            if (q.ContainsKey("treeMax")) c.TreeMax = Convert.ToInt32(q["treeMax"]);
             return c;
         }
         static Regex Re(Dictionary<string, object> q, string k)
@@ -518,6 +527,7 @@ namespace ClaudeConnect
                 doc["url"] = UrlOf(Doc);
                 doc["title"] = Doc.Current.Name ?? "";
             }
+            NewGeneration();
             AutomationElement root;
             try { root = start.GetUpdatedCache(Cache()); }
             catch (ElementNotAvailableException) { Doc = null; throw new Failure("no-page", "The page changed."); }
@@ -585,7 +595,7 @@ namespace ClaudeConnect
                     if (q.Lines > 0) n["lines"] = LinesOf(hit.El, q.Lines, "");
                     if (q.Tree)
                     {
-                        int[] budget = new int[] { 4000 };
+                        int[] budget = new int[] { q.TreeMax };
                         n["tree"] = TreeOf(hit.El, "", 0, budget);
                         if (budget[0] <= 0) n["cut"] = true;
                     }
@@ -781,19 +791,23 @@ namespace ClaudeConnect
                     try
                     {
                         if (!Front(Hwnd)) Fail("not-frontmost", "The Claude app could not be brought forward.");
+                        object p;
+                        bool hasValue = e.TryGetCurrentPattern(ValuePattern.Pattern, out p);
+                        // whatever an earlier try left in the box goes first, so the message isn't there twice
+                        if (hasValue) { try { ((ValuePattern)p).SetValue(""); } catch { } }
                         e.SetFocus();
                         for (int i = 0; i < 20 && !e.Current.HasKeyboardFocus; i++) Thread.Sleep(50);
                         if (!e.Current.HasKeyboardFocus) Fail("focus-failed", "Could not click into the message box.");
-                        object p;
-                        bool hasValue = e.TryGetCurrentPattern(ValuePattern.Pattern, out p);
-                        string start = hasValue ? (((ValuePattern)p).Current.Value ?? "") : "";
+                        GuardKeys(e);
+                        Chord(0x41, 0x11); // Ctrl+A: what's left in the box is replaced
                         string text = Str(a, "text");
-                        string want = Regex.Replace(text, "\\s+", " ").Trim();
-                        if (want.Length > 60) want = want.Substring(0, 60);
+                        string want = Regex.Replace(text, "\\s+", "");
                         if (Bool(a, "type")) TypeText(text, e);
                         else
                         {
                             System.Windows.Forms.DataObject saved = SaveClipboard();
+                            // what's on the clipboard can't be kept: it isn't touched, and the text is typed instead
+                            if (saved == null) Fail("clipboard-unreadable", "The clipboard could not be read, so it was left alone.");
                             uint mine = PutClipboard(text);
                             try
                             {
@@ -803,7 +817,7 @@ namespace ClaudeConnect
                             }
                             finally
                             {
-                                if (GetClipboardSequenceNumber() == mine && saved != null)
+                                if (GetClipboardSequenceNumber() == mine)
                                 {
                                     try { System.Windows.Forms.Clipboard.SetDataObject(saved, true, 5, 100); } catch { }
                                 }
@@ -812,7 +826,7 @@ namespace ClaudeConnect
                         for (int i = 0; i < 15 && !landed; i++)
                         {
                             string now = hasValue ? (((ValuePattern)p).Current.Value ?? "") : "";
-                            landed = !hasValue || (now != start && Regex.Replace(now, "\\s+", " ").Contains(want));
+                            landed = !hasValue || Regex.Replace(now, "\\s+", "") == want;
                             if (!landed) Thread.Sleep(100);
                         }
                     }
@@ -843,6 +857,7 @@ namespace ClaudeConnect
                     return r;
                 case "forget":
                     Handles.Clear();
+                    Older.Clear();
                     HandleRoles.Clear();
                     return r;
                 case "quit":

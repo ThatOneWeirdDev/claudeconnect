@@ -26,7 +26,7 @@ npx github:ThatOneWeirdDev/claudeconnect
 
 Each of these runs `ClaudeConnect.mjs`, a small launcher. It downloads the current release from this repository, checks every file against [`manifest.json`](manifest.json), and runs the setup that came with it. Nothing about ClaudeConnect itself is stored inside the launcher.
 
-Setup opens in a window in your browser: a page on your own computer (nothing is installed for it) that asks a few questions with buttons, shows each step as it happens, and walks you through the one part done in Cloudflare's dashboard. It asks whether you pay for Claude and what to call your site, signs you in to Cloudflare, creates the site, then explains turning on Cloudflare Access step by step and opens your one-time claim link. Running it again on a computer that is already set up offers **update** (in place, no questions), **reset** or **leave it**.
+Setup opens in a window in your browser: a page on your own computer (nothing is installed for it) that asks a few questions with buttons, shows each step as it happens, and walks you through the one part done in Cloudflare's dashboard. It asks whether you have a paid plan and what to call your site, signs you in to Cloudflare, creates the site, then explains turning on Cloudflare Access step by step and opens your one-time claim link. Running it again on a computer that is already set up offers **update** (in place, no questions), **reset** or **leave it**.
 
 Turning on Cloudflare Access the first time also turns on Cloudflare Zero Trust, and Cloudflare asks for a credit card for that even on its **Free** plan. Choose the Free plan: it costs nothing, Cloudflare uses the card to check you're a real person, and you won't be charged unless you pick a paid plan yourself, which ClaudeConnect never needs.
 
@@ -37,7 +37,7 @@ The setup still works in the terminal: it's used automatically over SSH or where
 | Command | What it does |
 | --- | --- |
 | `<command> update` | Updates the site and this computer to the newest version, in place. Your chats, name, look and settings are kept. If the new version brings a setting of its own, it asks about that, and nothing else. |
-| `<command> edit` | Goes through every setting the site's **Settings** has, in the same order, each with what it is now and a y/n: the name, logo, tab icon and theme; starting when you log in, your Claude plan, and the working folder; whether the site uses usage credits (on a paid plan); and the address. Then it shows what will change and asks once more before saving. Last it asks whether to delete the site, which needs you to type its name. |
+| `<command> edit` | Goes through every setting the site's **Settings** has, in the same order, each with what it is now and a y/n: the name, logo, tab icon and theme; starting when you log in, your plan, and the working folder; whether the site uses usage credits (on a paid plan); and the address. Then it shows what will change and asks once more before saving. Last it asks whether to delete the site, which needs you to type its name. |
 | `<command> help` | Lists the rest: start, stop, logs, status, open, claim and so on. |
 
 ## Everything from the site
@@ -46,11 +46,11 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 
 | Settings page | What it does |
 | --- | --- |
-| **General** | The site's name. Under **This computer**: **Start when you log in**, which makes it a startup item (a Login Item on macOS, the Startup folder on Windows) so it's online whenever you are; **Your Claude plan**, paid (Claude Code answers) or free (the Claude app answers); and the folder Claude Code works in. |
+| **General** | The site's name. Under **This computer**: **Start when you log in**, which makes it a startup item (a Login Item on macOS, the Startup folder on Windows) so it's online whenever you are; **Your plan**, **Paid plan** or **Free plan** (through the desktop app); and the **Working folder**. |
 | **Appearance** | The logo and the tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), and light, dark or system theme. The theme is kept on the site, so it's the same on every device. |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
 | **Updates** | Shows when a new version is out and installs it in place. |
-| **Delete site** | Deletes the site and every chat in it, then removes the setup from your computer. The folder Claude works in is kept. You type the site's name to confirm. |
+| **Delete site** | Deletes the site and every chat in it, then removes the setup from your computer. The working folder is kept. You type the site's name to confirm. |
 
 Nothing destructive happens before its replacement works: a move only deletes the old site after the new one is claimed and your computer is connected to it, and a failed step puts everything back.
 
@@ -108,7 +108,7 @@ On the free plan there's no Claude Code, so the sidebar has the chats started on
 
 ## Without a paid plan
 
-Claude Code needs a paid Claude plan. Without one, answer **no** when setup asks whether you pay for Claude (or switch later in **Settings** → **General** → **This computer**, or with `<command> edit`), and the [Claude desktop app](https://claude.ai/download) answers instead. The app is required: setup asks for it until it's installed, on macOS or Windows.
+Claude Code needs a paid Claude plan. Without one, answer **no** when setup asks whether you have a paid plan (or switch later in **Settings** → **General** → **This computer**, or with `<command> edit`), and the [Claude desktop app](https://claude.ai/download) answers instead. The app is required: setup asks for it until it's installed, on macOS or Windows.
 
 - **Your message is typed into the Claude app** on your computer, with the model you picked on the site and extended thinking on or off, and sent. The reply is read from the app as it's written and streams to the site, with its headings, lists, code blocks, tables and links.
 - **The model picker lists the app's own models.** Ones that need a paid plan are shown but can't be picked. **The app's choice** leaves the app on whatever it has picked.

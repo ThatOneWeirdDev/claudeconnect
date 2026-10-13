@@ -290,10 +290,10 @@ async function checkClaudeApp(name = "") {
   }
   if (interactive()) {
     // said once, before anything is done with the app: this is automation of a Claude account
-    note(`The free plan works the desktop app for you: it types into it and presses its buttons, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk; with a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`);
+    note(`The free plan works the desktop app for you: it types into it and presses its buttons, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai or its desktop app through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk; with a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`);
     const ok = await ask("  Use the desktop app this way? [Y/n] ", "y", {
       title: "Before the desktop app is used for you",
-      help: `The free plan types your messages into the desktop app on this computer and presses its buttons, the way an automation tool would, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk. With a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`,
+      help: `The free plan types your messages into the desktop app on this computer and presses its buttons, the way an automation tool would, with a Stop bar on the screen whenever it does. Anthropic's terms for claude.ai accounts don't allow using claude.ai or its desktop app through automated means except where Anthropic says so, so your claude.ai account could be limited or closed for this. Use it at your own risk. With a paid plan, ${name || "your site"} answers through Anthropic's command-line tool instead, and none of this applies.`,
       yes: "I understand, use the desktop app",
       no: "Stop here"
     });
@@ -1248,7 +1248,7 @@ async function editSettings() {
   if (local.plan === "paid") {
     try {
       JOB = true;
-      await setUpClaudeCode(name);
+      await setUpClaudeCode(job.displayName || name);
     } catch (e) {
       console.log(`  ${failure(e)}`);
       delete local.plan;
@@ -1256,7 +1256,7 @@ async function editSettings() {
     } finally {
       JOB = false;
     }
-  } else if (local.plan === "free") await checkClaudeApp(name);
+  } else if (local.plan === "free") await checkClaudeApp(job.displayName || name);
   const cfgChange = Object.fromEntries(["plan", "workspace"].filter(k => k in local).map(k => [k, local[k]]));
   if (Object.keys(cfgChange).length) {
     // written while the program here is stopped, so it can't save its own copy over this

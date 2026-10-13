@@ -219,10 +219,17 @@ export function createApp({ dir, cfg, saveConfig, log, WS = globalThis.WebSocket
   async function hold(text) {
     const o = await D.bar(true, text, `Stop ${siteName()}`).catch(() => null);
     if (o && o.stop) throw new Escaped(PAUSED());
+    // without a Stop bar on the screen, the app isn't used at all
+    if (o && o.failed) throw Object.assign(new Error(`The Stop bar couldn't be shown on your computer, so ${siteName()} didn't use the desktop app.${o.why ? " " + o.why : ""}`), { code: "app_bar" });
   }
+  // Takes the bar down. Stop pressed after the last look at it still counts: nothing touches the app until it's allowed again.
   async function letGo() {
-    if (D) await D.bar(false).catch(() => {});
+    if (!D) return;
+    const o = await D.bar(false).catch(() => null);
+    if (o && o.stop && !S.paused) pause();
   }
+  // the driver saw Stop pressed in the middle of something
+  const stoppedThere = e => e instanceof Escaped || (e && e.code === "app_stopped");
   // Stop was pressed: nothing more is clicked or typed, and it stays that way until it's allowed again on the site.
   function pause() {
     S.paused = true;
@@ -306,6 +313,9 @@ export function createApp({ dir, cfg, saveConfig, log, WS = globalThis.WebSocket
       emit({ type: "status", text });
     };
     await drv();
+    const sending = `${siteName()} is using the desktop app to send your message`;
+    // the bar is up before anything is done in the app
+    await hold(sending);
     await D.start(say);
     S.connected = true;
     // the conversation this chat has in the app, if it has one (a chat whose first message didn't get through has none yet)
@@ -314,7 +324,6 @@ export function createApp({ dir, cfg, saveConfig, log, WS = globalThis.WebSocket
     if (!p) throw new Error("The desktop app's page didn't load. Check that it's open and online on your computer, then send again.");
     if (p.challenge) throw Object.assign(new Error("The desktop app is asking you to confirm you're human. Do that in the app on your computer, then send again."), { code: "app_challenge" });
     if (p.login || !p.composer) throw Object.assign(new Error("Sign in to the desktop app on your computer, then send again."), { code: "app_signin" });
-    const sending = `${siteName()} is using the desktop app to send your message`;
     await hold(sending);
     const mi = m.model && m.model !== "app-default" ? await setModel(m.model, say).catch(() => null) : null;
     await hold(sending);
@@ -433,10 +442,10 @@ export function createApp({ dir, cfg, saveConfig, log, WS = globalThis.WebSocket
         S.partial = "";
         return await runOne(m, emit, stopped);
       } catch (e) {
-        if (e instanceof Escaped) {
+        if (stoppedThere(e)) {
           await letGo();
-          pause();
-          return { text: S.partial || "", error: e.message, code: "app_paused" };
+          if (!S.paused) pause();
+          return { text: S.partial || "", error: PAUSED(), code: "app_paused" };
         }
         return { text: S.partial || "", error: String((e && e.message) || e), code: (e && e.code) || "", resetsAt: (e && e.resetsAt) || null };
       } finally {
@@ -460,15 +469,15 @@ export function createApp({ dir, cfg, saveConfig, log, WS = globalThis.WebSocket
       if (!(await D.running().catch(() => false))) return S.models;
       S.busy = "models";
       try {
+        await hold(`${siteName()} is checking the models in the desktop app`);
         await D.start(() => {});
         const p = await D.open(null).catch(() => null);
         if (!p || !p.composer) return S.models;
-        await hold(`${siteName()} is checking the models in the desktop app`);
         return await readModels();
       } catch (e) {
-        if (!(e instanceof Escaped)) throw e;
+        if (!stoppedThere(e)) throw e;
         await letGo();
-        pause();
+        if (!S.paused) pause();
         return S.models;
       } finally {
         if (!S.paused) await letGo();

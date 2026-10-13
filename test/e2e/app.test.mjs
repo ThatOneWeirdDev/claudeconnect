@@ -155,7 +155,7 @@ test("a window in the Claude app that waits for an answer shows on the site, and
   assert.ok(q, "the window was shown");
   assert.ok(left.some(e => e.type === "remote_done" && e.id === q.remote.id), "and taken down");
   const done = left.find(e => e.type === "done").message;
-  assert.equal(done.meta.error, "Nobody answered the Claude app's question in time, so it was closed and the reply stopped. Send again to carry on.");
+  assert.equal(done.meta.error, "Nobody answered the desktop app's question in time, so it was closed and the reply stopped. Send again to carry on.");
   assert.doesNotMatch(done.content, /Allow once/);
 });
 
@@ -188,7 +188,7 @@ test("out of free messages, stopping, and a signed-out app each say so", { skip:
 
   fake.state.signedIn = false;
   const signedOut = await chat(site, { text: "anyone there?" });
-  assert.equal(signedOut.find(e => e.type === "done").message.meta.error, "Sign in to the Claude app on your computer, then send again.");
+  assert.equal(signedOut.find(e => e.type === "done").message.meta.error, "Sign in to the desktop app on your computer, then send again.");
 });
 
 test("a Stop button on the Claude app's own window takes it back at once, and it's left alone until the site lets it use it again", { skip: !CHROME && "needs a Chromium" }, async t => {
@@ -200,14 +200,14 @@ test("a Stop button on the Claude app's own window takes it back at once, and it
     if ((ev.type !== "delta" && ev.type !== "replace") || app) return;
     // the person at the computer sees the bar on the app's window, and clicks its Stop button
     app = await attachTo(port);
-    sawBar = !!(await app.boxOf("Test Site is reading the reply in the Claude app"));
+    sawBar = !!(await app.boxOf("Test Site is reading the reply in the desktop app"));
     const stop = await app.boxOf("Stop Test Site");
     assert.ok(stop, "the bar has a Stop button");
     await app.clickAt(stop);
   });
   assert.ok(sawBar, "while it uses the app, the app's window says so");
   const done = events.find(e => e.type === "done").message;
-  assert.match(done.meta.error, /You took back the Claude app on your computer, so Test Site stopped using it/);
+  assert.match(done.meta.error, /You took back the desktop app on your computer, so Test Site stopped using it/);
   assert.match(done.content, /^You/, "what had arrived of the reply is kept");
   // it let go: the bar is gone, and nothing was clicked after Stop (the reply in the app carries on by itself)
   await until(async () => !(await app.boxOf("Stop Test Site")) && !(await app.boxOf("Stopping…")), "the bar to go");

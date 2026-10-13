@@ -1,5 +1,6 @@
 // A stand-in for agent/app-mac-bar.js and agent/app-win-bar.ps1, the Stop bar: what it would show is written to
-// $CLAUDECONNECT_FAKE_DIR/bar.json, and a test presses Stop by making $CLAUDECONNECT_FAKE_DIR/bar-press.
+// $CLAUDECONNECT_FAKE_DIR/bar.json, a test presses Stop by making $CLAUDECONNECT_FAKE_DIR/bar-press, and makes it fail to
+// show with $CLAUDECONNECT_FAKE_DIR/bar-fail.
 import { writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -9,6 +10,11 @@ let bar = { text: "", label: "" };
 try {
   bar = { ...bar, ...JSON.parse(process.env.CLAUDECONNECT_BAR || "{}") };
 } catch {}
+// a bar that can't show (no desktop to show it on): it ends without saying it's ready
+if (existsSync(join(DIR, "bar-fail"))) {
+  process.stderr.write("no window server\n");
+  process.exit(3);
+}
 const show = shown => writeFileSync(join(DIR, "bar.json"), JSON.stringify({ shown, text: bar.text, label: bar.label }));
 const end = () => {
   show(false);

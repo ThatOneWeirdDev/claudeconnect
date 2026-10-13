@@ -65,7 +65,7 @@ function run() {
   // on every desktop, over full-screen apps too, and left out of Mission Control's window cycling
   bar.setCollectionBehavior(1 | 16 | 64 | 256);
   bar.setHidesOnDeactivate(false);
-  bar.setFloatingPanel(true);
+  // (no setFloatingPanel: it would put the level back down to an ordinary floating window's)
   bar.setBecomesKeyOnlyIfNeeded(true);
   bar.setWorksWhenModal(true);
   bar.setReleasedWhenClosed(false);

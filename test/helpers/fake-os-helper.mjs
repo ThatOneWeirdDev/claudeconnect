@@ -357,6 +357,8 @@ createInterface({ input: process.stdin }).on("line", line => {
     return;
   }
   S = load();
+  // {"slow": ms}: an app that takes its time answering
+  if (S.slow) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, S.slow);
   let res;
   try {
     const fn = CMD[req.cmd];

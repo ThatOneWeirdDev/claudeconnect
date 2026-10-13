@@ -21,7 +21,11 @@ const norm = s => String(s || "").replace(/\s+/g, " ").trim();
 async function waitFor(fn, ms, every = 300) {
   const end = Date.now() + ms;
   for (;;) {
-    const v = await fn().catch(() => null);
+    // Stop pressed ends any wait at once; anything else that goes wrong is another try
+    const v = await fn().catch(e => {
+      if (e && e.code === "app_stopped") throw e;
+      return null;
+    });
     if (v) return v;
     if (Date.now() > end) return null;
     await sleep(every);
@@ -40,25 +44,31 @@ function helperProcess(file, log) {
   let child = null;
   let ready = null;
   let next = 1;
+  let calls = 0;
   let tail = "";
-  const waiting = new Map();
-  const failAll = err => {
-    for (const w of waiting.values()) {
+  // each process answers only for what was asked of it: one that's ending can't fail a newer one's requests
+  let waiting = new Map();
+  const failAll = (map, err) => {
+    for (const w of map.values()) {
       clearTimeout(w.timer);
       w.reject(err);
     }
-    waiting.clear();
+    map.clear();
   };
+  const lastWords = () => (tail ? " " + tail.trim().split("\n").slice(-3).join(" ") : "");
   function start() {
     if (child) return ready;
     const [cmd, args] = command(file);
     const p = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    const mine = new Map();
     child = p;
+    waiting = mine;
+    calls = 0;
     tail = "";
     ready = new Promise((resolve, reject) => {
       // compiling the Windows helper takes a few seconds the first time
       const timer = setTimeout(() => {
-        reject(new Error("The helper that works the desktop app didn't start." + (tail ? " " + tail.trim().split("\n").slice(-3).join(" ") : "")));
+        reject(new Error("The helper that works the desktop app didn't start." + lastWords()));
         kill();
       }, IS_WIN ? 90000 : 30000);
       createInterface({ input: p.stdout }).on("line", line => {
@@ -73,9 +83,9 @@ function helperProcess(file, log) {
           resolve(r);
           return;
         }
-        const w = r && waiting.get(r.id);
+        const w = r && mine.get(r.id);
         if (!w) return;
-        waiting.delete(r.id);
+        mine.delete(r.id);
         clearTimeout(w.timer);
         if (r.ok) w.resolve(r);
         else w.reject(Object.assign(new Error(r.detail || r.error || "failed"), { code: r.error || "failed" }));
@@ -83,9 +93,9 @@ function helperProcess(file, log) {
       p.on("exit", code => {
         clearTimeout(timer);
         if (child === p) child = null;
-        const err = new Error(`The helper that works the desktop app stopped (${code}).` + (tail ? " " + tail.trim().split("\n").slice(-3).join(" ") : ""));
+        const err = new Error(`The helper that works the desktop app stopped (${code}).` + lastWords());
         reject(err);
-        failAll(err);
+        failAll(mine, err);
       });
     });
     ready.catch(() => {});
@@ -100,15 +110,17 @@ function helperProcess(file, log) {
     await start();
     const p = child;
     if (!p) throw new Error("The helper that works the desktop app stopped.");
+    const mine = waiting;
     const id = next++;
+    calls++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        waiting.delete(id);
+        mine.delete(id);
         // a helper stuck on one request holds up every other: it's started again on the next
         kill();
         reject(Object.assign(new Error(`The desktop app took too long to answer (${cmd}).`), { code: "timeout" }));
       }, ms);
-      waiting.set(id, { resolve, reject, timer });
+      mine.set(id, { resolve, reject, timer });
       p.stdin.write(ascii(JSON.stringify({ id, cmd, ...args })) + "\n");
     });
   }
@@ -125,16 +137,20 @@ function helperProcess(file, log) {
       } catch {}
     }, 1500).unref();
   }
-  return { start, call, kill, alive: () => !!child };
+  return { start, call, kill, alive: () => !!child, calls: () => calls };
 }
 
 // ---------------------------------------------------------------------------------------------------- the Stop bar
+// Stop, once pressed, stays pressed until clear(): the driver does nothing more in the app, and the orchestration hears
+// of it even when it was pressed after its last look. show() says whether the bar is on the screen.
 function stopBar(file, log) {
   let child = null;
   let shown = "";
   let pressed = false;
+  let why = "";
+  let up = null;
   function show(text, label) {
-    if (pressed) return;
+    if (pressed) return Promise.resolve(true);
     const want = JSON.stringify({ text, label });
     if (child) {
       if (want !== shown) {
@@ -143,7 +159,7 @@ function stopBar(file, log) {
           child.stdin.write("text " + ascii(want) + "\n");
         } catch {}
       }
-      return;
+      return up;
     }
     shown = want;
     const [cmd, args] = command(file);
@@ -153,24 +169,44 @@ function stopBar(file, log) {
       env: { ...process.env, CLAUDECONNECT_BAR: ascii(JSON.stringify({ text, label, parent: process.pid })) }
     });
     child = p;
+    let tail = "";
     p.stdin.on("error", () => {});
-    p.stderr.on("data", () => {});
+    p.stderr.on("data", d => {
+      tail = (tail + d).slice(-2000);
+    });
+    // nothing is done in the app before the bar is on the screen
+    up = new Promise(resolve => {
+      const timer = setTimeout(() => {
+        log("The Stop bar didn't show in time.");
+        resolve(false);
+      }, IS_WIN ? 60000 : 15000);
+      createInterface({ input: p.stdout }).on("line", line => {
+        const l = line.trim();
+        if (l === "ready") {
+          clearTimeout(timer);
+          resolve(true);
+        } else if (l === "stop") {
+          pressed = true;
+          log("Stop was pressed on the screen.");
+        }
+      });
+      p.on("exit", code => {
+        clearTimeout(timer);
+        if (child === p) child = null;
+        if (!pressed) {
+          why = tail.trim().split("\n").slice(-2).join(" ");
+          if (code) log("The Stop bar couldn't show (" + code + "):", why || "no reason given");
+        }
+        resolve(pressed);
+      });
+    });
     p.on("error", e => log("Couldn't show the Stop bar:", e.message || e));
-    createInterface({ input: p.stdout }).on("line", line => {
-      if (line.trim() === "stop") {
-        pressed = true;
-        log("Stop was pressed on the screen.");
-      }
-    });
-    p.on("exit", () => {
-      if (child === p) child = null;
-    });
+    return up;
   }
   function hide() {
     const p = child;
     child = null;
     shown = "";
-    pressed = false;
     if (!p) return;
     try {
       p.stdin.write("quit\n");
@@ -182,7 +218,15 @@ function stopBar(file, log) {
       } catch {}
     }, 1500).unref();
   }
-  return { show, hide, pressed: () => pressed };
+  return {
+    show,
+    hide,
+    pressed: () => pressed,
+    why: () => why,
+    clear() {
+      pressed = false;
+    }
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------- the reply as Markdown
@@ -355,15 +399,18 @@ const modelName = s => {
 };
 
 export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
-  const H = helperProcess(process.env.CLAUDECONNECT_APP_HELPER || join(HERE, IS_WIN ? "app-win.ps1" : "app-mac.js"), log);
+  // the site's name, as it is now: a rename on the site changes cfg.displayName
+  const siteName = () => (cfg && cfg.displayName) || NAME;
+  const H =helperProcess(process.env.CLAUDECONNECT_APP_HELPER || join(HERE, IS_WIN ? "app-win.ps1" : "app-mac.js"), log);
   const B = stopBar(process.env.CLAUDECONNECT_APP_BAR || join(HERE, IS_WIN ? "app-win-bar.ps1" : "app-mac-bar.js"), log);
   const S = { look: null, lookAt: 0, attached: false, say: () => {} };
   const info = () => {
     const f = find();
-    return { how: f.how || "", path: f.path || "", aumid: f.aumid || "", exe: f.exe || "" };
+    // (process: a test's stand-in for the app, another Chromium program)
+    return { how: f.how || "", path: f.path || "", aumid: f.aumid || "", exe: f.exe || "", ...(f.process ? { process: f.process } : {}) };
   };
   const permission = () =>
-    Object.assign(new Error(`${NAME} needs your permission to use the desktop app. On your Mac, open System Settings → Privacy & Security → Accessibility and switch on "${process.execPath.split("/").pop()}" (${process.execPath}), then send again.`), { code: "app_permission" });
+    Object.assign(new Error(`${siteName()} needs your permission to use the desktop app. On your Mac, open System Settings → Privacy & Security → Accessibility and switch on "${process.execPath.split("/").pop()}" (${process.execPath}), then send again.`), { code: "app_permission" });
   // what went wrong in the helper, in words for the site
   function explain(e) {
     if (e && e.code === "not-trusted") return permission();
@@ -372,6 +419,8 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
     return e;
   }
   async function call(cmd, args, ms) {
+    // after Stop, nothing at all is asked of the app
+    if (B.pressed()) throw Object.assign(new Error("Stop was pressed."), { code: "app_stopped" });
     try {
       return await H.call(cmd, args, ms);
     } catch (e) {
@@ -502,6 +551,11 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
     remoteEvery: 3,
     async start(say) {
       S.say = say;
+      // a helper that has run for long is started afresh between messages, so whatever it has kept is let go
+      if (H.alive() && H.calls() > 3000) {
+        H.kill();
+        S.attached = false;
+      }
       const hello = await H.start();
       if (hello && hello.trusted === false) throw permission();
       const a = await call("app", { info: info() });
@@ -629,10 +683,12 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
       const L = await look(true);
       const c = L.composer || L.textbox;
       if (!c) return false;
-      const want = norm(text);
+      // compared without spaces and line breaks: the app may write a new line its own way
+      const squash = v => String(v || "").replace(/\s+/g, "");
+      const want = squash(text);
       const landed = async () => {
-        const r = await call("read", { h: c.h }).catch(() => null);
-        if (!r || norm(r.value) !== want) return false;
+        const r = await call("read", { h: c.h });
+        if (!r || squash(r.value) !== want) return false;
         // the app took it in, not only the page: its send button works now (or it says you're out of messages)
         const L2 = await look(true);
         return !!((L2.send && !L2.send.disabled) || L2.limit);
@@ -648,6 +704,7 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
       }
       for (const how of [{}, { type: true }]) {
         const p = await call("paste", { h: c.h, text, ...how }, 60000).catch(e => {
+          if (e.code === "app_stopped") throw e;
           log("Couldn't put the message in the desktop app:", e.message || e);
           return null;
         });
@@ -659,6 +716,7 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
     // Presses send as soon as it can be pressed, and says whether the message went. A notice that you're out of messages
     // ends the wait early: that's the answer then.
     async send(before) {
+      S.whole = null;
       const began = Date.now();
       let limit = "";
       const b = await waitFor(async () => {
@@ -685,7 +743,22 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
     async reply() {
       const L = await look(false, true);
       if (!L.reply) return null;
-      return { md: markdown(L.reply.tree), streaming: !!L.stop, marked: false };
+      const streaming = !!L.stop;
+      let md = markdown(L.reply.tree);
+      // A quick look reads only so much of a long reply: then it's read whole now and then, and once more when it's done.
+      if (L.reply.cut) {
+        const w = S.whole;
+        if (!w || (streaming && Date.now() - w.at > 4000) || (!streaming && !w.final)) {
+          const r = await call("scan", { root: L.reply.h, queries: { all: { ...LOOK.reply, skip: true, last: false, limit: 1, treeMax: 40000, treeMs: 20000 } } }, 45000).catch(e => {
+            if (e.code === "app_stopped") throw e;
+            return null;
+          });
+          const t = first(r, "all");
+          if (t && t.tree) S.whole = { at: Date.now(), md: markdown(t.tree), final: !streaming };
+        }
+        if (S.whole && S.whole.md.length >= md.length) md = S.whole.md;
+      }
+      return { md, streaming, marked: false };
     },
     // what the reply streamed is what there is to read
     exact: async () => null,
@@ -716,8 +789,11 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
     },
     // the Stop bar on the screen; says whether it was pressed
     async bar(on, text, label) {
-      if (on) B.show(text || "", label || "Stop");
-      else B.hide();
+      if (on) {
+        // shown, or tried once more; without it, nothing is done in the app
+        const ok = (await B.show(text || "", label || "Stop")) || (await B.show(text || "", label || "Stop"));
+        if (!ok && !B.pressed()) return { stop: false, failed: true, why: B.why() };
+      } else B.hide();
       return { stop: B.pressed() };
     },
     connected: () => S.attached && H.alive(),
@@ -745,9 +821,11 @@ export function osDriver({ cfg, log, NAME = "ClaudeConnect", find }) {
       }
       return { ok: true };
     },
+    // (after Stop: once it's allowed to use the app again, it starts afresh)
     close() {
       H.kill();
       B.hide();
+      B.clear();
       S.attached = false;
       forget();
     }

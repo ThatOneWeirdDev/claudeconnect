@@ -514,7 +514,7 @@ test("everything `<command> edit` asks about can also be changed on the page", (
     [/Change the tab icon\?/, /imgField\("favicon"/],
     [/Change the theme\?/, /data-theme-set=/],
     [/when you log in to this computer\?/, /data-pc="autostart"/],
-    [/Switch to the free plan\?|Do you pay for Claude now/, /data-pc="plan"/],
+    [/Switch to the free plan\?|Do you have a paid plan now/, /data-pc="plan"/],
     [/Change the working folder/, /id="fWs"/],
     [/usage credits from the site\?/, /data-usage="credits"/],
     [/Change the address\?/, /data-act="move"/],

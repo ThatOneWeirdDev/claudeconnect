@@ -35,6 +35,8 @@ ObjC.bindFunction('AXIsProcessTrustedWithOptions', ['bool', ['id']]);
 ObjC.bindFunction('CGEventKeyboardSetUnicodeString', ['void', ['void*', 'unsigned long', 'void*']]);
 ObjC.bindFunction('malloc', ['void*', ['int']]);
 ObjC.bindFunction('free', ['void', ['void*']]);
+ObjC.bindFunction('CFEqual', ['bool', ['id', 'id']]);
+ObjC.bindFunction('AXUIElementGetPid', ['int', ['id', 'int*']]);
 
 var VERSION = 1;
 // a test names another Chromium program to stand in for the app
@@ -47,11 +49,17 @@ var KEY = { v: 9, return: 36, escape: 53 };
 var FLAG = { shift: 0x20000, ctrl: 0x40000, alt: 0x80000, cmd: 0x100000 };
 var MODKEYS = [55, 54, 56, 60, 58, 61, 59, 62];
 var BASE = ['AXRole', 'AXSubrole', 'AXTitle', 'AXDescription', 'AXValue', 'AXDOMClassList', 'AXFocused', 'AXEnabled'];
+// made once: a long-running script never drains what it makes, so as little as possible is made per node
+var BASE_NS = $(BASE);
+var NAMES = {};
+function nsName(name) { return NAMES[name] || (NAMES[name] = $(name)); }
+var SYSTEM = null;
 // roles whose insides are never walked
 var LEAF = { AXStaticText: 1, AXImage: 1, AXScrollBar: 1, AXSlider: 1, AXValueIndicator: 1, AXIncrementor: 1,
   AXProgressIndicator: 1, AXTextField: 1, AXTextArea: 1, AXColumn: 1, AXSplitter: 1 };
 
-var S = { pid: 0, app: null, ax: null, manualFor: 0, manualAt: 0, web: null, handles: {}, nHandles: 0, next: 1, lastPostAt: 0, cmdStart: 0, menuPaste: null };
+var S = { pid: 0, app: null, ax: null, manualFor: 0, manualAt: 0, manualTried: 0, web: null, handles: {}, older: {}, nHandles: 0, next: 1, lastPostAt: 0, cmdStart: 0, menuPaste: null, menuAll: null };
+var ON_SITE = /^https:\/\/([a-z0-9-]+\.)?claude\.ai(\/|$)/i;
 
 // ------------------------------------------------------------------------------------------------------------- plumbing
 var OUT = $.NSFileHandle.fileHandleWithStandardOutput;
@@ -87,7 +95,7 @@ function norm(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
 var lastErr = 0;
 function attr(el, name) {
   var r = Ref();
-  lastErr = $.AXUIElementCopyAttributeValue(el, $(name), r);
+  lastErr = $.AXUIElementCopyAttributeValue(el, nsName(name), r);
   return lastErr === 0 ? r[0] : null;
 }
 function str(el, name) { return jstr(attr(el, name)); }
@@ -98,14 +106,14 @@ function kids(el) {
   try { var n = Number(v.count); for (var i = 0; i < n; i++) out.push(v.objectAtIndex(i)); } catch (e) {}
   return out;
 }
-function setAttr(el, name, value) { return $.AXUIElementSetAttributeValue(el, $(name), value); }
-function perform(el, action) { return $.AXUIElementPerformAction(el, $(action)); }
+function setAttr(el, name, value) { return $.AXUIElementSetAttributeValue(el, nsName(name), value); }
+function perform(el, action) { return $.AXUIElementPerformAction(el, nsName(action)); }
 function urlOf(el) { var u = attr(el, 'AXURL'); try { return nil(u) ? '' : jstr(u.absoluteString); } catch (e) { return ''; } }
 
 // The attributes every node is looked at by, in one round trip when the app allows it.
 function readBase(el) {
   var o = {}, r = Ref();
-  var err = $.AXUIElementCopyMultipleAttributeValues(el, $(BASE), 0, r);
+  var err = $.AXUIElementCopyMultipleAttributeValues(el, BASE_NS, 0, r);
   if (err === 0 && !nil(r[0])) {
     var vals = r[0];
     for (var i = 0; i < BASE.length; i++) {
@@ -119,7 +127,8 @@ function readBase(el) {
     }
     return o.AXRole ? o : null;
   }
-  if (err === -25202) return null; // the element is gone
+  // one at a time only where asking for several isn't supported; gone, not allowed or not answering means no node
+  if (err !== -25205 && err !== -25208) { lastErr = err; return null; }
   for (var j = 0; j < BASE.length; j++) {
     var n = BASE[j];
     if (n === 'AXDOMClassList') { try { o.cls = ObjC.deepUnwrap(attr(el, n)) || []; if (!Array.isArray(o.cls)) o.cls = []; } catch (e) { o.cls = []; } continue; }
@@ -185,15 +194,21 @@ function view(b) {
   return v;
 }
 
+// Handles last for two generations, so one given out just before a new generation starts still works.
+function newGeneration() {
+  if (S.nHandles < 10000) return;
+  S.older = S.handles;
+  S.handles = {};
+  S.nHandles = 0;
+}
 function handleFor(el, v) {
-  if (S.nHandles > 20000) { S.handles = {}; S.nHandles = 0; }
   var h = 'h' + (S.next++);
   S.handles[h] = { el: el, role: v.role };
   S.nHandles++;
   return h;
 }
 function resolve(h) {
-  var e = S.handles[h];
+  var e = S.handles[h] || S.older[h];
   if (!e) fail('stale-handle', h);
   var b = readBase(e.el);
   if (!b) fail('stale-handle', h);
@@ -215,7 +230,7 @@ function attach() {
   var pid = Number(a.processIdentifier);
   if (pid !== S.pid) {
     S.pid = pid; S.app = a; S.ax = $.AXUIElementCreateApplication(pid); S.web = null;
-    S.handles = {}; S.nHandles = 0; S.menuPaste = null;
+    S.handles = {}; S.older = {}; S.nHandles = 0; S.menuPaste = null; S.menuAll = null;
   }
   return S.ax;
 }
@@ -248,17 +263,24 @@ function webAreas() {
   }
   return out;
 }
-function claudeWeb(fresh) {
+// The window also has the app's own page (its title bar), which has nothing to do with claude.ai: the claude.ai page is
+// the one kept. With {any: true}, another page will do when there's none on claude.ai (a sign-in page somewhere else).
+function claudeWeb(fresh, any) {
   if (!fresh && S.web) {
     var b = readBase(S.web.el);
-    if (b && b.AXRole === 'AXWebArea') { S.web.url = urlOf(S.web.el); S.web.title = str(S.web.el, 'AXTitle'); return S.web; }
+    if (b && b.AXRole === 'AXWebArea') {
+      S.web.url = urlOf(S.web.el);
+      S.web.title = str(S.web.el, 'AXTitle');
+      if (ON_SITE.test(S.web.url)) return S.web;
+    }
   }
-  var all = webAreas(), onSite = /^https:\/\/([a-z0-9-]+\.)?claude\.ai(\/|$)/i;
-  var pool = all.filter(function (w) { return onSite.test(w.url); });
-  if (!pool.length) pool = all;
+  var all = webAreas();
+  var pool = all.filter(function (w) { return ON_SITE.test(w.url); });
+  if (!pool.length && any) pool = all;
   pool.sort(function (x, y) { return y.kids - x.kids; });
-  S.web = pool.length ? pool[0] : null;
-  return S.web;
+  var w = pool.length ? pool[0] : null;
+  S.web = w && ON_SITE.test(w.url) ? w : null;
+  return w;
 }
 
 // ------------------------------------------------------------------------------------------------------------- reading
@@ -322,10 +344,11 @@ function treeOf(el, st, depth) {
 function scan(a) {
   requireTrust();
   attach();
+  newGeneration();
   var root, doc = null;
   if (a.root) root = resolve(a.root);
   else {
-    var w = claudeWeb(false);
+    var w = claudeWeb(false, true);
     if (!w) fail('no-page', 'The Claude app has no page open.');
     root = w.el;
     doc = { url: w.url, title: w.title };
@@ -370,7 +393,7 @@ function scan(a) {
       if (v.focused) n.focused = true;
       if (v.disabled) n.disabled = true;
       if (v.url) n.url = v.url;
-      var lim = { n: 0, max: 3000, end: now() + 2500 };
+      var lim = { n: 0, max: q.treeMax || 3000, end: now() + (q.treeMs || 2500) };
       if (q.lines) n.lines = linesOf(hit.el, q.lines, lim);
       if (q.tree) { n.tree = treeOf(hit.el, lim, 0); if (lim.cut) n.cut = true; }
       return n;
@@ -386,7 +409,7 @@ function activate(pid) {
   if (frontPid() === pid) return 'already';
   var a = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
   if (!nil(a)) {
-    try { if (a.isHidden) a.unhide; } catch (e) {}
+    try { if (a.isHidden) { S.wasHidden = true; a.unhide; } } catch (e) {}
     a.activateWithOptions(1 | 2);
     if (waitFor(function () { return frontPid() === pid; }, 1.0)) return 'app';
   }
@@ -398,10 +421,20 @@ function activate(pid) {
 }
 // Puts back whichever app was in front before.
 function giveBack(pid) {
-  if (!pid || pid === S.pid || frontPid() === pid) return;
-  var prev = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
-  if (!nil(prev)) prev.activateWithOptions(2);
-  if (!waitFor(function () { return frontPid() === pid; }, 0.8)) setAttr($.AXUIElementCreateApplication(pid), 'AXFrontmost', $(true));
+  var hide = S.wasHidden;
+  S.wasHidden = false;
+  if (pid && pid !== S.pid && frontPid() !== pid) {
+    var prev = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
+    if (!nil(prev)) prev.activateWithOptions(2);
+    if (!waitFor(function () { return frontPid() === pid; }, 0.8)) setAttr($.AXUIElementCreateApplication(pid), 'AXFrontmost', $(true));
+    if (!waitFor(function () { return frontPid() === pid; }, 0.8) && !nil(prev)) {
+      var id = jstr(prev.bundleIdentifier);
+      if (id) task('/usr/bin/open', ['-b', id]);
+      else if (!nil(prev.bundleURL)) task('/usr/bin/open', ['-a', jstr(prev.bundleURL.path)]);
+    }
+  }
+  // the Claude app was hidden before: hidden again
+  if (hide) { var me = $.NSRunningApplication.runningApplicationWithProcessIdentifier(S.pid); if (!nil(me)) me.hide; }
 }
 function task(path, args) {
   var t = $.NSTask.alloc.init;
@@ -430,7 +463,15 @@ function chord(code, flags) { post(code, true, flags); tick(0.012); post(code, f
 function releaseMods() { MODKEYS.forEach(function (k) { try { post(k, false, 0); } catch (e) {} }); }
 function guardKeys(focusEl) {
   if (frontPid() !== S.pid) fail('not-frontmost', 'The Claude app is not in front.');
-  if (focusEl && !bool(focusEl, 'AXFocused')) fail('focus-lost', 'The message box lost the focus.');
+  // where the keys would go, asked of the whole system rather than the app
+  SYSTEM = SYSTEM || $.AXUIElementCreateSystemWide();
+  if (focusEl) {
+    var f = attr(SYSTEM, 'AXFocusedUIElement');
+    if (nil(f) || !$.CFEqual(f, focusEl)) fail('focus-lost', 'The message box lost the focus.');
+  } else {
+    var app = attr(SYSTEM, 'AXFocusedApplication'), pid = Ref();
+    if (nil(app) || $.AXUIElementGetPid(app, pid) !== 0 || Number(pid[0]) !== S.pid) fail('focus-lost', 'The Claude app lost the focus.');
+  }
   if (personActive(S.cmdStart)) fail('person-active', 'You were using the keyboard or mouse.');
 }
 // Types text with key events that carry the characters (no clipboard), 20 at a time; new lines with Shift+Return.
@@ -439,13 +480,18 @@ function typeText(text, focusEl) {
   for (var li = 0; li < lines.length; li++) {
     if (li > 0) { guardKeys(focusEl); chord(KEY.return, FLAG.shift); }
     var s = lines[li];
-    for (var at = 0; at < s.length; at += 20) {
+    for (var at = 0; at < s.length;) {
       guardKeys(focusEl);
-      var part = s.slice(at, at + 20), buf = $.malloc(part.length * 2);
+      // 20 at a time, never splitting a character that takes two
+      var end = Math.min(at + 20, s.length), last = s.charCodeAt(end - 1);
+      if (end < s.length && last >= 0xD800 && last <= 0xDBFF) end--;
+      var part = s.slice(at, end), buf = $.malloc(part.length * 2);
+      at = end;
       try {
         for (var i = 0; i < part.length; i++) { var c = part.charCodeAt(i); buf[i * 2] = c & 255; buf[i * 2 + 1] = c >> 8; }
         [true, false].forEach(function (down) {
           var e = $.CGEventCreateKeyboardEvent(null, 0, down);
+          $.CGEventSetFlags(e, 0);
           $.CGEventKeyboardSetUnicodeString(e, part.length, buf);
           $.CGEventSetIntegerValueField(e, 42, MARK);
           $.CGEventPost(0, e);
@@ -495,9 +541,10 @@ function pbPut(pb, text) {
   pb.writeObjects($([item]));
   return Number(pb.changeCount);
 }
-// Edit > Paste in the app's menu, found by its shortcut, so it works in any language.
-function pasteItem() {
-  if (S.menuPaste) { try { if (str(S.menuPaste, 'AXRole') === 'AXMenuItem') return S.menuPaste; } catch (e) {} }
+// Edit > Paste and Edit > Select All in the app's menu, found by their shortcuts (Command-V, Command-A), so they work in
+// any language and with any keyboard layout. Pressed through the menu, never as keys.
+function menuItem(letter, key) {
+  if (S[key]) { try { if (str(S[key], 'AXRole') === 'AXMenuItem') return S[key]; } catch (e) {} }
   var bar = attr(S.ax, 'AXMenuBar');
   if (nil(bar)) return null;
   var tops = kids(bar);
@@ -506,8 +553,8 @@ function pasteItem() {
     for (var m = 0; m < menus.length; m++) {
       var items = kids(menus[m]);
       for (var k = 0; k < items.length; k++) {
-        if (str(items[k], 'AXMenuItemCmdChar').toUpperCase() === 'V' && Number(js(attr(items[k], 'AXMenuItemCmdModifiers')) || 0) === 0) {
-          S.menuPaste = items[k];
+        if (str(items[k], 'AXMenuItemCmdChar').toUpperCase() === letter && Number(js(attr(items[k], 'AXMenuItemCmdModifiers')) || 0) === 0) {
+          S[key] = items[k];
           return items[k];
         }
       }
@@ -560,6 +607,7 @@ CMD.launch = function (a) {
     started = waitFor(function () { return runningApp(); }, 20, 0.2);
   }
   if (!started) fail('launch-failed', 'The Claude app did not start.');
+  waitFor(function () { var r2 = runningApp(); return r2 && r2.isFinishedLaunching; }, 20, 0.2);
   return { pid: Number(started.processIdentifier), already: false };
 };
 
@@ -574,12 +622,16 @@ CMD.openUrl = function (a) {
 CMD.enable = function (a) {
   requireTrust();
   attach();
-  if (S.manualFor !== S.pid) {
-    setAttr(S.ax, 'AXManualAccessibility', $(true));
-    S.manualFor = S.pid;
-    S.manualAt = now();
-  }
-  var web = waitFor(function () { var w = claudeWeb(true); return w && w.kids > 0 ? w : null; }, (a.waitMs === undefined ? 10000 : a.waitMs) / 1000, 0.25);
+  // asked again only when the last ask didn't go through (the app was still starting), and not too often
+  var ask = function () {
+    if (S.manualFor === S.pid || now() - S.manualTried < 2500) return;
+    S.manualTried = now();
+    if (setAttr(S.ax, 'AXManualAccessibility', $(true)) === 0) { S.manualFor = S.pid; S.manualAt = now(); }
+  };
+  var wait = (a.waitMs === undefined ? 10000 : a.waitMs) / 1000;
+  var web = waitFor(function () { ask(); var w = claudeWeb(true); return w && w.kids > 0 && ON_SITE.test(w.url) ? w : null; }, wait, 0.25);
+  // a page somewhere else (a sign-in page) is better than none
+  if (!web) { var other = claudeWeb(true, true); if (other && other.kids > 0) web = other; }
   return { pid: S.pid, web: web ? { url: web.url, title: web.title } : null };
 };
 
@@ -622,8 +674,9 @@ CMD.setValue = function (a) {
   return { err: err, landed: !!got };
 };
 
-// Puts the text in a text box the way a person would: brings the app forward, clicks into the box, pastes, and puts back
-// the clipboard and the app that was in front. With {type: true} it types the characters instead of pasting.
+// Puts the text in a text box the way a person would: brings the app forward, clicks into the box, empties it, pastes,
+// and puts back the clipboard and the app that was in front. With {type: true} it types the characters instead.
+var squash = function (v) { return String(v || '').replace(/\s+/g, ''); };
 CMD.paste = function (a) {
   requireTrust();
   attach();
@@ -632,24 +685,30 @@ CMD.paste = function (a) {
   var out = { landed: false };
   try {
     if (!activate(S.pid)) fail('not-frontmost', 'The Claude app could not be brought forward.');
+    // whatever an earlier try left in the box goes first, so the message isn't there twice
+    setAttr(el, 'AXValue', $(''));
     if (!bool(el, 'AXFocused')) {
       setAttr(el, 'AXFocused', $(true));
       if (!waitFor(function () { return bool(el, 'AXFocused'); }, 1.0)) fail('focus-failed', 'Could not click into the message box.');
     }
-    var start = str(el, 'AXValue'), want = norm(a.text).slice(0, 60);
-    var landed = function () { var v = str(el, 'AXValue'); return v !== start && norm(v).indexOf(want) >= 0; };
+    var all = menuItem('A', 'menuAll');
+    if (all) { perform(all, 'AXPress'); tick(0.1); }
+    var want = squash(a.text);
+    var landed = function () { return squash(str(el, 'AXValue')) === want; };
     if (a.type) {
       typeText(a.text, el);
       out.landed = !!waitFor(landed, 1.5);
     } else {
+      var item = menuItem('V', 'menuPaste');
+      if (!item) fail('no-paste', 'The app has no Paste in its menu.');
       var pb = $.NSPasteboard.generalPasteboard;
       var saved = pbSave(pb);
+      // what's on the clipboard can't be kept: it isn't touched, and the text is typed instead
+      if (saved === null) fail('clipboard-unreadable', 'The clipboard could not be read, so it was left alone.');
       var mine = pbPut(pb, String(a.text));
       try {
         guardKeys(el);
-        var item = pasteItem();
-        if (item && js(attr(item, 'AXEnabled')) !== false) perform(item, 'AXPress');
-        else chord(KEY.v, FLAG.cmd);
+        perform(item, 'AXPress');
         out.landed = !!waitFor(landed, 1.5);
         if (!out.landed) { tick(0.5); out.landed = !!landed(); }
       } finally {
