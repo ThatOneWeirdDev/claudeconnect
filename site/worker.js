@@ -192,10 +192,16 @@ function parseRange(h) {
 
 // What the computer said went wrong, as an answer to the page.
 function fsError(r) {
-  const status = { outside: 403, unreadable: 403, missing: 404, not_folder: 400, not_file: 400, root: 400, trash_failed: 500 }[r.code] || 500;
+  const status = { outside: 403, unreadable: 403, unwritable: 403, missing: 404, not_folder: 400, not_file: 400, root: 400, bad_text: 400, too_big: 413, changed: 409, trash_failed: 500 }[r.code] || 500;
   return json({ error: typeof r.error === "string" && r.error ? r.error.slice(0, 300) : "That couldn't be done on your computer.", code: FS_CODES.includes(r.code) ? r.code : "failed" }, status);
 }
-const FS_CODES = ["outside", "unreadable", "missing", "not_folder", "not_file", "root", "trash_failed"];
+const FS_CODES = ["outside", "unreadable", "missing", "not_folder", "not_file", "root", "trash_failed", "changed", "too_big", "unwritable", "bad_text"];
+// Which place on the computer a path is in: the working folder ("ws"), "home", "downloads", "pc" (the whole computer)…
+const PLACE_RE = /^[a-z0-9-]{1,16}$/;
+function cleanPlace(v) {
+  return typeof v === "string" && PLACE_RE.test(v) ? v : "ws";
+}
+const WRITE_MAX = 2 * 1024 * 1024;
 
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0D0D0D"/><circle cx="29" cy="29" r="12.5" fill="none" stroke="#fff" stroke-width="6.5"/><path d="M41.5 29v22" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/><path d="M36 45h11" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>`;
 
@@ -989,6 +995,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/files" && method === "GET") return this.listFiles(url);
     if (p === "/api/files/raw" && (method === "GET" || method === "HEAD")) return this.serveFile(req, url);
     if (p === "/api/files/trash" && method === "POST") return this.trashFile(req);
+    if (p === "/api/files/write" && method === "POST") return this.writeFile(req);
     if (p === "/api/chats" && method === "GET") return json({ chats: this.chatList() });
     const cm = p.match(/^\/api\/chats\/([A-Za-z0-9-]{8,64})$/);
     if (cm && method === "GET") return this.getChat(cm[1]);
@@ -1827,7 +1834,7 @@ export class ChatgqlHub extends DurableObject {
       if (!f || typeof f.name !== "string") continue;
       // where it is in the working folder, for the file browser
       const path = typeof f.path === "string" ? cleanFsPath(f.path) : null;
-      const at = path ? { path } : {};
+      const at = path ? { root: cleanPlace(f.root), path } : {};
       if (f.tooBig && out.length < 16) {
         const name = f.name.slice(0, 120);
         const mime = mimeOf(name);
@@ -1871,18 +1878,22 @@ export class ChatgqlHub extends DurableObject {
     const no = this.filesBlocked();
     if (no) return no;
     const path = cleanFsPath(url.searchParams.get("path"));
-    if (path === null) return json({ error: "That isn't in the working folder.", code: "outside" }, 403);
-    const r = await this.askAgent({ type: "fs_list", path }, 20000, "files");
+    if (path === null) return json({ error: "That isn't in this folder.", code: "outside" }, 403);
+    const root = cleanPlace(url.searchParams.get("root"));
+    const r = await this.askAgent({ type: "fs_list", root, path }, 20000, "files");
     if (!r) return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
     if (!r.ok) return fsError(r);
     const entries = (Array.isArray(r.entries) ? r.entries.slice(0, 5000) : [])
       .filter(e => e && typeof e.name === "string" && e.name && e.name.length <= 1024 && !/[/\0]/.test(e.name) && e.name !== "." && e.name !== "..")
       .map(e => ({ name: e.name, dir: !!e.dir, size: Math.max(0, Math.round(Number(e.size)) || 0), mtime: Math.max(0, Math.round(Number(e.mtime)) || 0), kind: FS_KINDS.includes(e.kind) ? e.kind : "file", ...(e.link ? { link: true } : {}), ...(e.broken ? { broken: true } : {}) }));
-    return json({ path, root: typeof r.root === "string" ? r.root.slice(0, 1024) : "", total: Math.max(entries.length, Math.round(Number(r.total)) || 0), cut: !!r.cut, entries });
+    const places = (Array.isArray(r.places) ? r.places.slice(0, 40) : [])
+      .filter(x => x && typeof x.id === "string" && PLACE_RE.test(x.id) && typeof x.label === "string")
+      .map(x => ({ id: x.id, label: x.label.slice(0, 60), path: typeof x.path === "string" ? x.path.slice(0, 1024) : "" }));
+    return json({ path, place: root, places, root: typeof r.root === "string" ? r.root.slice(0, 1024) : "", total: Math.max(entries.length, Math.round(Number(r.total)) || 0), cut: !!r.cut, entries });
   }
 
-  readPiece(path, offset, length) {
-    return this.askAgent({ type: "fs_read", path, offset, length }, 30000, "files");
+  readPiece(root, path, offset, length) {
+    return this.askAgent({ type: "fs_read", root, path, offset, length }, 30000, "files");
   }
 
   // A file's bytes, a piece at a time as they're sent on, so a big one never sits here whole. Ranges are answered, which is
@@ -1891,12 +1902,13 @@ export class ChatgqlHub extends DurableObject {
     const no = this.filesBlocked();
     if (no) return no;
     const path = cleanFsPath(url.searchParams.get("path"));
-    if (path === null) return json({ error: "That isn't in the working folder.", code: "outside" }, 403);
+    if (path === null) return json({ error: "That isn't in this folder.", code: "outside" }, 403);
     if (!path) return json({ error: "That's a folder.", code: "not_file" }, 400);
+    const root = cleanPlace(url.searchParams.get("root"));
     const download = url.searchParams.has("download");
     const range = parseRange(req.headers.get("range"));
     const suffix = !!range && range.suffix !== undefined;
-    const first = await this.readPiece(path, range && !suffix ? range.start : 0, suffix ? 0 : FS_PIECE);
+    const first = await this.readPiece(root, path, range && !suffix ? range.start : 0, suffix ? 0 : FS_PIECE);
     if (!first) return json({ error: "Couldn't reach your computer. Try again in a moment.", code: "offline" }, 503);
     if (!first.ok) return fsError(first);
     const size = Math.max(0, Math.round(Number(first.size)) || 0);
@@ -1932,7 +1944,7 @@ export class ChatgqlHub extends DurableObject {
           let bytes = ready;
           ready = null;
           if (!bytes) {
-            const r = await this.readPiece(path, pos, Math.min(FS_PIECE, end - pos + 1));
+            const r = await this.readPiece(root, path, pos, Math.min(FS_PIECE, end - pos + 1));
             if (!r || !r.ok) throw new Error((r && r.error) || "Lost your computer while sending the file.");
             bytes = b64urlBytes(String(r.data || ""));
           }
@@ -1961,12 +1973,30 @@ export class ChatgqlHub extends DurableObject {
     if (no) return no;
     const b = await req.json().catch(() => ({}));
     const path = cleanFsPath(b.path);
-    if (path === null) return json({ error: "That isn't in the working folder.", code: "outside" }, 403);
-    if (!path) return json({ error: "The working folder itself can't be moved to the Trash.", code: "root" }, 400);
-    const r = await this.askAgent({ type: "fs_trash", path }, 120000, "files");
+    if (path === null) return json({ error: "That isn't in this folder.", code: "outside" }, 403);
+    if (!path) return json({ error: "This place itself can't be moved to the Trash.", code: "root" }, 400);
+    const r = await this.askAgent({ type: "fs_trash", root: cleanPlace(b.root), path }, 120000, "files");
     if (!r) return json({ error: "Couldn't reach your computer, so nothing was moved. Try again in a moment.", code: "offline" }, 503);
     if (!r.ok) return fsError(r);
     return json({ ok: true, where: r.where === "Recycle Bin" ? "Recycle Bin" : "Trash" });
+  }
+
+  // An edited text file, saved on the computer: only one that's there, and only if it hasn't changed there since it was
+  // opened (`mtime`, from when it was read), unless `force`.
+  async writeFile(req) {
+    const no = this.filesBlocked();
+    if (no) return no;
+    const b = await req.json().catch(() => ({}));
+    const path = cleanFsPath(b.path);
+    if (path === null) return json({ error: "That isn't in this folder.", code: "outside" }, 403);
+    if (!path) return json({ error: "That's a folder.", code: "not_file" }, 400);
+    if (typeof b.text !== "string") return json({ error: "There's nothing to save.", code: "bad_text" }, 400);
+    if (b.text.length > WRITE_MAX) return json({ error: "That's too big to save from here (2 MB at most).", code: "too_big" }, 413);
+    const mtime = Number.isFinite(Number(b.mtime)) ? Math.round(Number(b.mtime)) : null;
+    const r = await this.askAgent({ type: "fs_write", root: cleanPlace(b.root), path, text: b.text, mtime, force: b.force === true }, 60000, "files");
+    if (!r) return json({ error: "Couldn't reach your computer, so it wasn't saved. Try again in a moment.", code: "offline" }, 503);
+    if (!r.ok) return fsError(r);
+    return json({ ok: true, size: Math.max(0, Math.round(Number(r.size)) || 0), mtime: Math.max(0, Math.round(Number(r.mtime)) || 0) });
   }
 
   serveArtifact(id, download) {

@@ -1,10 +1,11 @@
-// The file browser's side on the computer: only the working folder, links that lead out of it included.
+// The file browser's side on the computer: only inside the place asked for, links that lead out of it included; saving an
+// edited file; and the places there are.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, symlinkSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, symlinkSync, existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { list, info, readPart, trash, insideRoot, kindOf } from "../../agent/files.mjs";
+import { list, info, readPart, trash, insideRoot, kindOf, write, places } from "../../agent/files.mjs";
 
 function tree() {
   const base = mkdtempSync(join(tmpdir(), "cc-files-"));
@@ -67,4 +68,42 @@ test("moving to the Trash takes it out of the working folder and into the Trash"
   assert.deepEqual(r, { where: "Trash", name: "b.txt" });
   assert.equal(existsSync(join(root, "b.txt")), false);
   assert.equal(existsSync(join(home, ".local", "share", "Trash", "files", "b.txt")), true);
+});
+
+test("an edited text file is saved over itself, unless it changed on the computer since it was read", () => {
+  const { root } = tree();
+  const before = info(root, "b.txt");
+  const after = write(root, "b.txt", "hello there\nsecond line", { mtime: before.mtime });
+  assert.equal(readFileSync(join(root, "b.txt"), "utf8"), "hello there\nsecond line");
+  assert.equal(after.size, 23);
+  // changed since: refused, and kept as it is, unless it's saved over anyway
+  assert.throws(() => write(root, "b.txt", "mine", { mtime: before.mtime - 5000 }), e => e.code === "changed");
+  assert.equal(readFileSync(join(root, "b.txt"), "utf8"), "hello there\nsecond line");
+  write(root, "b.txt", "mine", { mtime: before.mtime - 5000, force: true });
+  assert.equal(readFileSync(join(root, "b.txt"), "utf8"), "mine");
+  // nothing new is made, nothing outside, and not a folder
+  assert.throws(() => write(root, "new.txt", "x"), e => e.code === "missing");
+  assert.throws(() => write(root, "escape/key.txt", "x"), e => e.code === "outside");
+  assert.throws(() => write(root, "src", "x"), e => e.code === "not_file");
+  assert.throws(() => write(root, "b.txt", "x".repeat(2 * 1024 * 1024 + 1)), e => e.code === "too_big");
+});
+
+test("the places: the working folder, home and its usual folders, folders Claude Code is allowed into, and the whole computer", () => {
+  const base = mkdtempSync(join(tmpdir(), "cc-places-"));
+  const home = join(base, "home");
+  const ws = join(home, "ws");
+  for (const d of [ws, join(home, "Downloads"), join(home, "Desktop"), join(base, "data"), join(home, ".claude"), join(ws, ".claude")]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ permissions: { additionalDirectories: [join(base, "data"), "~/Downloads", join(base, "gone")] } }));
+  writeFileSync(join(ws, ".claude", "settings.local.json"), JSON.stringify({ permissions: { additionalDirectories: ["../.."] } }));
+  const got = places({ workspace: ws, home, platform: "linux", env: {} });
+  assert.deepEqual(got.map(p => [p.id, p.label, p.path]), [
+    ["ws", "Working folder", ws],
+    ["home", "Home", home],
+    ["desktop", "Desktop", join(home, "Desktop")],
+    ["downloads", "Downloads", join(home, "Downloads")],
+    ["x0", "data", join(base, "data")],
+    ["x3", base.split("/").pop(), base],
+    ["pc", "This computer", "/"]
+  ], "no Documents when there's none, each folder once, and none that isn't there");
+  assert.ok(statSync(got[0].path).isDirectory());
 });

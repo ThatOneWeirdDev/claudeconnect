@@ -8,24 +8,24 @@
 <title>__TAB_TITLE__</title>
 <link rel="icon" href="/favicon">
 <style>
-/* The look follows ChatGPT's as it is now, with the colours of OpenAI's own design system (apps-sdk-ui): a white page and
-   a #f9f9f9 sidebar in light, #212121 and #181818 in dark, a one-row pill-shaped message box, soft grey bubbles for what you
-   send, a black (white in dark) send button, filled 20px icons and the system font. The dark colours are in two blocks, one
-   for "System" when the computer is dark and one for "Dark": they must stay the same. */
+/* The look follows ChatGPT's as it is now, colours taken from its page: one colour for the page and the sidebar (black in
+   dark, white in light) with a hairline between, a #1b1b1b message box with ChatGPT's blue #2c68c6 button, its light blue
+   for links, the "Chat | Work" switch at the top (here Chat | Files), a teal avatar, filled 20px icons and the system font.
+   The dark colours are in two blocks, one for "System" when the computer is dark and one for "Dark": they must stay the same. */
 :root{
-  --surface:#ffffff;--surface-2:#f9f9f9;--surface-3:#f3f3f3;--elevated:#ffffff;--menu:#ffffff;--composer:#ffffff;
-  --text:#0d0d0d;--text-2:#5d5d5d;--text-3:#8f8f8f;
-  --border-0:rgba(13,13,13,.05);--border:rgba(13,13,13,.10);--border-2:rgba(13,13,13,.15);
-  --hover:rgba(13,13,13,.05);--hover-2:rgba(13,13,13,.08);--select:rgba(13,13,13,.08);
+  --surface:#ffffff;--surface-2:#ffffff;--surface-3:#f3f3f3;--elevated:#ffffff;--menu:#ffffff;--composer:#f3f3f3;
+  --text:#0d0d0d;--text-2:#5d5d5d;--text-3:#8f8f8f;--nav:#2b2b2b;--ph:#8f8f8f;
+  --border-0:#ececec;--border:rgba(13,13,13,.10);--border-2:rgba(13,13,13,.15);
+  --hover:#f0f0f0;--hover-2:#e8e8e8;--select:#ececec;
   --solid:#000000;--solid-ink:#ffffff;--solid-hover:#303030;--solid-off:#d7d7d7;--solid-off-ink:#f4f4f4;
-  --btn:#181818;--btn-ink:#ffffff;--btn-hover:#303030;
-  --link:#0169cc;--focus:#0169cc;--toggle:#0285ff;--toggle-off:#dfdfdf;--accent:#0285ff;--avatar:#10a37f;
+  --btn:#181818;--btn-ink:#ffffff;--btn-hover:#303030;--pill:#f0f0f0;
+  --link:#2c68c6;--blue:#2c68c6;--focus:#2c68c6;--toggle:#2c68c6;--toggle-off:#dfdfdf;--accent:#2c68c6;--avatar:#1abc9c;
   --danger:#e02e2a;--danger-text:#ba2623;--danger-soft:color-mix(in oklab,#fa423e 8%,transparent);
   --warn:#b9480d;--warn-soft:color-mix(in oklab,#fb6a22 8%,transparent);--ok:#008635;
-  --user:rgba(233,233,233,.5);--code:#f9f9f9;
+  --user:#f3f3f3;--code:#f7f7f7;
   --inline:rgba(13,13,13,.04);--inline-ring:rgba(13,13,13,.08);--quote:rgba(13,13,13,.15);
-  --seg:#ededed;--seg-on:#ffffff;
-  --composer-edge:0 4px 4px 0 rgba(0,0,0,.04),0 0 1px 0 rgba(0,0,0,.62);
+  --seg:#f0f0f0;--seg-on:#ffffff;
+  --composer-edge:none;
   --shadow:0 10px 15px -3px rgba(0,0,0,.10),0 4px 6px -4px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.08);
   --shadow-s:0 1px 2px -1px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.08);
   --scrim:rgba(0,0,0,.30);--scroll:rgba(13,13,13,.3);
@@ -35,48 +35,49 @@
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --surface:#212121;--surface-2:#181818;--surface-3:#303030;--elevated:#303030;--menu:#353535;--composer:#303030;
-    --text:#ffffff;--text-2:#afafaf;--text-3:#8f8f8f;
-    --border-0:rgba(255,255,255,.06);--border:rgba(255,255,255,.12);--border-2:rgba(255,255,255,.20);
-    --hover:rgba(255,255,255,.06);--hover-2:rgba(255,255,255,.10);--select:rgba(255,255,255,.10);
+    --surface:#000000;--surface-2:#000000;--surface-3:#1b1b1b;--elevated:#1b1b1b;--menu:#1f1f1f;--composer:#1b1b1b;
+    --text:#f3f3f3;--text-2:#b4b4b4;--text-3:#7d7d7d;--nav:#cccccc;--ph:#dcdcdc;
+    --border-0:#1a1a1a;--border:rgba(255,255,255,.10);--border-2:rgba(255,255,255,.16);
+    --hover:#1a1a1a;--hover-2:#262626;--select:#1a1a1a;
     --solid:#ffffff;--solid-ink:#000000;--solid-hover:#ececec;--solid-off:#676767;--solid-off-ink:#2f2f2f;
-    --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;
-    --link:#339cff;--focus:#0285ff;--toggle:#0285ff;--toggle-off:#414141;--accent:#339cff;--avatar:#10a37f;
+    --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;--pill:#222222;
+    --link:#80a9e0;--blue:#80a9e0;--focus:#2c68c6;--toggle:#2c68c6;--toggle-off:#414141;--accent:#2c68c6;--avatar:#1abc9c;
     --danger:#e02e2a;--danger-text:#fa423e;--danger-soft:color-mix(in oklab,#fa423e 16%,transparent);
     --warn:#ff8549;--warn-soft:color-mix(in oklab,#fb6a22 16%,transparent);--ok:#04b84c;
-    --user:rgba(50,50,50,.85);--code:#181818;
+    --user:#1b1b1b;--code:#121212;
     --inline:rgba(255,255,255,.10);--inline-ring:rgba(255,255,255,.08);--quote:rgba(255,255,255,.20);
-    --seg:rgba(0,0,0,.28);--seg-on:#454545;
+    --seg:#131313;--seg-on:#1b1b1b;
     --composer-edge:none;
-    --shadow:0 10px 15px -3px rgba(0,0,0,.20),0 4px 6px -4px rgba(0,0,0,.20),0 0 0 1px rgba(255,255,255,.10);
+    --shadow:0 10px 15px -3px rgba(0,0,0,.40),0 4px 6px -4px rgba(0,0,0,.40),0 0 0 1px rgba(255,255,255,.10);
     --shadow-s:0 1px 2px -1px rgba(0,0,0,.2),0 0 0 1px rgba(255,255,255,.10);
-    --scrim:rgba(0,0,0,.50);--scroll:rgba(255,255,255,.3);
+    --scrim:rgba(0,0,0,.60);--scroll:rgba(255,255,255,.3);
     --hl-1:#ffe48c;--hl-2:#66b5ff;--hl-3:#40c977;--hl-4:#ff8cc1;--hl-5:#ad7bf9;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --surface:#212121;--surface-2:#181818;--surface-3:#303030;--elevated:#303030;--menu:#353535;--composer:#303030;
-  --text:#ffffff;--text-2:#afafaf;--text-3:#8f8f8f;
-  --border-0:rgba(255,255,255,.06);--border:rgba(255,255,255,.12);--border-2:rgba(255,255,255,.20);
-  --hover:rgba(255,255,255,.06);--hover-2:rgba(255,255,255,.10);--select:rgba(255,255,255,.10);
+  --surface:#000000;--surface-2:#000000;--surface-3:#1b1b1b;--elevated:#1b1b1b;--menu:#1f1f1f;--composer:#1b1b1b;
+  --text:#f3f3f3;--text-2:#b4b4b4;--text-3:#7d7d7d;--nav:#cccccc;--ph:#dcdcdc;
+  --border-0:#1a1a1a;--border:rgba(255,255,255,.10);--border-2:rgba(255,255,255,.16);
+  --hover:#1a1a1a;--hover-2:#262626;--select:#1a1a1a;
   --solid:#ffffff;--solid-ink:#000000;--solid-hover:#ececec;--solid-off:#676767;--solid-off-ink:#2f2f2f;
-  --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;
-  --link:#339cff;--focus:#0285ff;--toggle:#0285ff;--toggle-off:#414141;--accent:#339cff;--avatar:#10a37f;
+  --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;--pill:#222222;
+  --link:#80a9e0;--blue:#80a9e0;--focus:#2c68c6;--toggle:#2c68c6;--toggle-off:#414141;--accent:#2c68c6;--avatar:#1abc9c;
   --danger:#e02e2a;--danger-text:#fa423e;--danger-soft:color-mix(in oklab,#fa423e 16%,transparent);
   --warn:#ff8549;--warn-soft:color-mix(in oklab,#fb6a22 16%,transparent);--ok:#04b84c;
-  --user:rgba(50,50,50,.85);--code:#181818;
+  --user:#1b1b1b;--code:#121212;
   --inline:rgba(255,255,255,.10);--inline-ring:rgba(255,255,255,.08);--quote:rgba(255,255,255,.20);
-  --seg:rgba(0,0,0,.28);--seg-on:#454545;
+  --seg:#131313;--seg-on:#1b1b1b;
   --composer-edge:none;
-  --shadow:0 10px 15px -3px rgba(0,0,0,.20),0 4px 6px -4px rgba(0,0,0,.20),0 0 0 1px rgba(255,255,255,.10);
+  --shadow:0 10px 15px -3px rgba(0,0,0,.40),0 4px 6px -4px rgba(0,0,0,.40),0 0 0 1px rgba(255,255,255,.10);
   --shadow-s:0 1px 2px -1px rgba(0,0,0,.2),0 0 0 1px rgba(255,255,255,.10);
-  --scrim:rgba(0,0,0,.50);--scroll:rgba(255,255,255,.3);
+  --scrim:rgba(0,0,0,.60);--scroll:rgba(255,255,255,.3);
   --hl-1:#ffe48c;--hl-2:#66b5ff;--hl-3:#40c977;--hl-4:#ff8cc1;--hl-5:#ad7bf9;
   color-scheme:dark;
 }
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
 [hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 html,body{height:100%}
 body{margin:0;background:var(--surface);color:var(--text);font-family:ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:14px;line-height:1.4286;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-synthesis-weight:none;overflow:hidden}
 button,input,textarea,select{font:inherit;color:inherit}
@@ -88,31 +89,38 @@ svg{display:block;flex:none}
 /* ---- layout and sidebar */
 .app{--side-w:260px;--panel-w:0px;display:grid;grid-template-columns:var(--side-w) minmax(0,1fr) var(--panel-w);height:100vh;height:100dvh}
 .app.panel-open{--panel-w:min(50vw,860px)}
-.side{grid-column:1;background:var(--surface-2);display:flex;flex-direction:column;min-width:0;min-height:0}
-.side-top{flex:none;display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 8px}
-.brand{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;color:var(--text);text-decoration:none;flex:none}
+.side{grid-column:1;background:var(--surface-2);display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid var(--border-0)}
+.side-top{flex:none;display:flex;align-items:center;gap:2px;height:56px;padding:0 8px 0 10px}
+/* the site's name as a wordmark, like "ChatGPT" at the top of its sidebar; a logo of your own goes before it */
+.brand{display:flex;align-items:center;gap:8px;min-width:0;height:36px;margin-right:auto;padding:0 8px;border-radius:8px;color:var(--text);text-decoration:none;font-size:18px;line-height:24px;font-weight:600;letter-spacing:-.01em}
 .brand:hover{background:var(--hover)}
-.brand>svg,.brand>img{width:24px;height:24px;border-radius:6px;object-fit:contain}
-.brand span{display:none}
+.brand>img{width:24px;height:24px;border-radius:6px;object-fit:contain;flex:none}
+.brand>svg{display:none;width:24px;height:24px}
+.brand>span:not(.brand-open){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-open{display:none}
 .icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;color:var(--text);flex:none}
 .icon-btn:hover,.icon-btn[aria-expanded="true"]{background:var(--hover)}
 .icon-btn svg{width:20px;height:20px}
-.side-nav{display:flex;flex-direction:column}
-.nav-item{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 6px;padding:0 10px;border-radius:10px;font-size:14px;line-height:20px;color:var(--text);text-align:left;cursor:pointer}
-.nav-item:hover,.nav-item:focus-within{background:var(--hover)}
+.side-nav{display:flex;flex-direction:column;gap:1px;padding-top:2px}
+.nav-item{display:flex;align-items:center;gap:10px;min-height:38px;margin:0 8px;padding:0 10px;border-radius:10px;font-size:14px;line-height:20px;color:var(--nav);text-align:left;cursor:pointer}
+.nav-item:hover,.nav-item:focus-within,.nav-item.on{background:var(--hover);color:var(--text)}
+/* search is the magnifier at the top, as in ChatGPT: its field only shows while it's being used */
+.side:not(.searching) #searchRow{display:none}
 .nav-item svg{width:20px;height:20px}
 .nav-item>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav-item input{flex:1;min-width:0;height:36px;border:0;background:none;outline:none;padding:0}
 .nav-item input::-webkit-search-cancel-button{display:none}
-.nav-item input::placeholder{color:var(--text)}
+.nav-item input::placeholder{color:var(--nav)}
 .nav-item input:focus::placeholder{color:var(--text-3)}
 .nav-item kbd{font:inherit;font-size:14px;line-height:20px;color:var(--text-3);white-space:nowrap;opacity:0;transition:opacity .15s}
 .nav-item:hover kbd{opacity:1}
 .nav-item input:not(:placeholder-shown)~kbd,.nav-item input:focus~kbd{display:none}
-.history-label{padding:20px 16px 6px;font-size:14px;line-height:20px;color:var(--text-3)}
+.history-label{padding:22px 18px 8px;font-size:14px;line-height:20px;font-weight:500;color:var(--text-2)}
 .history{flex:1;overflow-y:auto;padding:0 0 8px;min-height:0}
 .item{position:relative;display:flex;align-items:center;margin:0 6px;border-radius:10px}
-.item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:36px;padding:0 10px;color:var(--text);text-decoration:none;border-radius:10px;font-size:14px;line-height:20px}
+.item{margin:0 8px}
+.item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;color:var(--nav);text-decoration:none;border-radius:10px;font-size:14px;line-height:20px}
+.item:hover a,.item.on a{color:var(--text)}
 .item a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item a.sub{min-height:48px;padding-top:6px;padding-bottom:6px}
 .item a .tt{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.3}
@@ -127,13 +135,16 @@ svg{display:block;flex:none}
 .item input{flex:1;min-width:0;margin:2px;padding:5px 8px;border:1px solid var(--border-2);border-radius:8px;background:var(--surface);outline:none;font-size:14px}
 .empty-list{padding:8px 16px;color:var(--text-3);font-size:13px}
 .opening{display:flex;align-items:center;justify-content:center;gap:10px;padding:56px 0;color:var(--text-3);font-size:14px}
-.side-foot{flex:none;padding:6px 0 max(8px,env(safe-area-inset-bottom));position:relative}
-.profile{display:flex;align-items:center;gap:8px;width:calc(100% - 12px);min-height:52px;margin:0 6px;padding:0 10px;border-radius:10px;text-align:left}
+.side-foot{flex:none;display:flex;align-items:center;gap:6px;padding:6px 8px max(10px,env(safe-area-inset-bottom));position:relative}
+.profile{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:52px;padding:0 8px;border-radius:10px;text-align:left}
 .profile:hover,.profile[aria-expanded="true"]{background:var(--hover)}
-.avatar{position:relative;width:24px;height:24px;border-radius:50%;background:var(--avatar);color:#fff;display:grid;place-items:center;font-weight:600;font-size:11px;line-height:1;flex:none;text-transform:uppercase}
+.avatar{position:relative;width:32px;height:32px;border-radius:50%;background:var(--avatar);color:#e8fffa;display:grid;place-items:center;font-weight:500;font-size:12px;line-height:1;flex:none;text-transform:uppercase}
 .who{display:flex;flex-direction:column;min-width:0}
-.who b{font-weight:400;font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.who small{color:var(--text-3);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who b{font-weight:500;font-size:14px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* like ChatGPT's Upgrade beside you: here, the update waiting */
+.side-up{flex:none;height:32px;padding:0 14px;border-radius:999px;background:var(--pill);border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:500;white-space:nowrap}
+.side-up:hover{background:var(--hover-2)}
+.who small{color:var(--text-2);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .who small:empty{display:none}
 .scrim{display:none}
 /* collapsed, the sidebar is a rail of icons, like ChatGPT's: the logo (which turns into "open sidebar" under the pointer), new chat, search, and you */
@@ -141,6 +152,11 @@ svg{display:block;flex:none}
   .app.side-collapsed{--side-w:52px}
   .app.side-collapsed .side{border-right:1px solid var(--border-0)}
   .app.side-collapsed .side-top{justify-content:center}
+  .app.side-collapsed .brand{width:36px;padding:0;justify-content:center;margin:0}
+  .app.side-collapsed .brand>svg{display:block}
+  .app.side-collapsed .side #searchRow{display:flex}
+  .app.side-collapsed .brand>span:not(.brand-open),.app.side-collapsed #searchBtn,.app.side-collapsed .side-up{display:none}
+  .app.side-collapsed .side-foot{justify-content:center}
   .app.side-collapsed #hideSide,.app.side-collapsed .history-label,.app.side-collapsed .history,.app.side-collapsed .nav-item>span,.app.side-collapsed .nav-item input,.app.side-collapsed .nav-item kbd,.app.side-collapsed .who{display:none}
   .app.side-collapsed .brand{cursor:e-resize}
   .app.side-collapsed .brand:hover>:not(.brand-open){display:none}
@@ -155,14 +171,17 @@ svg{display:block;flex:none}
 
 /* ---- the top bar: ChatGPT's model switcher on the left, the update button and the chat's ⋯ on the right */
 .main{grid-column:2;display:flex;flex-direction:column;min-width:0;min-height:0;height:100vh;height:100dvh;position:relative}
-.top{flex:none;height:52px;display:flex;align-items:center;gap:4px;padding:0 8px;position:relative;z-index:2}
-.top .grow{flex:1;min-width:0}
+.top{flex:none;height:56px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:4px;padding:0 10px;position:relative;z-index:2}
+.top-l,.top-r{display:flex;align-items:center;gap:4px;min-width:0}
+.top-r{justify-content:flex-end}
+/* ChatGPT's "Chat | Work" switch: here the chat, and the file browser */
+.views{display:inline-flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:var(--seg)}
+.views button{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 20px;border-radius:999px;font-size:15px;line-height:20px;color:var(--text);white-space:nowrap}
+.views button.on{background:var(--seg-on);box-shadow:var(--shadow-s)}
+.views button.alt{color:var(--blue)}
+.views button.alt svg{width:16px;height:16px}
+.views button:not(.on):hover{background:var(--hover)}
 .only-narrow{display:none}
-.ms{display:inline-flex;align-items:center;gap:4px;min-width:0;min-height:36px;padding:0 10px;border-radius:8px;font-size:18px;line-height:28px;font-weight:400;color:var(--text);white-space:nowrap}
-.ms:hover,.ms[aria-expanded="true"]{background:var(--hover)}
-.ms>span{overflow:hidden;text-overflow:ellipsis}
-.ms .sub{color:var(--text-2);flex:none}
-.ms svg{width:16px;height:16px;color:var(--text-3)}
 .pill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:9999px;font-size:14px;line-height:20px;font-weight:500;white-space:nowrap;color:var(--text);flex:none}
 .pill:hover{background:var(--hover)}
 .pill svg{width:20px;height:20px}
@@ -170,6 +189,9 @@ svg{display:block;flex:none}
 .pill.busy i{display:block;animation:pulse 1.2s ease-in-out infinite}
 .pill.busy svg{display:none}
 .pill.bad{color:var(--danger-text)}
+/* an update waiting: blue, like ChatGPT's "Upgrade" */
+.pill.up{color:var(--blue);font-weight:400;font-size:15px}
+.pill.up:hover{background:none;opacity:.85}
 
 /* ---- menus and popovers: no border, a hairline in the shadow, rows 36px high with 20px icons */
 .menu,.pmenu,.pop{background:var(--menu);border-radius:16px;box-shadow:var(--shadow);font-size:14px;line-height:20px;color:var(--text)}
@@ -370,7 +392,7 @@ svg{display:block;flex:none}
 /* the conversation fades out above the message box, rather than being cut off at its edge */
 .main:not(.is-empty) .dock-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:24px;background:linear-gradient(to bottom,transparent,var(--surface));pointer-events:none}
 .hero{display:none;width:100%;max-width:768px;margin:0 auto 28px;padding:0 8px;text-align:center}
-.hero h1{margin:0;font-size:28px;line-height:34px;font-weight:400}
+.hero h1{margin:0;font-size:28px;line-height:34px;font-weight:400;letter-spacing:-.01em}
 .hero p{margin:12px 0 0;color:var(--text-2);font-size:14px;line-height:20px}
 .hero p:empty{display:none}
 .hero code{font-family:var(--mono);font-size:.875em;font-weight:500;background:var(--inline);box-shadow:inset 0 0 0 1px var(--inline-ring);padding:1px .3rem;border-radius:4px}
@@ -378,8 +400,14 @@ svg{display:block;flex:none}
 .main.is-empty .thread{display:none}
 .main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:calc(10vh + 32px);overflow-y:auto}
 .main.is-empty .hero{display:block}
+/* under the empty box, like ChatGPT's "Write or edit" and "Search the web" */
+.sugg{display:none;flex-direction:column;gap:2px;margin:18px 0 0;padding:0 12px}
+.main.is-empty .sugg{display:flex}
+.sugg button{display:flex;align-items:center;gap:14px;min-height:48px;padding:0 12px;border-radius:12px;font-size:16px;line-height:24px;color:var(--text-2);text-align:left}
+.sugg button:hover{background:var(--hover);color:var(--text)}
+.sugg svg{width:20px;height:20px;color:var(--text-3)}
 .main.is-empty .legal{display:none}
-.composer{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"lead main trail";align-items:center;column-gap:4px;min-height:56px;padding:10px;border-radius:28px;background:var(--composer);box-shadow:var(--composer-edge);cursor:text;transition:box-shadow .15s}
+.composer{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"lead main trail";align-items:center;column-gap:4px;min-height:56px;padding:10px;border-radius:30px;background:var(--composer);box-shadow:var(--composer-edge);cursor:text;transition:box-shadow .15s}
 .composer.tall{grid-template-areas:"chips chips chips" "main main main" "lead . trail";row-gap:8px}
 .composer.drag{box-shadow:0 0 0 2px var(--accent)}
 .composer.disabled{opacity:.55;pointer-events:none}
@@ -387,16 +415,18 @@ svg{display:block;flex:none}
 .chips:empty{display:none}
 .composer textarea{grid-area:main;display:block;width:100%;min-width:0;min-height:24px;max-height:25dvh;margin:0;padding:0 4px;border:0;outline:0;background:none;resize:none;font-size:16px;line-height:24px;overflow-y:auto}
 .composer.tall textarea{padding:4px 6px 0}
-.composer textarea::placeholder{color:var(--text-3)}
+.composer textarea::placeholder{color:var(--ph)}
 .c-lead{grid-area:lead;display:flex;align-items:center;gap:4px;min-width:0}
 .c-trail{grid-area:trail;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
 .c-icon{width:36px;height:36px;border-radius:9999px;display:grid;place-items:center;color:var(--text);flex:none;cursor:pointer}
 .c-icon:hover{background:var(--hover-2)}
 .c-icon svg,.send svg{width:20px;height:20px}
 /* a tool pill, like ChatGPT's: the permission mode */
-.c-pill{display:inline-flex;align-items:center;gap:4px;height:36px;padding:0 10px;border-radius:9999px;font-size:14px;line-height:20px;color:var(--accent);white-space:nowrap;flex:none;cursor:pointer}
+.c-pill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;border-radius:9999px;font-size:15px;line-height:20px;color:var(--text-2);white-space:nowrap;flex:none;cursor:pointer;min-width:0}
 .c-pill svg{width:20px;height:20px}
-.c-pill:hover,.c-pill[aria-expanded="true"]{background:color-mix(in oklab,var(--accent) 12%,transparent)}
+.c-pill:hover,.c-pill[aria-expanded="true"]{background:var(--hover-2);color:var(--text)}
+.c-pill>span{overflow:hidden;text-overflow:ellipsis}
+.c-pill .sub{color:var(--text-3)}
 .c-pill[aria-pressed="false"]{color:var(--text-2)}
 .c-pill[aria-pressed="false"]:hover{background:var(--hover-2);color:var(--text)}
 .ring{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;color:var(--text-2);flex:none}
@@ -406,9 +436,9 @@ svg{display:block;flex:none}
 .ring .bar{stroke:currentColor;stroke-linecap:round;transition:stroke-dashoffset .35s}
 .ring.mid{color:var(--warn)}
 .ring.high{color:var(--danger)}
-.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--solid);color:var(--solid-ink);flex:none;transition:background .15s,color .15s,opacity .15s}
-.send:hover{opacity:.8}
-.send[disabled]{background:var(--solid-off);color:var(--solid-off-ink);opacity:1;cursor:default}
+.send{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none;transition:background .15s,color .15s,opacity .15s}
+.send:hover{opacity:.88}
+.send[disabled]{background:var(--accent);color:#fff;opacity:1;cursor:default}
 .c-note{margin:0 auto 8px;padding:0 12px;color:var(--text-3);font-size:12px;line-height:16px;text-align:center}
 .c-note:empty{display:none}
 .c-note.warn{color:var(--warn)}
@@ -443,8 +473,9 @@ svg{display:block;flex:none}
 /* ---- the file browser: the working folder on the computer, over the whole page. Folders and files on the left, the one
    picked on the right; on a phone, one then the other. */
 .files{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;background:var(--surface);color:var(--text);animation:fade .15s ease-out}
-.fb-head{flex:none;display:flex;align-items:center;gap:4px;height:52px;padding:0 8px 0 16px;border-bottom:1px solid var(--border-0)}
-.fb-title{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.fb-head{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;height:56px;padding:0 8px 0 12px;border-bottom:1px solid var(--border-0)}
+.fb-title{min-width:0;display:flex;align-items:center;gap:8px}
+.fb-tools{display:flex;align-items:center;justify-content:flex-end;gap:2px}
 .fb-title h2{margin:0;font-size:18px;line-height:28px;font-weight:600;white-space:nowrap}
 .crumbs{display:flex;align-items:center;min-width:0;overflow-x:auto;scrollbar-width:none}
 .crumbs::-webkit-scrollbar{display:none}
@@ -455,7 +486,18 @@ svg{display:block;flex:none}
 .crumbs .sep svg{width:14px;height:14px}
 .fb-head .icon-btn[aria-pressed="true"]{background:var(--select)}
 .fb-head svg,.fb-vhead svg{width:20px;height:20px}
-.fb-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr)}
+.fb-main{flex:1;min-height:0;display:grid;grid-template-columns:220px minmax(300px,380px) minmax(0,1fr);grid-template-areas:"places side view"}
+.fb-places{grid-area:places;display:flex;flex-direction:column;gap:1px;padding:8px;border-right:1px solid var(--border-0);overflow:auto;min-height:0}
+.fb-places .mh{padding:8px 10px 6px}
+.fb-place{display:flex;align-items:center;gap:10px;min-height:38px;padding:0 10px;border-radius:10px;color:var(--nav);text-align:left;font-size:14px;line-height:20px;white-space:nowrap;flex:none}
+.fb-place span{overflow:hidden;text-overflow:ellipsis}
+.fb-place:hover{background:var(--hover);color:var(--text)}
+.fb-place.on{background:var(--select);color:var(--text)}
+.fb-place svg{width:18px;height:18px}
+.fb-side{grid-area:side}
+.fb-view{grid-area:view}
+.fb-edit{display:block;width:100%;height:100%;margin:0;padding:16px 20px;border:0;outline:0;resize:none;background:var(--code);color:var(--text);font:14px/1.6 var(--mono);tab-size:2;white-space:pre;overflow:auto}
+.fb-vhead .btn{height:32px;padding:0 14px;font-size:13px;margin-left:4px}
 .fb-side{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--border-0)}
 .fb-list{flex:1;min-height:0;overflow-y:auto;padding:6px;overscroll-behavior:contain}
 .fb-foot{flex:none;padding:8px 16px;border-top:1px solid var(--border-0);color:var(--text-3);font-size:12px;line-height:16px}
@@ -496,8 +538,20 @@ svg{display:block;flex:none}
 .fb-audio audio{width:100%}
 .fb-note{margin:0;padding:8px 18px;border-bottom:1px solid var(--border-0);background:var(--surface);color:var(--text-3);font-size:12px;line-height:16px}
 .fb-vbody .p-code{min-height:0}
+/* narrower: the places are a row of chips over the list */
+@media (max-width:1100px){
+  .fb-main{grid-template-columns:minmax(280px,380px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"places view" "side view"}
+  .fb-places{flex-direction:row;gap:6px;padding:8px 10px;border-right:1px solid var(--border-0);border-bottom:1px solid var(--border-0);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .fb-places .mh{display:none}
+  .fb-place{min-height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border)}
+  .fb-place svg{width:16px;height:16px}
+}
 @media (max-width:860px){
-  .fb-head{height:calc(52px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 4px 0 12px}
+  .fb-head{height:calc(52px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 4px 0 12px;grid-template-columns:minmax(0,1fr) auto}
+  .fb-head .views{display:none}
+  .fb-main{grid-template-columns:minmax(0,1fr);grid-template-areas:"places" "side"}
+  .files.viewing .fb-main{grid-template-areas:"view";grid-template-rows:minmax(0,1fr)}
+  .files.viewing .fb-places{display:none}
   .fb-head .icon-btn,.fb-vhead .icon-btn{width:40px;height:40px}
   .fb-main{grid-template-columns:minmax(0,1fr)}
   .fb-side{border-right:0}
@@ -658,6 +712,8 @@ svg{display:block;flex:none}
   .only-narrow{display:grid}
   .only-wide{display:none}
   .top{padding:env(safe-area-inset-top) 8px 0;gap:0;height:calc(52px + env(safe-area-inset-top))}
+  .views button{padding:0 14px;height:32px;font-size:14px}
+  .c-pill .sub{display:none}
   .top .icon-btn{width:40px;height:40px}
   .pill{height:40px}
   .pill.solo{width:40px;padding:0;justify-content:center}
@@ -688,13 +744,15 @@ svg{display:block;flex:none}
   <aside class="side" id="side" aria-label="Chats">
     <div class="side-top">
       <a class="brand" href="/" id="brand" aria-label="__SITE_NAME__">__BRAND_MARK__<span>__SITE_NAME__</span><span class="brand-open" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.45C8 5.42 8.00 5.39 8.00 5.36C7.55 5.37 7.18 5.38 6.85 5.41C6.32 5.45 5.99 5.53 5.74 5.64L5.63 5.69C5.14 5.94 4.73 6.32 4.44 6.79L4.32 7.00C4.19 7.26 4.10 7.61 4.05 8.21C4.00 8.83 4 9.62 4 10.76V13.23C4 14.37 4.00 15.16 4.05 15.78C4.10 16.38 4.19 16.73 4.32 16.99L4.44 17.20C4.73 17.67 5.14 18.05 5.63 18.30L5.74 18.35C5.99 18.46 6.32 18.54 6.85 18.58C7.17 18.61 7.55 18.62 8 18.62V5.45ZM22 13.23C22 14.33 22.00 15.22 21.94 15.94C21.89 16.58 21.78 17.15 21.56 17.68L21.45 17.90C20.97 18.84 20.21 19.61 19.27 20.09C18.67 20.39 18.03 20.51 17.30 20.57C16.59 20.63 15.70 20.63 14.59 20.63H9.40C9.27 20.63 9.15 20.63 9.03 20.63C9.02 20.63 9.01 20.63 9 20.63C8.98 20.63 8.97 20.63 8.95 20.63C8.05 20.63 7.31 20.62 6.69 20.57C6.05 20.52 5.48 20.42 4.95 20.19L4.73 20.09C3.84 19.64 3.12 18.94 2.63 18.08L2.54 17.90C2.24 17.31 2.11 16.67 2.05 15.94C1.99 15.22 2 14.33 2 13.23V10.76C2 9.66 1.99 8.77 2.05 8.05C2.11 7.32 2.24 6.68 2.54 6.09L2.63 5.91C3.12 5.05 3.84 4.35 4.73 3.90L4.95 3.80C5.48 3.57 6.05 3.47 6.69 3.42C7.40 3.36 8.29 3.36 9.40 3.36H14.59C15.70 3.36 16.59 3.36 17.30 3.42C18.03 3.48 18.67 3.60 19.26 3.90L19.44 4.00C20.30 4.48 21.00 5.21 21.45 6.09L21.56 6.31C21.78 6.84 21.89 7.41 21.94 8.05C22.00 8.77 22 9.66 22 10.76V13.23ZM10 18.63H14.59C15.73 18.63 16.52 18.63 17.14 18.58C17.75 18.53 18.09 18.44 18.36 18.30L18.56 18.19C19.03 17.90 19.42 17.49 19.67 16.99L19.72 16.89C19.82 16.64 19.90 16.31 19.94 15.78C19.99 15.16 20 14.37 20 13.23V10.76C20 9.62 19.99 8.83 19.94 8.21C19.90 7.68 19.82 7.35 19.72 7.10L19.67 7.00C19.42 6.50 19.03 6.09 18.56 5.80L18.36 5.69C18.09 5.55 17.75 5.46 17.14 5.41C16.52 5.36 15.73 5.36 14.59 5.36H9.99C9.99 5.39 10 5.42 10 5.45V18.63Z" fill="currentColor"/></svg></span></a>
+      <button class="icon-btn" id="searchBtn" type="button" title="Search chats" aria-label="Search chats"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg></button>
       <button class="icon-btn" id="hideSide" type="button" title="Close sidebar" aria-label="Close sidebar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.45C8 5.42 8.00 5.39 8.00 5.36C7.55 5.37 7.18 5.38 6.85 5.41C6.32 5.45 5.99 5.53 5.74 5.64L5.63 5.69C5.14 5.94 4.73 6.32 4.44 6.79L4.32 7.00C4.19 7.26 4.10 7.61 4.05 8.21C4.00 8.83 4 9.62 4 10.76V13.23C4 14.37 4.00 15.16 4.05 15.78C4.10 16.38 4.19 16.73 4.32 16.99L4.44 17.20C4.73 17.67 5.14 18.05 5.63 18.30L5.74 18.35C5.99 18.46 6.32 18.54 6.85 18.58C7.17 18.61 7.55 18.62 8 18.62V5.45ZM22 13.23C22 14.33 22.00 15.22 21.94 15.94C21.89 16.58 21.78 17.15 21.56 17.68L21.45 17.90C20.97 18.84 20.21 19.61 19.27 20.09C18.67 20.39 18.03 20.51 17.30 20.57C16.59 20.63 15.70 20.63 14.59 20.63H9.40C9.27 20.63 9.15 20.63 9.03 20.63C9.02 20.63 9.01 20.63 9 20.63C8.98 20.63 8.97 20.63 8.95 20.63C8.05 20.63 7.31 20.62 6.69 20.57C6.05 20.52 5.48 20.42 4.95 20.19L4.73 20.09C3.84 19.64 3.12 18.94 2.63 18.08L2.54 17.90C2.24 17.31 2.11 16.67 2.05 15.94C1.99 15.22 2 14.33 2 13.23V10.76C2 9.66 1.99 8.77 2.05 8.05C2.11 7.32 2.24 6.68 2.54 6.09L2.63 5.91C3.12 5.05 3.84 4.35 4.73 3.90L4.95 3.80C5.48 3.57 6.05 3.47 6.69 3.42C7.40 3.36 8.29 3.36 9.40 3.36H14.59C15.70 3.36 16.59 3.36 17.30 3.42C18.03 3.48 18.67 3.60 19.26 3.90L19.44 4.00C20.30 4.48 21.00 5.21 21.45 6.09L21.56 6.31C21.78 6.84 21.89 7.41 21.94 8.05C22.00 8.77 22 9.66 22 10.76V13.23ZM10 18.63H14.59C15.73 18.63 16.52 18.63 17.14 18.58C17.75 18.53 18.09 18.44 18.36 18.30L18.56 18.19C19.03 17.90 19.42 17.49 19.67 16.99L19.72 16.89C19.82 16.64 19.90 16.31 19.94 15.78C19.99 15.16 20 14.37 20 13.23V10.76C20 9.62 19.99 8.83 19.94 8.21C19.90 7.68 19.82 7.35 19.72 7.10L19.67 7.00C19.42 6.50 19.03 6.09 18.56 5.80L18.36 5.69C18.09 5.55 17.75 5.46 17.14 5.41C16.52 5.36 15.73 5.36 14.59 5.36H9.99C9.99 5.39 10 5.42 10 5.45V18.63Z" fill="currentColor"/></svg></button>
     </div>
     <div class="side-nav">
       <button class="nav-item" id="newChat" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.67 3.91C16.89 2.69 18.86 2.69 20.08 3.91C21.30 5.13 21.30 7.10 20.08 8.32L14.14 14.26C13.38 15.02 12.39 15.52 11.32 15.67L9.14 15.98C8.82 16.03 8.51 15.92 8.29 15.70C8.07 15.48 7.96 15.17 8.01 14.85L8.32 12.67C8.47 11.60 8.97 10.61 9.73 9.85L15.67 3.91ZM18.67 5.32C18.23 4.88 17.52 4.88 17.08 5.32L11.14 11.26C10.69 11.72 10.39 12.31 10.30 12.96L10.17 13.82L11.03 13.69C11.68 13.60 12.27 13.30 12.73 12.85L18.67 6.91C19.11 6.47 19.11 5.76 18.67 5.32ZM11 3.99C11.00 4.55 10.55 4.99 10.00 5.00C9.00 5.00 8.29 5.00 7.74 5.06C7.20 5.11 6.88 5.20 6.63 5.32C6.07 5.61 5.61 6.07 5.32 6.63C5.19 6.90 5.10 7.24 5.05 7.85C5.00 8.47 5 9.26 5 10.4V13.6C5 14.73 5.00 15.52 5.05 16.14C5.10 16.75 5.19 17.09 5.32 17.36C5.61 17.92 6.07 18.38 6.63 18.67C6.90 18.80 7.24 18.89 7.85 18.94C8.47 18.99 9.26 19 10.4 19H13.6C14.73 19 15.52 18.99 16.14 18.94C16.75 18.89 17.09 18.80 17.36 18.67C17.92 18.38 18.38 17.92 18.67 17.36C18.79 17.11 18.88 16.79 18.93 16.25C18.99 15.70 18.99 14.99 18.99 13.99C19.00 13.44 19.44 12.99 20.00 13C20.55 13.00 21.00 13.44 20.99 14.00C20.99 14.97 20.99 15.78 20.93 16.44C20.86 17.11 20.73 17.71 20.45 18.26C19.97 19.21 19.21 19.97 18.27 20.45C17.67 20.75 17.03 20.88 16.30 20.94C15.60 21 14.72 21 13.64 21H10.35C9.27 21 8.39 21 7.69 20.94C6.96 20.88 6.32 20.75 5.73 20.45C4.78 19.97 4.02 19.21 3.54 18.26C3.24 17.67 3.11 17.03 3.05 16.30C2.99 15.60 2.99 14.72 3 13.64V10.35C2.99 9.27 2.99 8.39 3.05 7.69C3.11 6.96 3.24 6.32 3.54 5.73C4.02 4.78 4.78 4.02 5.73 3.54C6.28 3.26 6.88 3.13 7.55 3.06C8.21 3.00 9.02 3.00 9.99 3.00C10.55 2.99 10.99 3.44 11 3.99Z" fill="currentColor"/></svg><span>New chat</span><kbd data-keys="shift+o" aria-hidden="true">Ctrl Shift O</kbd></button>
-      <label class="nav-item"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"><kbd data-keys="k" aria-hidden="true">Ctrl K</kbd></label>
+      <label class="nav-item" id="searchRow"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"><kbd data-keys="k" aria-hidden="true">Ctrl K</kbd></label>
+      <button class="nav-item" id="filesNav" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.4a2 2 0 0 1 1.42.59L12.24 7H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-9Z"/></svg><span>Files</span></button>
     </div>
-    <div class="history-label">Chats</div>
+    <div class="history-label">Recents</div>
     <nav class="history" id="history"></nav>
     <div class="side-foot">
       <div class="pmenu" id="pmenu" hidden role="menu" aria-label="Account"></div>
@@ -702,20 +760,24 @@ svg{display:block;flex:none}
         <span class="avatar" id="avatar"></span>
         <span class="who"><b id="whoName"></b><small id="whoSub"></small></span>
       </button>
+      <button class="side-up" id="sideUp" type="button" hidden>Update</button>
     </div>
   </aside>
   <div class="scrim" id="scrim"></div>
   <main class="main is-empty" id="main">
     <header class="top">
-      <button class="icon-btn only-narrow" id="openSide" type="button" aria-label="Open sidebar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 8a1 1 0 0 1 1-1h16a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm0 8a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Z"/></svg></button>
-      <button class="ms" id="modelBtn" type="button" aria-haspopup="menu" aria-expanded="false"><span id="modelName">Opus 5.5</span><span class="sub" id="effortName">Medium</span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.29 9.29a1 1 0 0 1 1.41 0L12 12.58l3.29-3.29a1 1 0 1 1 1.41 1.41l-4 4a1 1 0 0 1-1.41 0l-4-4a1 1 0 0 1 0-1.41Z" clip-rule="evenodd"/></svg></button>
-      <div class="grow"></div>
+      <div class="top-l">
+        <button class="icon-btn only-narrow" id="openSide" type="button" aria-label="Open sidebar"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 8a1 1 0 0 1 1-1h16a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm0 8a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Z"/></svg></button>
+      </div>
+      <div class="views" role="tablist" aria-label="View"><button type="button" role="tab" data-view="chat" aria-selected="true" class="on">Chat</button><button type="button" role="tab" data-view="files" aria-selected="false" class="alt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.4a2 2 0 0 1 1.42.59L12.24 7H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-9Z"/></svg>Files</button></div>
+      <div class="top-r">
       <button class="pill" id="updatePill" type="button" hidden><i></i><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 12C4 7.58 7.58 4 12 4C16.41 4 20 7.58 20 12C20 16.41 16.41 20 12 20C7.58 20 4 16.41 4 12ZM12 2C6.47 2 2 6.47 2 12C2 17.52 6.47 22 12 22C17.52 22 22 17.52 22 12C22 6.47 17.52 2 12 2ZM16.20 10.79L12.70 7.29C12.31 6.90 11.68 6.90 11.29 7.29L7.79 10.79C7.40 11.18 7.40 11.81 7.79 12.20C8.18 12.59 8.81 12.59 9.20 12.20L11 10.41V16C11 16.55 11.44 17 12 17C12.55 17 13 16.55 13 16V10.41L14.79 12.20C15.18 12.59 15.81 12.59 16.20 12.20C16.59 11.81 16.59 11.18 16.20 10.79Z" fill="currentColor"/></svg><span class="only-wide" id="pillText"></span><span class="only-narrow" id="pillShort"></span></button>
       <button class="icon-btn" id="chatMore" type="button" hidden title="Chat options" aria-label="Chat options" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm7 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm7 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z"/></svg></button>
+      </div>
     </header>
     <section class="thread" id="thread"><div class="thread-inner" id="threadInner"></div></section>
     <div class="dock">
-      <div class="hero"><h1 id="heroTitle">What's on your mind today?</h1><p id="heroSub"></p></div>
+      <div class="hero"><h1 id="heroTitle">What's on the agenda today?</h1><p id="heroSub"></p></div>
       <div class="dock-wrap">
         <button class="jump" id="jump" type="button" hidden aria-label="Jump to latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21C11.73 21 11.48 20.89 11.29 20.70L4.29 13.70C3.90 13.31 3.90 12.68 4.29 12.29C4.68 11.90 5.31 11.90 5.70 12.29L11 17.58V4C11 3.44 11.44 3 12 3C12.55 3 13 3.44 13 4V17.58L18.29 12.29C18.68 11.90 19.31 11.90 19.70 12.29C20.09 12.68 20.09 13.31 19.70 13.70L12.70 20.70C12.51 20.89 12.26 21 12 21Z" fill="currentColor"/></svg></button>
         <div class="c-note" id="cNote"></div>
@@ -725,13 +787,19 @@ svg{display:block;flex:none}
             <button type="button" class="c-icon" id="attachBtn" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.59C12.58 3.59 13.06 4.07 13.06 4.66V10.93H19.33C19.92 10.93 20.4 11.41 20.4 12C20.4 12.58 19.92 13.06 19.33 13.06H13.06V19.33C13.06 19.92 12.58 20.4 12 20.4C11.41 20.4 10.93 19.92 10.93 19.33V13.06H4.66C4.07 13.06 3.59 12.58 3.59 12C3.59 11.41 4.07 10.93 4.66 10.93H10.93V4.66C10.93 4.07 11.41 3.59 12 3.59Z" fill="currentColor"/></svg></button>
             <input type="file" id="fileInput" multiple hidden>
           </div>
-          <textarea id="input" rows="1" placeholder="Ask anything" aria-label="Message"></textarea>
+          <textarea id="input" rows="1" placeholder="Ask __SITE_NAME__" aria-label="Message"></textarea>
           <div class="c-trail">
+            <button type="button" class="c-pill" id="modelBtn" aria-haspopup="menu" aria-expanded="false" title="Model and effort"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg><span id="modelName">Opus 5.5</span><span class="sub" id="effortName">Medium</span></button>
             <button type="button" class="c-pill" id="permBtn" aria-haspopup="menu" aria-expanded="false" title="Permissions"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.34 10.03a1 1 0 1 0-1.68-1.07l-2.47 3.89-.943-1.03a1 1 0 0 0-1.47 1.34l1.82 2a1 1 0 0 0 1.58-.138l3.17-5Z"/><path fill-rule="evenodd" d="M13.20 1.93a3 3 0 0 0-2.40 0l-6 2.62A3 3 0 0 0 3 7.30V13a9 9 0 1 0 18 0V7.30a3 3 0 0 0-1.79-2.74l-6-2.62Zm-1.60 1.83a1 1 0 0 1 .802 0l6 2.62a1 1 0 0 1 .599.91V13a7 7 0 1 1-14 0V7.30a1 1 0 0 1 .6-.916l6-2.62Z" clip-rule="evenodd"/></svg><span id="permName">Auto</span></button>
             <button type="button" class="ring" id="ctxBtn" aria-haspopup="true" aria-expanded="false" aria-label="Context is empty" title="Context is empty"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" aria-hidden="true"><circle class="trk" cx="12" cy="12" r="9"/><circle class="bar" id="ctxBar" cx="12" cy="12" r="9" stroke-dasharray="56.549" stroke-dashoffset="56.549"/></svg></button>
             <button type="submit" class="send" id="sendBtn" aria-label="Send" disabled><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3C12.26 3 12.51 3.10 12.70 3.29L19.70 10.29C20.09 10.68 20.09 11.31 19.70 11.70C19.31 12.09 18.68 12.09 18.29 11.70L13 6.41V20C13 20.55 12.55 21 12 21C11.44 21 11 20.55 11 20V6.41L5.70 11.70C5.31 12.09 4.68 12.09 4.29 11.70C3.90 11.31 3.90 10.68 4.29 10.29L11.29 3.29C11.48 3.10 11.73 3 12 3Z" fill="currentColor"/></svg></button>
           </div>
         </form>
+        <div class="sugg" id="sugg">
+          <button type="button" data-sugg="write"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4"/><path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5 4 20Z"/></svg>Write or edit</button>
+          <button type="button" data-sugg="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z"/></svg>Search the web</button>
+          <button type="button" data-sugg="files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.4a2 2 0 0 1 1.42.59L12.24 7H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-9Z"/></svg>Browse files</button>
+        </div>
       </div>
       <p class="legal" id="legal"></p>
     </div>
@@ -758,6 +826,7 @@ svg{display:block;flex:none}
 <div class="files" id="files" hidden role="dialog" aria-modal="true" aria-labelledby="fbTitle">
   <div class="fb-head" id="fbHead"></div>
   <div class="fb-main">
+    <nav class="fb-places" id="fbPlaces" aria-label="Places"></nav>
     <div class="fb-side"><div class="fb-list" id="fbList" role="list" aria-label="Files"></div><div class="fb-foot" id="fbFoot"></div></div>
     <section class="fb-view" id="fbView" aria-label="Preview"><div class="fb-vhead" id="fbVHead"></div><div class="fb-vbody" id="fbVBody"></div></section>
   </div>
@@ -863,6 +932,9 @@ I.back = LINE + '<path d="M15 5l-7 7 7 7"/></svg>';
 I.eye = LINE + '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
 I.refresh = LINE + '<path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>';
 I.k_audio = LINE + '<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>';
+I.house = LINE + '<path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19v-8.5Z"/></svg>';
+I.drive = LINE + '<rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5 13 7.5 5.5A2 2 0 0 1 9.4 4h5.2a2 2 0 0 1 1.9 1.5L19 13"/><path d="M7 16.5h.01"/></svg>';
+I.star = LINE + '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></svg>';
 I.k_video = LINE + '<rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/></svg>';
 I.k_web = I.globe;
 I.k_doc = I.k_pdf;
@@ -1113,6 +1185,8 @@ function renderBar() {
   put("permName", permOf(permNow()).name);
   $("permBtn").setAttribute("aria-label", `Permissions: ${permOf(permNow()).name}`);
   $("chatMore").hidden = !S.chatId;
+  // "New chat" is lit while you're on one, as in ChatGPT
+  $("newChat").classList.toggle("on", !S.chatId);
   renderSwitchNote();
   renderCtx();
 }
@@ -1179,7 +1253,7 @@ function renderSwitchNote() {
 
 // one popup open at a time: the model switcher's menu drops down from the top bar; the message box's open above it when
 // there is room and below it when there isn't. Each grows out of the corner nearest its button.
-const POPS = { model: ["modelBtn", "modelMenu", "left", popModel], perm: ["permBtn", "permMenu", "right", popPerm], ctx: ["ctxBtn", "ctxMenu", "right", popCtx] };
+const POPS = { model: ["modelBtn", "modelMenu", "right", popModel], perm: ["permBtn", "permMenu", "right", popPerm], ctx: ["ctxBtn", "ctxMenu", "right", popCtx] };
 let popOpen = null;
 function closePop() {
   if (!popOpen) return;
@@ -1254,7 +1328,13 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (e.key !== "Escape") return;
-  if (F.open) { if (!$("remote").hidden) return; if (F.sel && matchMedia("(max-width: 860px)").matches) { F.sel = null; renderFiles(); } else closeFiles(); return; }
+  if (F.open) {
+    if (!$("remote").hidden) return;
+    if (F.edit) cancelEdit();
+    else if (F.sel && matchMedia("(max-width: 860px)").matches) { F.sel = null; renderFiles(); }
+    else closeFiles();
+    return;
+  }
   if (!$("pmenu").hidden) { closeProfile(); $("profileBtn").focus(); return; }
   if (popOpen) { const b = $(POPS[popOpen][0]); closePop(); closeMenus(); b.focus(); return; }
   if (document.querySelector(".menu")) { closeMenus(); return; }
@@ -1433,7 +1513,7 @@ function artCard(a) {
   const off = a.tooBig || !a.id;
   const sub = off ? `${kind} · too large to show here${a.path ? " · Show in file browser" : ""}` : `${kind} · ${fmtSize(a.size || 0)}`;
   const on = P.a && P.a.id === a.id ? " on" : "";
-  return `<div class="art${off && !a.path ? " off" : on}"${!off ? ` data-art="${esc(a.id)}" role="button" tabindex="0"` : a.path ? ` data-reveal="${esc(a.path)}" role="button" tabindex="0"` : ""}><span class="ico">${I["k_" + a.kind] || I.file}</span><span class="txt"><b>${esc(a.name)}</b><small>${esc(sub)}</small></span>${a.id ? `<a class="dl" href="/a/${encodeURIComponent(a.id)}?download=1" download="${esc(a.name)}" title="Download" aria-label="Download ${esc(a.name)}" data-dl>${I.download}</a>` : ""}</div>`;
+  return `<div class="art${off && !a.path ? " off" : on}"${!off ? ` data-art="${esc(a.id)}" role="button" tabindex="0"` : a.path ? ` data-reveal="${esc(a.path)}" data-root="${esc(a.root || "ws")}" role="button" tabindex="0"` : ""}><span class="ico">${I["k_" + a.kind] || I.file}</span><span class="txt"><b>${esc(a.name)}</b><small>${esc(sub)}</small></span>${a.id ? `<a class="dl" href="/a/${encodeURIComponent(a.id)}?download=1" download="${esc(a.name)}" title="Download" aria-label="Download ${esc(a.name)}" data-dl>${I.download}</a>` : ""}</div>`;
 }
 function toolsHtml(tools, open, k) {
   if (!tools || !tools.length) return "";
@@ -1734,7 +1814,7 @@ document.addEventListener("keydown", e => {
     e.preventDefault();
     if (matchMedia("(max-width: 860px)").matches) $("app").classList.add("side-open");
     else if (railed()) showSide();
-    $("search").focus();
+    startSearch();
   }
 });
 // the logo starts a new chat; in the rail it opens the sidebar
@@ -2047,14 +2127,14 @@ document.addEventListener("click", e => {
   const card = e.target.closest("[data-art]");
   if (card && ARTS.get(card.dataset.art)) openPanel(ARTS.get(card.dataset.art));
   const rv = e.target.closest("[data-reveal]");
-  if (rv) revealFile(rv.dataset.reveal);
+  if (rv) revealFile(rv.dataset.reveal, rv.dataset.root);
 });
 document.addEventListener("keydown", e => {
   if (e.key !== "Enter" && e.key !== " ") return;
   const card = e.target.closest && e.target.closest("[data-art],[data-reveal]");
   if (!card || e.target.closest("[data-dl]")) return;
   e.preventDefault();
-  if (card.dataset.reveal) revealFile(card.dataset.reveal);
+  if (card.dataset.reveal) revealFile(card.dataset.reveal, card.dataset.root);
   else if (ARTS.get(card.dataset.art)) openPanel(ARTS.get(card.dataset.art));
 });
 
@@ -2134,17 +2214,20 @@ $("pTabs").onclick = e => {
   renderPanelBody();
 };
 $("pClose").onclick = () => closePanel();
-$("pReveal").onclick = () => { if (P.a && P.a.path) revealFile(P.a.path); };
+$("pReveal").onclick = () => { if (P.a && P.a.path) revealFile(P.a.path, P.a.root); };
 
-/* ---------- the file browser: the working folder on the computer, over the whole page ---------- */
-// Everything is read from the computer as it's looked at: the folder's list, and a file's bytes while it shows. Moving
-// something to the Trash is done there too, and never deletes anything: it can be put back from the Trash (the Recycle Bin
-// on Windows).
-const F = { open: false, from: "", path: "", list: null, loading: false, err: "", code: "", sel: null, shown: "", busy: "", seq: 0, back: null, hidden: !!store.get("hiddenFiles", false) };
+/* ---------- the file browser: everything on the computer that can be reached, over the whole page ---------- */
+// Places down the side: the working folder, your home folder and its Desktop, Documents and Downloads, folders the
+// computer's Claude Code settings let it into, and the whole computer. Everything is read from the computer as it's looked
+// at. A text file can be edited and saved back. Moving something to the Trash is done there too, and never deletes
+// anything: it can be put back from the Trash (the Recycle Bin on Windows).
+const F = { open: false, from: "", root: "ws", path: "", list: null, places: [], loading: false, err: "", code: "", sel: null, shown: "", busy: "", seq: 0, back: null, edit: null, hidden: !!store.get("hiddenFiles", false) };
 const FKIND = { folder: "Folder", image: "Image", audio: "Audio", video: "Video", pdf: "PDF", text: "Text", file: "File" };
 const FICON = { folder: I.folder, image: I.k_image, audio: I.k_audio, video: I.k_video, pdf: I.k_pdf, text: I.k_code, file: I.file };
+const PLACE_ICON = { ws: I.star, home: I.house, desktop: I.monitor, documents: I.file, downloads: I.download, pc: I.drive };
 const TEXT_MAX = 262144; // how much of a text file shows; it can be downloaded whole
-function fsUrl(path, download) { return `/api/files/raw?path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`; }
+const EDIT_MAX = 2 * 1024 * 1024; // the biggest text file that can be edited here
+function fsUrl(path, download, root = F.root) { return `/api/files/raw?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}${download ? "&download=1" : ""}`; }
 function joinPath(dir, name) { return dir ? dir + "/" + name : name; }
 function parentOf(path) { const i = path.lastIndexOf("/"); return i < 0 ? "" : path.slice(0, i); }
 function baseOf(path) { return path.slice(path.lastIndexOf("/") + 1); }
@@ -2156,20 +2239,32 @@ function fbWhen(ms) {
   return d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" });
 }
 function fbShown() { return F.list ? F.list.entries.filter(e => F.hidden || !e.name.startsWith(".") || (F.sel && F.sel.name === e.name)) : []; }
+function placeOf(id) { return F.places.find(p => p.id === id) || null; }
+function modeSwitch(on) {
+  return `<div class="views" role="tablist" aria-label="View"><button type="button" role="tab" data-view="chat" aria-selected="${on === "chat"}" class="${on === "chat" ? "on" : ""}">Chat</button><button type="button" role="tab" data-view="files" aria-selected="${on === "files"}" class="alt${on === "files" ? " on" : ""}">${I.folder}Files</button></div>`;
+}
 
-function openFiles(path, pick, from) {
+function openFiles(path, pick, from, root) {
   if (!F.open) F.back = document.activeElement;
   F.open = true;
   F.from = from || "";
   $("files").hidden = false;
   $("app").inert = true;
-  loadFiles(path || "", pick);
+  loadFiles(path || "", pick, root || "ws");
   setTimeout(() => { const c = $("fbHead").querySelector('[data-fb="close"]'); if (c && !$("files").contains(document.activeElement)) c.focus(); }, 0);
 }
-// where an artifact is in the working folder: its folder, with it picked
-function revealFile(path) { openFiles(parentOf(path), baseOf(path)); }
+// where an artifact is: its folder, with it picked
+function revealFile(path, root) { openFiles(parentOf(path), baseOf(path), "", root || "ws"); }
+// Whether what's being edited may be left: unsaved changes are only dropped when you say so.
+function leaveEdit() {
+  if (!F.edit) return true;
+  if (F.edit.dirty && !confirm(`Discard your changes to "${baseOf(F.edit.path)}"?`)) return false;
+  F.edit = null;
+  F.shown = "";
+  return true;
+}
 function closeFiles() {
-  if (!F.open) return;
+  if (!F.open || !leaveEdit()) return;
   F.open = false;
   F.seq++;
   F.sel = null;
@@ -2180,20 +2275,23 @@ function closeFiles() {
   if (F.from === "settings") return openSettings("files");
   if (F.back && F.back.isConnected && F.back.focus) F.back.focus();
 }
+addEventListener("beforeunload", e => { if (F.edit && F.edit.dirty) e.preventDefault(); });
 
 // `pick` is a file in that folder to show; without one, what showed before stays if it's still there.
-async function loadFiles(path, pick) {
+async function loadFiles(path, pick, root = F.root) {
   const seq = ++F.seq;
-  if (path !== F.path) { F.list = null; F.sel = null; }
+  if (path !== F.path || root !== F.root) { F.list = null; F.sel = null; F.edit = null; }
+  F.root = root;
   F.path = path;
   F.loading = true;
   F.err = "";
   renderFiles();
   try {
-    const j = await apiJson(`/api/files?path=${encodeURIComponent(path)}`);
+    const j = await apiJson(`/api/files?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`);
     if (seq !== F.seq) return;
     F.list = j;
     F.path = j.path;
+    if (j.places && j.places.length) F.places = j.places;
     const name = pick !== undefined ? pick : F.sel && F.sel.name;
     const e = name ? j.entries.find(x => x.name === name && !x.dir) : null;
     F.sel = e ? { ...e, path: joinPath(j.path, e.name) } : null;
@@ -2212,16 +2310,18 @@ async function loadFiles(path, pick) {
 function renderFiles() {
   if (!F.open) return;
   $("files").classList.toggle("viewing", !!F.sel);
-  const root = (F.list && F.list.root) || "Working folder";
+  const place = placeOf(F.root);
+  const label = place ? place.label : F.root === "ws" ? "Working folder" : "…";
   const parts = F.path ? F.path.split("/") : [];
-  const crumbs = [`<button type="button" data-fb-go="" title="${esc(root)}"${parts.length ? "" : ' aria-current="page"'}>${esc(root)}</button>`]
+  const crumbs = [`<button type="button" data-fb-go="" title="${esc((F.list && F.list.root) || label)}"${parts.length ? "" : ' aria-current="page"'}>${esc(label)}</button>`]
     .concat(parts.map((p, i) => `<span class="sep">${I.chev}</span><button type="button" data-fb-go="${esc(parts.slice(0, i + 1).join("/"))}"${i === parts.length - 1 ? ' aria-current="page"' : ""}>${esc(p)}</button>`)).join("");
-  patchHtml($("fbHead"), `<div class="fb-title"><h2 id="fbTitle">Files</h2><nav class="crumbs" aria-label="Folder">${crumbs}</nav></div><button class="icon-btn" type="button" data-fb="hidden" aria-pressed="${F.hidden}" title="${F.hidden ? "Hide hidden files" : "Show hidden files"}" aria-label="Show hidden files">${I.eye}</button><button class="icon-btn" type="button" data-fb="refresh" title="Refresh" aria-label="Refresh">${I.refresh}</button><button class="icon-btn" type="button" data-fb="close" title="Close" aria-label="Close the file browser">${I.x}</button>`);
+  patchHtml($("fbHead"), `<div class="fb-title"><h2 id="fbTitle" class="sr">Files</h2><nav class="crumbs" aria-label="Folder">${crumbs}</nav></div>${modeSwitch("files")}<div class="fb-tools"><button class="icon-btn" type="button" data-fb="hidden" aria-pressed="${F.hidden}" title="${F.hidden ? "Hide hidden files" : "Show hidden files"}" aria-label="Show hidden files">${I.eye}</button><button class="icon-btn" type="button" data-fb="refresh" title="Refresh" aria-label="Refresh">${I.refresh}</button><button class="icon-btn" type="button" data-fb="close" title="Close" aria-label="Close the file browser">${I.x}</button></div>`);
   const cr = $("fbHead").querySelector(".crumbs");
   cr.scrollLeft = cr.scrollWidth;
+  patchHtml($("fbPlaces"), `<div class="mh">Places</div>` + F.places.map(p => `<button type="button" class="fb-place${p.id === F.root ? " on" : ""}" data-fb-place="${esc(p.id)}" title="${esc(p.path)}"${p.id === F.root ? ' aria-current="true"' : ""}>${PLACE_ICON[p.id] || (p.id.startsWith("drive-") ? I.drive : I.folder)}<span>${esc(p.label)}</span></button>`).join(""));
   const list = fbShown();
   let html;
-  if (F.err) html = `<div class="p-empty"><span>${esc(F.err)}</span>${F.code === "missing" && F.path ? `<button class="btn ghost" type="button" data-fb-go="">Go to the working folder</button>` : `<button class="btn ghost" type="button" data-fb="refresh">Try again</button>`}</div>`;
+  if (F.err) html = `<div class="p-empty"><span>${esc(F.err)}</span>${F.code === "missing" && (F.path || F.root !== "ws") ? `<button class="btn ghost" type="button" data-fb-place="ws">Go to the working folder</button>` : `<button class="btn ghost" type="button" data-fb="refresh">Try again</button>`}</div>`;
   else if (!F.list) html = '<div class="p-empty">Loading…</div>';
   else if (!list.length) html = `<div class="p-empty"><span>${F.list.entries.length ? "Only hidden files here. The eye button at the top shows them." : "This folder is empty."}</span></div>`;
   else {
@@ -2242,6 +2342,7 @@ function renderFiles() {
 function noPreview(why, f) {
   return `<div class="p-empty"><span>${esc(why)}</span><a class="btn ghost" href="${fsUrl(f.path, true)}" download="${esc(f.name)}">${I.download}Download</a></div>`;
 }
+function editable(f) { return f.kind === "text" && f.size <= EDIT_MAX; }
 function renderFileView() {
   const f = F.sel;
   const head = $("fbVHead");
@@ -2252,9 +2353,15 @@ function renderFileView() {
     patchHtml(body, `<div class="p-empty">${F.list && F.list.entries.length ? "<span>Pick a file to see it here.</span>" : ""}</div>`);
     return;
   }
-  patchHtml(head, `<button class="icon-btn only-narrow" type="button" data-fb="back" aria-label="Back to the folder">${I.back}</button><div class="p-title"><b>${esc(f.name)}</b><small>${esc(`${FKIND[f.kind] || "File"} · ${fmtSize(f.size)}${f.mtime ? " · " + fbWhen(f.mtime) : ""}`)}</small></div><a class="icon-btn" href="${fsUrl(f.path, true)}" download="${esc(f.name)}" title="Download" aria-label="Download">${I.download}</a><button class="icon-btn danger" type="button" data-fb="trash" title="Move to Trash" aria-label="Move to Trash"${F.busy ? " disabled" : ""}>${I.trash}</button>`);
+  const ed = F.edit && F.edit.path === f.path && F.edit.root === F.root ? F.edit : null;
+  const tools = ed
+    ? `<button class="btn ghost" type="button" data-fb="cancel"${ed.saving ? " disabled" : ""}>Cancel</button><button class="btn primary" type="button" data-fb="save"${ed.saving || ed.loading ? " disabled" : ""}>${ed.saving ? "Saving…" : "Save"}</button>`
+    : `${editable(f) ? `<button class="icon-btn" type="button" data-fb="edit" title="Edit" aria-label="Edit">${I.pencil}</button>` : ""}<a class="icon-btn" href="${fsUrl(f.path, true)}" download="${esc(f.name)}" title="Download" aria-label="Download">${I.download}</a><button class="icon-btn danger" type="button" data-fb="trash" title="Move to Trash" aria-label="Move to Trash"${F.busy ? " disabled" : ""}>${I.trash}</button>`;
+  patchHtml(head, `<button class="icon-btn only-narrow" type="button" data-fb="back" aria-label="Back to the folder">${I.back}</button><div class="p-title"><b>${esc(f.name)}${ed && ed.dirty ? " •" : ""}</b><small>${esc(ed ? (ed.dirty ? "Edited, not saved" : "Editing") : `${FKIND[f.kind] || "File"} · ${fmtSize(f.size)}${f.mtime ? " · " + fbWhen(f.mtime) : ""}`)}</small></div>${tools}`);
+  // being edited, the editor stays as it is
+  if (ed) return;
   // the file itself is only shown again when it's another file, or changed: a song keeps playing while the list refreshes
-  const key = `${f.path}|${f.size}|${f.mtime}`;
+  const key = `${F.root}|${f.path}|${f.size}|${f.mtime}`;
   if (key === F.shown) return;
   F.shown = key;
   const src = fsUrl(f.path) + `&v=${f.mtime || 0}`;
@@ -2270,7 +2377,7 @@ function renderFileView() {
 // The start of a text file, coloured like code.
 async function showText(f, key) {
   const body = $("fbVBody");
-  if (!f.size) { body.innerHTML = '<div class="p-empty">This file is empty.</div>'; return; }
+  if (!f.size) { body.innerHTML = `<div class="p-empty"><span>This file is empty.</span>${editable(f) ? `<button class="btn ghost" type="button" data-fb="edit">${I.pencil}Edit</button>` : ""}</div>`; return; }
   body.innerHTML = '<div class="p-empty">Loading…</div>';
   try {
     const r = await api(fsUrl(f.path), { headers: { range: `bytes=0-${TEXT_MAX - 1}` } });
@@ -2280,7 +2387,7 @@ async function showText(f, key) {
     if (t.slice(0, 8000).includes("\u0000")) { body.innerHTML = noPreview("This file isn't text, so it can't be shown here.", f); return; }
     const ext = ((f.name.match(/\.([A-Za-z0-9]+)$/) || [])[1] || "").toLowerCase();
     const lang = LANG[ext] || ext || "plaintext";
-    const cut = f.size > TEXT_MAX ? `<p class="fb-note">Showing the first ${fmtSize(TEXT_MAX)} of ${fmtSize(f.size)}. Download it to see all of it.</p>` : "";
+    const cut = f.size > TEXT_MAX ? `<p class="fb-note">Showing the first ${fmtSize(TEXT_MAX)} of ${fmtSize(f.size)}. ${editable(f) ? "Edit shows all of it." : "Download it to see all of it."}</p>` : "";
     body.innerHTML = `${cut}<pre class="p-code"><code class="language-${esc(lang)}">${esc(t)}</code></pre>`;
     if (t.length < 200000) highlight(body);
   } catch (e) {
@@ -2288,15 +2395,82 @@ async function showText(f, key) {
   }
 }
 
+// Editing: the whole file, as text. Saved only if it hasn't changed on the computer since it was opened here, unless you
+// say to save over it. Line endings stay as the file had them.
+async function startEdit() {
+  const f = F.sel;
+  if (!f || !editable(f) || F.edit) return;
+  const ed = { root: F.root, path: f.path, mtime: f.mtime, orig: "", crlf: false, dirty: false, loading: true, saving: false };
+  F.edit = ed;
+  renderFileView();
+  const body = $("fbVBody");
+  body.innerHTML = '<div class="p-empty">Loading…</div>';
+  let text;
+  try {
+    const r = await api(fsUrl(f.path) + `&v=${f.mtime || 0}`);
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Couldn't read this file."); }
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await r.arrayBuffer());
+    if (text.includes("\u0000")) throw new Error("This file isn't text, so it can't be edited here.");
+  } catch (e) {
+    if (F.edit !== ed) return;
+    F.edit = null;
+    F.shown = "";
+    toast(e instanceof TypeError ? "This file isn't plain text (UTF-8), so it can't be edited here." : e.message === "Signed out" ? "Sign in again to edit this file." : e.message);
+    renderFileView();
+    return;
+  }
+  if (F.edit !== ed) return;
+  ed.orig = text;
+  ed.crlf = /\r\n/.test(text);
+  ed.loading = false;
+  body.innerHTML = `<textarea class="fb-edit" id="fbEdit" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="${esc(`Edit ${f.name}`)}"></textarea>`;
+  const ta = $("fbEdit");
+  ta.value = text;
+  ta.addEventListener("input", () => { const d = ta.value !== ed.orig.replace(/\r\n/g, "\n"); if (d !== ed.dirty) { ed.dirty = d; renderFileView(); } });
+  ta.addEventListener("keydown", e => { if ((MAC ? e.metaKey : e.ctrlKey) && (e.key || "").toLowerCase() === "s") { e.preventDefault(); saveEdit(); } });
+  renderFileView();
+  ta.focus();
+}
+function cancelEdit() {
+  if (!leaveEdit()) return;
+  renderFileView();
+}
+async function saveEdit(force) {
+  const ed = F.edit;
+  const ta = $("fbEdit");
+  if (!ed || ed.saving || ed.loading || !ta) return;
+  const text = ed.crlf ? ta.value.replace(/\r?\n/g, "\r\n") : ta.value;
+  ed.saving = true;
+  renderFileView();
+  try {
+    const r = await apiJson("/api/files/write", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ root: ed.root, path: ed.path, text, mtime: ed.mtime, force: !!force }) });
+    if (F.edit !== ed) return;
+    F.edit = null;
+    F.shown = "";
+    const name = baseOf(ed.path);
+    if (F.sel && F.sel.path === ed.path) Object.assign(F.sel, { size: r.size, mtime: r.mtime });
+    const row = F.list && F.list.entries.find(x => x.name === name);
+    if (row) Object.assign(row, { size: r.size, mtime: r.mtime });
+    toast(`Saved "${name}".`);
+    renderFiles();
+  } catch (e) {
+    ed.saving = false;
+    renderFileView();
+    if (e.data && e.data.code === "changed" && confirm(`"${baseOf(ed.path)}" changed on your computer since you opened it here. Save your version over it?`)) return saveEdit(true);
+    if (e.message !== "Signed out" && !(e.data && e.data.code === "changed")) toast(e.message);
+  }
+}
+
 async function trashFile(name) {
   const e = F.list && F.list.entries.find(x => x.name === name);
   if (!e || F.busy) return;
   const path = joinPath(F.path, name);
+  if (F.edit && F.edit.path === path && !leaveEdit()) return;
   if (!confirm(`Move "${name}" to the Trash on your computer?${e.dir ? " Everything in it goes too." : ""}\n\nIt isn't deleted: you can put it back from the Trash (the Recycle Bin on Windows).`)) return;
   F.busy = path;
   renderFiles();
   try {
-    const r = await apiJson("/api/files/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path }) });
+    const r = await apiJson("/api/files/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ root: F.root, path }) });
     toast(`Moved "${name}" to the ${r.where}.`);
     if (F.sel && F.sel.path === path) F.sel = null;
     F.list.entries = F.list.entries.filter(x => x.name !== name);
@@ -2309,14 +2483,21 @@ async function trashFile(name) {
 }
 
 $("files").addEventListener("click", e => {
+  const view = e.target.closest("[data-view]");
+  if (view) { if (view.dataset.view === "chat") closeFiles(); return; }
+  const place = e.target.closest("[data-fb-place]");
+  if (place) { if (leaveEdit()) loadFiles("", undefined, place.dataset.fbPlace); return; }
   const go = e.target.closest("[data-fb-go]");
-  if (go) return loadFiles(go.dataset.fbGo);
+  if (go) { if (leaveEdit()) loadFiles(go.dataset.fbGo); return; }
   const open = e.target.closest("[data-fb-open]");
   if (open) {
     const x = F.list && F.list.entries.find(y => y.name === open.dataset.fbOpen);
     if (!x) return;
-    if (x.dir) return loadFiles(joinPath(F.path, x.name));
-    F.sel = { ...x, path: joinPath(F.path, x.name) };
+    const p = joinPath(F.path, x.name);
+    if (F.edit && F.edit.path === p) return;
+    if (!leaveEdit()) return;
+    if (x.dir) return loadFiles(p);
+    F.sel = { ...x, path: p };
     return renderFiles();
   }
   const tr = e.target.closest("[data-fb-trash]");
@@ -2326,8 +2507,11 @@ $("files").addEventListener("click", e => {
   const act = b.dataset.fb;
   if (act === "close") closeFiles();
   else if (act === "refresh") loadFiles(F.path);
-  else if (act === "back") { F.sel = null; renderFiles(); }
+  else if (act === "back") { if (leaveEdit()) { F.sel = null; renderFiles(); } }
   else if (act === "trash" && F.sel) trashFile(F.sel.name);
+  else if (act === "edit") startEdit();
+  else if (act === "save") saveEdit();
+  else if (act === "cancel") cancelEdit();
   else if (act === "hidden") { F.hidden = !F.hidden; store.set("hiddenFiles", F.hidden); renderFiles(); }
 });
 
@@ -2336,7 +2520,7 @@ function filesPaneHtml() {
   const a = agentNow();
   const c = a && a.computer;
   const why = !a || !a.online ? `${CFG.name} is offline, so the files on your computer can't be shown right now.` : !a.files ? `Update ${CFG.name} on your computer to see its files here.` : "";
-  return `<div class="sec"><h3>File browser</h3><p>Everything in the working folder${c && c.workspace ? `, <code>${esc(c.workspace)}</code>` : ""}, where ${esc(CFG.name)} works: look at photos, play audio and video, read text and download any file, full screen.</p><p>You can also move files and folders to the Trash on your computer from here. Nothing is deleted outright: you can put it back from the Trash (the Recycle Bin on Windows).</p>${why ? `<div class="note soft">${why}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="files"${why ? " disabled" : ""}>${I.folder}Open file browser</button></div></div>`;
+  return `<div class="sec"><h3>File browser</h3><p>Everything ${esc(CFG.name)} can reach on your computer, full screen: the working folder${c && c.workspace ? `, <code>${esc(c.workspace)}</code>` : ""}, your home folder with its Desktop, Documents and Downloads, other folders it's allowed into, and the whole computer. Look at photos, play audio and video, read and edit text and code, and download any file.</p><p>You can also move files and folders to the Trash on your computer from here. Nothing is deleted outright: you can put it back from the Trash (the Recycle Bin on Windows).</p>${why ? `<div class="note soft">${why}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="files"${why ? " disabled" : ""}>${I.folder}Open file browser</button></div></div>`;
 }
 $("pCopy").onclick = async () => {
   if (!P.a) return;
@@ -2352,7 +2536,27 @@ $("hideSide").onclick = () => {
 function railed() { return $("app").classList.contains("side-collapsed") && !matchMedia("(max-width: 860px)").matches; }
 function showSide() { $("app").classList.remove("side-collapsed"); store.set("collapsed", false); }
 // in the rail, search opens the sidebar to type in
-$("search").closest(".nav-item").addEventListener("click", () => { if (railed()) { showSide(); $("search").focus(); } });
+$("search").closest(".nav-item").addEventListener("click", () => { if (railed()) { showSide(); startSearch(); } });
+// Search is the magnifier at the top of the sidebar, as in ChatGPT: its field shows while there's a search.
+function startSearch() { $("side").classList.add("searching"); $("search").focus(); }
+$("searchBtn").onclick = () => { if ($("side").classList.contains("searching") && !$("search").value) $("side").classList.remove("searching"); else startSearch(); };
+$("search").addEventListener("blur", () => { if (!$("search").value) $("side").classList.remove("searching"); });
+// the file browser, from the sidebar and from the switch at the top: where it was left
+function showFiles() { $("app").classList.remove("side-open"); openFiles(F.path, undefined, "", F.root); }
+$("filesNav").onclick = showFiles;
+document.querySelector('.top [data-view="files"]').onclick = showFiles;
+// The rows under the empty message box: a start for the message, or the file browser.
+const SUGG = { write: "Help me write ", search: "Search the web for " };
+$("sugg").onclick = e => {
+  const b = e.target.closest("[data-sugg]");
+  if (!b) return;
+  if (b.dataset.sugg === "files") return showFiles();
+  const i = $("input");
+  i.value = SUGG[b.dataset.sugg] + i.value;
+  i.dispatchEvent(new Event("input", { bubbles: true }));
+  i.focus();
+  i.setSelectionRange(i.value.length, i.value.length);
+};
 if (store.get("collapsed", false)) $("app").classList.add("side-collapsed");
 
 document.title = tabName();
@@ -2414,7 +2618,7 @@ function planLabel() {
 function renderProfile() {
   const st = S.state;
   const email = (st && st.email) || "";
-  $("avatar").textContent = (email[0] || CFG.name[0] || "?");
+  $("avatar").textContent = (email ? email.split("@")[0] : CFG.name).replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2) || "?";
   $("whoName").textContent = email ? email.split("@")[0] : CFG.name;
   // the plan, as ChatGPT shows it ("Free", "Plus"); being offline is said too, being online isn't
   const plan = planLabel();
@@ -2861,6 +3065,7 @@ function applySite(site) {
   if (S.state) S.state.site = site;
   CFG.name = site.name;
   CFG.tab = site.tab || "";
+  $("input").placeholder = `Ask ${CFG.name}`;
   // the command on the computer follows the name, once the computer has renamed it
   if (site.command) CFG.command = site.command;
   document.title = S.chat && S.chat.title ? `${S.chat.title} · ${tabName()}` : tabName();
@@ -3153,15 +3358,18 @@ function renderPill() {
   else if (run && run.state === "done" && UP.seen === run.id && !pageIsStale()) { text = "Updated · Reload"; short = "Reload"; }
   else if (pageIsStale() && !reloadAsked()) { text = "Updated · Reload"; short = "Reload"; }
   // on a phone, an update waiting is just the icon, as ChatGPT keeps its top bar to ☰, the model and one button
-  else if (updateAvailable(u)) { text = "Update"; short = ""; }
+  else if (updateAvailable(u)) { text = "Update"; short = ""; cls += " up"; }
   b.hidden = !text;
   b.className = cls + (short ? "" : " solo");
+  // and beside you at the bottom of the sidebar, where ChatGPT has Upgrade
+  $("sideUp").hidden = !(updateAvailable(u) && !run && !pageIsStale());
   b.title = text;
   b.setAttribute("aria-label", text);
   $("pillText").textContent = text;
   $("pillShort").textContent = short;
 }
 // One click: a finished update or change reloads straight away, rather than opening a panel that has another Reload button.
+$("sideUp").onclick = () => openSettings("updates");
 $("updatePill").onclick = () => {
   const run = upRun();
   if (run ? run.state === "done" : pageIsStale()) return reloadNow();

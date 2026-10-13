@@ -8,7 +8,7 @@ import http from "node:http";
 import os from "node:os";
 import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID } from "./sessions.mjs";
 import { resetsFrom } from "./limits.mjs";
-import { list as listFiles, info as fileInfo, readPart, trash as trashFile, FilesError } from "./files.mjs";
+import { list as listFiles, info as fileInfo, readPart, trash as trashFile, write as writeFile, places, FilesError } from "./files.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -1273,6 +1273,13 @@ function inside(child, parent) {
   return !!r && !r.startsWith("..") && !isAbsolute(r);
 }
 
+function whereIs(p) {
+  const rel = (b, x) => relative(b, x).split(/[\\/]/).join("/");
+  if (inside(p, WORKSPACE)) return { root: "ws", path: rel(WORKSPACE, p) };
+  const place = placeList().filter(x => x.id !== "ws" && inside(p, x.path)).sort((a, b) => b.path.length - a.path.length)[0];
+  return place ? { root: place.id, path: rel(place.path, p) } : {};
+}
+
 function collectArtifacts(writes, base = WORKSPACE) {
   const uploads = join(WORKSPACE, "uploads");
   const seen = new Map();
@@ -1290,8 +1297,8 @@ function collectArtifacts(writes, base = WORKSPACE) {
     try {
       const s = statSync(p);
       if (!s.isFile()) continue;
-      // where it is in the working folder, for "Show in file browser"
-      const at = inside(p, WORKSPACE) ? { path: relative(WORKSPACE, p).split(/[\\/]/).join("/") } : {};
+      // where it is, for "Show in file browser": in the working folder, or else in the place that has it
+      const at = whereIs(p);
       if (s.size > ARTIFACT_MAX || total + s.size > ARTIFACT_TOTAL) {
         out.push({ name: basename(p), size: s.size, tooBig: true, ...at });
         continue;
@@ -1459,13 +1466,23 @@ function onMessage(raw) {
   else if (m.type === "transcript") handleTranscript(m);
   else if (m.type === "computer") setComputer(m).catch(e => log("Couldn't change a setting:", e.message || e));
   else if (m.type === "site") saveSite(m);
-  else if (m.type === "fs_list" || m.type === "fs_read" || m.type === "fs_trash") handleFiles(m);
+  else if (m.type === "fs_list" || m.type === "fs_read" || m.type === "fs_trash" || m.type === "fs_write") handleFiles(m);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
 
-// The site's file browser: what's in the working folder, a piece of a file, or moving one to the Trash (never deleting it).
-// files.mjs refuses anything outside the working folder.
+// The site's file browser: what's in a folder, a piece of a file, saving an edited text file, or moving one to the Trash
+// (never deleting it). Each request names a place (the working folder, Home, Downloads… see places() in files.mjs), and
+// files.mjs refuses anything outside it.
 const FS_PIECE = 288000;
+let placesAt = 0;
+let placesNow = [];
+function placeList() {
+  if (Date.now() - placesAt > 10000) {
+    placesNow = places({ workspace: WORKSPACE });
+    placesAt = Date.now();
+  }
+  return placesNow;
+}
 function shownPath(p) {
   const home = os.homedir();
   return p === home || p.startsWith(home + "/") || p.startsWith(home + "\\") ? "~" + p.slice(home.length) : p;
@@ -1473,15 +1490,25 @@ function shownPath(p) {
 function handleFiles(m) {
   const reply = body => send({ type: "fs_result", req: m.req, ...body });
   try {
-    if (m.type === "fs_list") return reply({ ok: true, root: shownPath(WORKSPACE), ...listFiles(WORKSPACE, m.path) });
+    if (m.type === "fs_list") placesAt = 0; // a fresh look at where there is to go
+    const all = placeList();
+    const place = all.find(p => p.id === (m.root || "ws"));
+    if (!place) throw new FilesError("missing", "That place isn't on this computer any more.");
+    const base = place.path;
+    if (m.type === "fs_list") return reply({ ok: true, root: shownPath(base), place: place.id, places: all.map(p => ({ id: p.id, label: p.label, path: shownPath(p.path) })), ...listFiles(base, m.path) });
     if (m.type === "fs_read") {
-      const f = fileInfo(WORKSPACE, m.path);
+      const f = fileInfo(base, m.path);
       const offset = Math.max(0, Math.floor(Number(m.offset)) || 0);
       const length = Math.min(FS_PIECE, Math.max(0, Math.floor(Number(m.length)) || 0), Math.max(0, f.size - offset));
-      return reply({ ok: true, ...f, offset, data: length ? readPart(WORKSPACE, m.path, offset, length).toString("base64") : "" });
+      return reply({ ok: true, ...f, offset, data: length ? readPart(base, m.path, offset, length).toString("base64") : "" });
     }
-    const r = trashFile(WORKSPACE, m.path);
-    log(`Moved ${m.path} to the ${r.where}, from the site's file browser.`);
+    if (m.type === "fs_write") {
+      const f = writeFile(base, m.path, m.text, { mtime: typeof m.mtime === "number" ? m.mtime : NaN, force: !!m.force });
+      log(`Saved ${shownPath(join(base, m.path))}, edited on the site.`);
+      return reply({ ok: true, ...f });
+    }
+    const r = trashFile(base, m.path);
+    log(`Moved ${shownPath(join(base, m.path))} to the ${r.where}, from the site's file browser.`);
     reply({ ok: true, where: r.where });
   } catch (e) {
     if (e instanceof FilesError) return reply({ ok: false, code: e.code, error: e.message });

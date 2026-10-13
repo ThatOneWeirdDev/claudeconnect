@@ -139,7 +139,7 @@ test("the working folder is listed, read whole and by range, and nothing outside
     assert.notEqual(r.body.ok, true, JSON.stringify(path));
   }
   assert.equal(existsSync(join(pc.home, "outside.txt")), true);
-  assert.match(pc.log(), /Moved notes\.md to the Trash, from the site's file browser\./);
+  assert.match(pc.log(), /Moved ~\/ws\/notes\.md to the Trash, from the site's file browser\./);
 });
 
 test("an artifact remembers where it is in the working folder", async t => {
@@ -149,7 +149,7 @@ test("an artifact remembers where it is in the working folder", async t => {
   const done = lines.find(l => l.type === "done");
   assert.ok(done, JSON.stringify(lines.slice(-3)));
   const arts = done.message.meta.artifacts;
-  assert.deepEqual(arts.map(a => [a.name, a.path, a.kind]), [["chart.svg", "art/chart.svg", "image"]]);
+  assert.deepEqual(arts.map(a => [a.name, a.root, a.path, a.kind]), [["chart.svg", "ws", "art/chart.svg", "image"]]);
   // and the file browser has it there
   const art = (await site.api("/api/files?path=art")).body;
   assert.deepEqual(art.entries.map(e => e.name), ["chart.svg"]);
@@ -173,7 +173,11 @@ test("the file browser in the page: opened from Settings, full screen, showing p
   assert.deepEqual([box[0], box[1]], [box[2], box[3]], "full screen");
   await page.until(`document.querySelectorAll("#fbList .fb-row").length === 7`, "the list, without the hidden file");
   assert.equal(await page.evaluate(`document.getElementById("app").inert`), true, "what's under it can't be reached");
-  assert.equal(await page.evaluate(`document.querySelector(".crumbs").textContent`), "~/ws");
+  assert.equal(await page.evaluate(`document.querySelector(".crumbs").textContent`), "Working folder");
+  assert.equal(await page.evaluate(`document.querySelector(".crumbs button").title`), "~/ws");
+  // the places down the side, and ChatGPT's switch at the top with Files on
+  assert.deepEqual(await page.evaluate(`[...document.querySelectorAll(".fb-place")].map(b => b.textContent)`), ["Working folder", "Home", "This computer"]);
+  assert.equal(await page.evaluate(`document.querySelector('#fbHead [data-view="files"]').classList.contains("on")`), true);
   assert.match(await page.evaluate(`document.getElementById("fbFoot").textContent`), /^7 items, and 1 hidden$/);
 
   // hidden files, when asked
@@ -194,7 +198,7 @@ test("the file browser in the page: opened from Settings, full screen, showing p
   // into a folder, and a picture there
   await page.evaluate(`document.querySelector('[data-fb-open="photos"]').click()`);
   await page.until(`document.querySelector('[data-fb-open="dot.png"]')`, "the photos folder");
-  assert.equal(await page.evaluate(`[...document.querySelectorAll(".crumbs button")].map(b => b.textContent).join("/")`), "~/ws/photos");
+  assert.equal(await page.evaluate(`[...document.querySelectorAll(".crumbs button")].map(b => b.textContent).join("/")`), "Working folder/photos");
   await page.evaluate(`document.querySelector('[data-fb-open="dot.png"]').click()`);
   await page.until(`(document.querySelector("#fbVBody img") || {}).naturalWidth === 1`, "the picture, loaded");
 
@@ -227,10 +231,91 @@ test("an artifact's Show in file browser opens the browser with it picked", { sk
   assert.equal(await page.evaluate(`document.getElementById("pReveal").getAttribute("aria-label")`), "Show in file browser");
   await page.evaluate(`document.getElementById("pReveal").click()`);
   await page.until(`!document.getElementById("files").hidden && (document.querySelector("#fbVHead b") || {}).textContent === "chart.svg"`, "the file browser with it picked");
-  assert.equal(await page.evaluate(`[...document.querySelectorAll(".crumbs button")].map(b => b.textContent).join("/")`), "~/ws/art");
+  assert.equal(await page.evaluate(`[...document.querySelectorAll(".crumbs button")].map(b => b.textContent).join("/")`), "Working folder/art");
   assert.equal(await page.evaluate(`document.querySelector(".fb-row.on b").textContent`), "chart.svg");
   await page.until(`(document.querySelector("#fbVBody img") || {}).naturalWidth === 40`, "the picture, loaded");
   // closed, the chat is back as it was, with the preview still open
   await page.evaluate(`document.querySelector('[data-fb="close"]').click()`);
   await page.until(`document.getElementById("files").hidden && !document.getElementById("panel").hidden`, "the chat and its preview");
+});
+
+test("beyond the working folder: home, Downloads and the whole computer, and an edited text file saved back", async t => {
+  const { site, pc } = await boot(t);
+  const dl = join(pc.home, "Downloads");
+  mkdirSync(dl);
+  writeFileSync(join(dl, "report.txt"), "first draft\n");
+  writeFileSync(join(dl, "dos.txt"), "a\r\nb\r\n");
+  // the places come with every listing
+  let r = await site.api("/api/files");
+  assert.deepEqual(r.body.places.map(p => [p.id, p.label, p.path]), [["ws", "Working folder", "~/ws"], ["home", "Home", "~"], ["downloads", "Downloads", "~/Downloads"], ["pc", "This computer", "/"]]);
+  r = await site.api("/api/files?root=downloads");
+  assert.equal(r.body.place, "downloads");
+  assert.equal(r.body.root, "~/Downloads");
+  assert.deepEqual(r.body.entries.map(e => e.name), ["dos.txt", "report.txt"]);
+  assert.ok((await site.api("/api/files?root=home")).body.entries.some(e => e.name === "Downloads" && e.dir));
+  // the whole computer reaches the same file
+  r = await site.api(`/api/files?root=pc&path=${encodeURIComponent(dl.slice(1))}`);
+  assert.deepEqual(r.body.entries.map(e => e.name), ["dos.txt", "report.txt"]);
+  let raw = await site.asOwner("/api/files/raw?root=downloads&path=report.txt");
+  assert.equal(await raw.text(), "first draft\n");
+  assert.equal((await site.api("/api/files?root=nowhere")).body.code, "missing");
+
+  // saved over itself, with the time it was read
+  const before = r.body.entries.find(e => e.name === "report.txt");
+  r = await site.api("/api/files/write", { method: "POST", body: JSON.stringify({ root: "downloads", path: "report.txt", text: "second draft\n", mtime: before.mtime }) });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.size, 13);
+  assert.equal(readFileSync(join(dl, "report.txt"), "utf8"), "second draft\n");
+  // changed on the computer since: refused, unless it's saved over anyway
+  r = await site.api("/api/files/write", { method: "POST", body: JSON.stringify({ root: "downloads", path: "report.txt", text: "stale\n", mtime: before.mtime - 60000 }) });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "changed");
+  assert.equal(readFileSync(join(dl, "report.txt"), "utf8"), "second draft\n");
+  r = await site.api("/api/files/write", { method: "POST", body: JSON.stringify({ root: "downloads", path: "report.txt", text: "mine\n", mtime: before.mtime - 60000, force: true }) });
+  assert.equal(r.status, 200);
+  assert.equal(readFileSync(join(dl, "report.txt"), "utf8"), "mine\n");
+  // nothing new is made, and no folder is written over
+  assert.equal((await site.api("/api/files/write", { method: "POST", body: JSON.stringify({ root: "downloads", path: "new.txt", text: "x" }) })).body.code, "missing");
+  assert.equal((await site.api("/api/files/write", { method: "POST", body: JSON.stringify({ root: "home", path: "Downloads", text: "x" }) })).body.code, "not_file");
+  assert.match(pc.log(), /Saved ~\/Downloads\/report\.txt, edited on the site\./);
+  // and to the Trash from there too
+  r = await site.api("/api/files/trash", { method: "POST", body: JSON.stringify({ root: "downloads", path: "report.txt" }) });
+  assert.equal(r.body.ok, true);
+  assert.equal(existsSync(join(dl, "report.txt")), false);
+  // a place itself never goes
+  assert.notEqual((await site.api("/api/files/trash", { method: "POST", body: JSON.stringify({ root: "downloads", path: "" }) })).body.ok, true);
+});
+
+test("a text file is edited in the page, saved with Save, keeping its line endings", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const { site, pc } = await boot(t);
+  const dl = join(pc.home, "Downloads");
+  mkdirSync(dl);
+  writeFileSync(join(dl, "dos.txt"), "a\r\nb\r\n");
+  const page = await openPage(site.origin + "/");
+  t.after(() => page.close());
+  await page.until(`document.getElementById("input")`, "the page");
+  await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
+  // the sidebar's Files opens it
+  await page.evaluate(`document.getElementById("filesNav").click()`);
+  await page.until(`document.querySelector('[data-fb-place="downloads"]')`, "the places");
+  await page.evaluate(`document.querySelector('[data-fb-place="downloads"]').click()`);
+  await page.until(`document.querySelector('[data-fb-open="dos.txt"]')`, "Downloads");
+  assert.equal(await page.evaluate(`document.querySelector(".crumbs").textContent`), "Downloads");
+  await page.evaluate(`document.querySelector('[data-fb-open="dos.txt"]').click()`);
+  await page.until(`document.querySelector('[data-fb="edit"]')`, "the Edit button");
+  await page.evaluate(`document.querySelector('[data-fb="edit"]').click()`);
+  await page.until(`document.getElementById("fbEdit")`, "the editor");
+  assert.equal(await page.evaluate(`document.getElementById("fbEdit").value`), "a\nb\n");
+  await page.evaluate(`(() => { const t = document.getElementById("fbEdit"); t.value += "c\\n"; t.dispatchEvent(new Event("input")); })()`);
+  await page.until(`document.querySelector("#fbVHead small").textContent === "Edited, not saved"`, "the change noted");
+  // leaving it asks first; saying no keeps it
+  await page.evaluate(`window.confirm = m => (window.asked = m, false)`);
+  await page.evaluate(`document.querySelector('[data-fb-place="ws"]').click()`);
+  assert.match(await page.evaluate(`window.asked`), /^Discard your changes to "dos\.txt"\?/);
+  assert.equal(await page.evaluate(`!!document.getElementById("fbEdit")`), true);
+  await page.evaluate(`document.querySelector('[data-fb="save"]').click()`);
+  await page.until(`!document.getElementById("fbEdit") && /Saved "dos\\.txt"\\./.test(document.getElementById("toast").textContent)`, "saved");
+  assert.equal(readFileSync(join(dl, "dos.txt"), "utf8"), "a\r\nb\r\nc\r\n", "Windows line endings stay");
+  // (shown in the page, a line break is a line break)
+  await page.until(`(document.querySelector("#fbVBody pre code") || {}).textContent === "a\\nb\\nc\\n"`, "the saved text shown");
 });
