@@ -47,25 +47,27 @@ test("the model and effort choosers sit under the message box, show their curren
   assert.doesNotMatch(html, /answers without an effort setting/);
 });
 
-test("the bar has add file, the Claude / Claude Code switch and permission mode on the left, and no record button", () => {
+test("the bar has add file and the permission mode on the left, no Claude / Claude Code switch, and no record button", () => {
   const left = /<div class="c-row">([\s\S]*?)<div class="c-right">/.exec(html)[1];
-  assert.ok(left.indexOf('id="attachBtn"') < left.indexOf('id="modes"') && left.indexOf('id="modes"') < left.indexOf('id="permBtn"'));
-  assert.match(left, /data-mode="claude"[\s\S]*data-mode="code"/);
+  assert.ok(left.indexOf('id="attachBtn"') < left.indexOf('id="permBtn"'));
+  // everything runs as Claude Code (or, on the free plan, in the Claude app): there's nothing to switch between
+  assert.doesNotMatch(html, /data-mode=|id="modes"|MODE_NAME|modeNow|Plain chat with Claude/);
   assert.doesNotMatch(html, /record|dictat|microphone|id="mic/i);
-  // what is sent says which mode and permission mode it is
-  assert.match(script, /mode: modeNow\(\), perm: S\.perm/);
-  // the permission modes are only ones Claude Code can run without anyone to ask
-  assert.deepEqual([...script.matchAll(/\{ id: "(auto|acceptEdits|plan)", name:/g)].map(m => m[1]), ["auto", "acceptEdits", "plan"]);
+  // what is sent says which permission mode it is, and no mode
+  assert.match(script, /JSON\.stringify\(\{ chatId: S\.chatId, text, model, effort, perm: permNow\(\), \.\.\.\(free \? \{ think: !!S\.think \} : \{\}\)/);
+  // the permission modes are ones Claude Code can run on its own, and "Ask first", which asks on this page
+  assert.deepEqual([...script.matchAll(/\{ id: "(auto|default|acceptEdits|plan)", name:/g)].map(m => m[1]), ["auto", "default", "acceptEdits", "plan"]);
+  assert.match(script, /\{ id: "default", name: "Ask first",[^\n]*ask: true \}/);
+  assert.match(script, /function permsShown\(\) \{ const a = agentNow\(\); return PERM_MODES\.filter\(x => !x\.ask \|\| \(a && a\.ask\)\); \}/, "only when the computer can ask");
   assert.doesNotMatch(script, /bypassPermissions/);
 });
 
-test("on a phone the Claude / Claude Code switch and permission mode get a row of their own at the bottom of the box", () => {
-  // the mode controls are one group, a sibling of add file and the right-hand controls, so CSS can move just them
-  assert.match(html, /<\/button>\s*<input type="file" id="fileInput" multiple hidden>\s*<div class="c-modes">[\s\S]*?id="modes"[\s\S]*?id="permBtn"[\s\S]*?<div class="c-right">/);
+test("on a phone the permission mode gets a row of its own at the bottom of the box", () => {
+  // the mode control is its own group, a sibling of add file and the right-hand controls, so CSS can move just it
+  assert.match(html, /<\/button>\s*<input type="file" id="fileInput" multiple hidden>\s*<div class="c-modes">\s*<button type="button" class="c-btn" id="permBtn"[\s\S]*?<div class="c-right">/);
   const phone = /@media \(max-width:700px\)\{([\s\S]*?)\n\}/.exec(html)[1];
   assert.match(phone, /\.c-modes\{order:3;flex:1 1 100%/, "after everything else, taking a whole row");
   assert.match(phone, /\.c-right\{order:2\}/);
-  assert.match(phone, /\.modes \.pre\{display:inline\}/, "there is room for the full name down there");
 });
 
 test("there is no pencil in the top corner", () => {
@@ -271,7 +273,7 @@ test("Plan usage reads the latest as soon as it opens, and has no Refresh button
   assert.match(lift("openUsage"), /renderUsage\(\);\n  refreshUsage\(\);/);
   assert.doesNotMatch(script, /data-usage="refresh"|data-usage=refresh|I\.retry \+ "Refresh"/);
   // "You've hit a limit" only from the site's own reckoning, which knows about usage credits and resets
-  assert.match(script, /if \(l\.limited\) html \+= `<div class="note err">You've hit a limit/);
+  assert.match(script, /if \(l\.limited\) html \+= `<div class="note err">You've hit \$\{free \? "your free plan's" : "a"\} limit/);
   assert.doesNotMatch(script, /status === "rejected"/);
 });
 
@@ -282,19 +284,134 @@ test("bringing chats over from claude.ai's export is gone, and chats brought ove
   assert.match(worker, /this\.sql\.exec\("DELETE FROM chats WHERE origin = 'claude\.ai'"\);/);
 });
 
-test("Fable 5.1 is always in the model picker, marked as using usage credits, and says when there are none", () => {
-  assert.doesNotMatch(html, /CFG\.fable|fFable|SHOW_FABLE|Fable 5\.1 in the model picker/);
+// The model picker and the bar, lifted out with stand-ins for what they read.
+function picker(state, extra = {}) {
   const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
-  const ctx = { EFF: [], TICK: "", S: { model: "claude-opus-5-5", state: { prefs: {}, noCredits: null } } };
-  vm.runInNewContext(`const ALL_MODELS = ${models}; function noteHtml() { return ""; }` + /function useCredits\(\) \{.*\}\n/.exec(script)[0] + /function noCredits\(\) \{.*\}\n/.exec(script)[0] + lift("popModel") + "this.popModel = popModel;", ctx);
-  assert.match(ctx.popModel(), /<b>Fable 5\.1<\/b>[\s\S]*?<span class="tag">Uses usage credits<\/span>/);
-  ctx.S.state.noCredits = { why: "none", message: "You have no usage credits!" };
-  assert.match(ctx.popModel(), /<span class="tag">Uses usage credits\. You have none!<\/span>/);
-  ctx.S.state.prefs.useCredits = false;
-  assert.match(ctx.popModel(), /<span class="tag">Uses usage credits, which are off here<\/span>/);
-  // picking it with none says so, and a message turned away for it brings the page up to date
-  assert.match(script, /if \(modelOf\(S\.model\)\.credits && useCredits\(\) && noCredits\(\)\) toast\(noCredits\(\)\.message, 8000\);/);
+  const ctx = { EFF: [], TICK: "", I: { info: "" }, APP_DEFAULT: "app-default", APP: { loading: false }, DEFAULT_MODEL: "claude-opus-5-5", S: { model: "claude-fable-5-1", appModel: "app-default", state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
+  vm.runInNewContext(`const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "freePlan", "fableOk", "paidModels", "appInfo", "appModels", "appModelNow", "appModelName", "modelNow", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
+  return ctx;
+}
+
+test("Fable 5.1 is only in the model picker when there are usage credits to spend, with no setting for it", () => {
+  assert.doesNotMatch(html, /CFG\.fable|fFable|SHOW_FABLE|Fable 5\.1 in the model picker/);
+  let p = picker({ agent: { online: true, plan: "paid" }, fable: { available: true } });
+  assert.match(p.popModel(), /<b>Fable 5\.1<\/b>[\s\S]*?<span class="tag">Uses usage credits<\/span>/);
+  assert.equal(p.modelNow(), "claude-fable-5-1");
+  for (const why of ["out", "off", "none", "site", "unknown"]) {
+    p = picker({ agent: { online: true, plan: "paid" }, fable: { available: false, why } });
+    assert.doesNotMatch(p.popModel(), /Fable/, why);
+    assert.equal(p.modelNow(), "claude-opus-5-5", "picked before, it falls back while there are none");
+  }
+  // a message turned away for it brings the page up to date
   assert.match(script, /j\.code === "no_credits"\) loadState\(\);/);
+});
+
+test("on the free plan the model picker lists the Claude app's own models, and nothing that needs a paid plan can be picked", () => {
+  const app = { models: [{ id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Smart", locked: false }, { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Upgrade to Pro", locked: true }], thinking: false, model: "Sonnet 5.5" };
+  const p = picker({ agent: { online: true, plan: "free", app }, fable: { available: true } }, { appModel: "claude-opus-5-5" });
+  const menu = p.popModel();
+  assert.doesNotMatch(menu, /Fable|Haiku/, "Claude Code's models aren't these");
+  assert.match(menu, /data-model="app-default"[\s\S]*now Sonnet 5\.5/);
+  assert.match(menu, /data-model="claude-opus-5-5" type="button" disabled aria-disabled="true"><b>Opus 5\.5<\/b>[\s\S]*Needs a paid Claude plan/);
+  assert.equal(p.modelNow(), "app-default", "a locked model picked before isn't sent");
+  p.S.appModel = "claude-sonnet-5-5";
+  assert.equal(p.modelNow(), "claude-sonnet-5-5");
+  // before the app has said what it has, the picker says where they come from, and asks the computer to read them
+  const empty = picker({ agent: { online: true, plan: "free", app: null }, fable: {} });
+  assert.match(empty.popModel(), /The Claude app's models show here once it has opened on your computer/);
+  assert.match(lift("openPop"), /if \(name === "model"\) refreshAppModels\(\);/);
+  assert.match(lift("refreshAppModels"), /apiJson\("\/api\/app\/refresh"/);
+});
+
+test("the context ring isn't there in an empty message box, only in a chat with a reading, and never on the free plan", () => {
+  const els = {};
+  const $ = id => (els[id] = els[id] || { hidden: false, className: "", title: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+  const ctx = { $, CIRC: 56.549, popOpen: null, closePop: () => {}, S: { chatId: null, ctx: null, state: { agent: { plan: "paid" } } } };
+  vm.runInNewContext(["agentNow", "freePlan", "ctxPct", "renderCtx"].map(lift).join("") + "this.renderCtx = renderCtx;", ctx);
+  ctx.renderCtx();
+  assert.equal(els.ctxBtn.hidden, true, "a new chat, before anything is sent");
+  ctx.S.chatId = "c1";
+  ctx.renderCtx();
+  assert.equal(els.ctxBtn.hidden, true, "a chat with no reading yet");
+  ctx.S.ctx = { used: 150000, window: 200000 };
+  ctx.renderCtx();
+  assert.equal(els.ctxBtn.hidden, false);
+  ctx.S.state.agent.plan = "free";
+  ctx.renderCtx();
+  assert.equal(els.ctxBtn.hidden, true, "the Claude app doesn't say how full it is");
+});
+
+test("there's no setting for the credit balance or for which chats are listed; the plan, starting at login and the working folder are there", () => {
+  assert.doesNotMatch(script, /Show your usage credit balance|Working folder only|data-pc="history"|data-pc="credits"|SCOPES/);
+  const pc = lift("computerHtml");
+  assert.match(pc, /data-pc="plan" data-value="\$\{k\}"/);
+  assert.match(pc, /data-pc="autostart"/);
+  assert.match(pc, /Makes it a startup item on this computer/);
+  assert.match(pc, /id="fWs"/);
+  assert.match(script, /const PLAN_KINDS = \[\["paid", "I pay for Claude"\], \["free", "Free plan"\]\];/);
+  // switching the plan is confirmed, since it changes where replies come from
+  assert.match(lift("setComputer"), /if \(key === "plan" && !confirm\(/);
+});
+
+test("everything `<command> edit` asks about can also be changed on the page", () => {
+  const installer = readFileSync(join(ROOT, "installer.mjs"), "utf8");
+  const edit = /async function editSettings\(\) \{[\s\S]*?\n\}\n/.exec(installer)[0];
+  // what edit asks, and where the page has it
+  const pairs = [
+    [/Change the name\?/, /id="fName"/],
+    [/Change the logo\?/, /imgField\("logo"/],
+    [/Change the tab icon\?/, /imgField\("favicon"/],
+    [/Change the theme\?/, /data-theme-set=/],
+    [/when you log in to this computer\?/, /data-pc="autostart"/],
+    [/Switch to the free plan\?|Do you pay for Claude now/, /data-pc="plan"/],
+    [/Change the working folder/, /id="fWs"/],
+    [/usage credits from the site\?/, /data-usage="credits"/],
+    [/Change the address\?/, /data-act="move"/],
+    [/Delete \$\{name\}\?/, /data-act="delete"/]
+  ];
+  for (const [asked, shown] of pairs) {
+    assert.match(edit, asked);
+    assert.match(script, shown, String(asked));
+  }
+  // and nothing it no longer asks
+  assert.doesNotMatch(edit, /usage credit balance|which of Claude Code.s chats|(Show|Hide) Fable/);
+});
+
+test("something waiting on the computer shows over the page, escaped, and the answer goes back for that reply", () => {
+  const els = {};
+  const $ = id => (els[id] = els[id] || { hidden: true, innerHTML: "", textContent: "" });
+  const ctx = { $, esc: v => String(v).replace(/</g, "&lt;").replace(/"/g, "&quot;"), CFG: { name: "Site" }, R: { q: null, busy: false } };
+  vm.runInNewContext(lift("showRemote") + lift("hideRemote") + "this.showRemote = showRemote; this.hideRemote = hideRemote;", ctx);
+  ctx.showRemote({ id: "a1", kind: "permission", title: "Run a command", detail: "rm -rf <build>", at: 1 });
+  assert.equal(els.remote.hidden, false);
+  assert.equal(els.rName.textContent, "Claude Code");
+  assert.match(els.rBody.innerHTML, /<pre>rm -rf &lt;build><\/pre>/);
+  assert.match(els.rBody.innerHTML, /data-ranswer="deny">Deny<\/button><button class="btn primary" type="button" data-ranswer="allow">Allow<\/button>/);
+  ctx.hideRemote("someone-else");
+  assert.equal(els.remote.hidden, false, "only its own id closes it");
+  ctx.hideRemote("a1");
+  assert.equal(els.remote.hidden, true);
+  // the Claude app's window: a picture to click, and its buttons
+  ctx.showRemote({ id: "s1", kind: "screen", title: "Allow Claude to read <x>?", image: "QUJD", buttons: [{ label: "Deny" }, { label: "Allow once" }], at: 2 });
+  assert.equal(els.rName.textContent, "Claude app on your computer");
+  assert.match(els.rBody.innerHTML, /<button class="rshot" type="button" data-rshot[^>]*><img src="data:image\/jpeg;base64,QUJD"/);
+  assert.match(els.rBody.innerHTML, /data-rbutton="0">Deny<\/button><button class="btn primary" type="button" data-rbutton="1">Allow once<\/button>/);
+  assert.match(els.rBody.innerHTML, /Allow Claude to read &lt;x>\?/);
+  // a click on the picture is sent as where it was, as a share of the picture's size
+  assert.match(script, /answerRemote\(\{ click: \{ x: \(e\.clientX - r\.left\) \/ r\.width, y: \(e\.clientY - r\.top\) \/ r\.height \} \}\)/);
+  assert.match(lift("answerRemote"), /apiJson\("\/api\/remote", \{ method: "POST"[^\n]*JSON\.stringify\(\{ chatId: S\.chatId, id: R\.q\.id, \.\.\.body \}\)/);
+});
+
+test("out of usage, the note under the message box says when it comes back, and offers a free reset", () => {
+  const note = lift("renderLimitNote");
+  assert.match(note, /reset = usableResets\(\)\.find\(x => x\.can\) \|\| null;/);
+  assert.match(note, />\$\{U\.resetting \? "Using a free reset…" : "Use a free reset"\}<\/button>/);
+  // Plan usage lists the free resets with how often a new one comes, and each limit says when it resets
+  const resets = lift("resetsHtml");
+  assert.match(resets, /<b>Free limit resets<\/b>/);
+  assert.match(resets, /A new one \$\{EVERY\[x\.every\]\}/);
+  assert.match(script, /const EVERY = \{ day: "every day", week: "every week", month: "every month" \};/);
+  assert.match(lift("renderUsage"), /Resets \$\{esc\(relTime\(w\.resetsAt\)\)\} \(\$\{esc\(clock\(w\.resetsAt\)\)\}\)/);
 });
 
 test("only a newer site makes the page out of date, and once Reload was pressed for a version the notice stays away", () => {

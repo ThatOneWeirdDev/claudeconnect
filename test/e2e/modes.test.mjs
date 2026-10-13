@@ -1,4 +1,4 @@
-// Claude vs Claude Code, how freely Claude Code acts, and how full the context is.
+// Every message runs as Claude Code: how freely it acts, and how full the context is.
 // The first half is the site with a fake agent; the second half runs the real agent with a fake `claude` and reads the
 // command line it was given.
 import { test } from "node:test";
@@ -44,7 +44,7 @@ test("a message is sent as Claude Code, in auto, unless it says otherwise", asyn
   await sent.text();
 });
 
-test("every mode and permission mode is passed on, and anything else falls back", async t => {
+test("every permission mode is passed on, anything else falls back, and there is no plain Claude any more", async t => {
   const { s, agent } = await ready(t);
   const run = async body => {
     const sent = await sendAs(s, body);
@@ -53,35 +53,47 @@ test("every mode and permission mode is passed on, and anything else falls back"
     await sent.text();
     return r;
   };
-  assert.deepEqual(pick(await run({ mode: "claude" })), { mode: "claude", perm: "auto" });
-  assert.deepEqual(pick(await run({ mode: "code", perm: "plan" })), { mode: "code", perm: "plan" });
-  assert.deepEqual(pick(await run({ mode: "code", perm: "acceptEdits" })), { mode: "code", perm: "acceptEdits" });
-  assert.deepEqual(pick(await run({ mode: "code", perm: "bypassPermissions" })), { mode: "code", perm: "auto" }, "a permission mode that isn't offered is not passed on");
-  assert.deepEqual(pick(await run({ mode: "root", perm: "plan" })), { mode: "code", perm: "plan" });
-  assert.deepEqual(pick(await run({ mode: ["claude"], perm: { x: 1 } })), { mode: "code", perm: "auto" });
-  // plain Claude has no tools to ask about, so a permission mode means nothing there
-  assert.deepEqual(pick(await run({ mode: "claude", perm: "plan" })), { mode: "claude", perm: "auto" });
+  assert.deepEqual(pick(await run({ perm: "plan" })), { mode: "code", perm: "plan" });
+  assert.deepEqual(pick(await run({ perm: "acceptEdits" })), { mode: "code", perm: "acceptEdits" });
+  assert.deepEqual(pick(await run({ perm: "bypassPermissions" })), { mode: "code", perm: "auto" }, "a permission mode that isn't offered is not passed on");
+  assert.deepEqual(pick(await run({ perm: { x: 1 } })), { mode: "code", perm: "auto" });
+  // an older page that still asks for plain Claude gets Claude Code, with the permission mode it asked for
+  assert.deepEqual(pick(await run({ mode: "claude" })), { mode: "code", perm: "auto" });
+  assert.deepEqual(pick(await run({ mode: "claude", perm: "plan" })), { mode: "code", perm: "plan" });
+  assert.deepEqual(pick(await run({ mode: ["claude"], perm: "acceptEdits" })), { mode: "code", perm: "acceptEdits" });
+  // asking first needs a computer that can put the question on the site; this one can't, so it's auto
+  assert.deepEqual(pick(await run({ perm: "default" })), { mode: "code", perm: "auto" });
 });
 const pick = r => ({ mode: r.mode, perm: r.perm });
 
+test("asking first is passed on when the computer can ask on the site", async t => {
+  const { s, agent } = await ready(t, { caps: ["update", "admin", "limits", "modes", "history", "ask"] });
+  assert.equal((await s.api("/api/state")).body.agent.ask, true);
+  const sent = await sendAs(s, { perm: "default" });
+  const r = await agent.next(m => m.type === "run");
+  assert.deepEqual(pick(r), { mode: "code", perm: "default" });
+  agent.send({ type: "done", runId: r.runId, chatId: r.chatId, text: "ok", started: true, tools: [] });
+  await sent.text();
+});
+
 test("how a chat's last message was sent is remembered, and shown when the chat is opened", async t => {
   const { s, agent } = await ready(t);
-  const sent = await sendAs(s, { mode: "claude" });
+  const sent = await sendAs(s, { perm: "plan" });
   const run = await agent.next(m => m.type === "run");
   agent.send({ type: "done", runId: run.runId, chatId: run.chatId, text: "ok", started: true, tools: [] });
   await sent.text();
   let c = (await s.api(`/api/chats/${run.chatId}`)).body;
-  assert.equal(c.chat.mode, "claude");
-  assert.equal(c.chat.perm, "auto");
-  assert.equal(c.messages[0].meta.mode, "claude");
-  assert.equal(c.messages[1].meta.mode, "claude");
-  const again = await sendAs(s, { chatId: run.chatId, mode: "code", perm: "plan" });
+  assert.equal(c.chat.mode, "code");
+  assert.equal(c.chat.perm, "plan");
+  assert.equal(c.messages[0].meta.perm, "plan");
+  assert.equal(c.messages[1].meta.perm, "plan");
+  const again = await sendAs(s, { chatId: run.chatId, perm: "acceptEdits" });
   const run2 = await agent.next(m => m.type === "run");
   assert.equal(run2.resume, true);
   agent.send({ type: "done", runId: run2.runId, chatId: run2.chatId, text: "ok", started: true, tools: [] });
   await again.text();
   c = (await s.api(`/api/chats/${run.chatId}`)).body;
-  assert.deepEqual([c.chat.mode, c.chat.perm], ["code", "plan"]);
+  assert.deepEqual([c.chat.mode, c.chat.perm], ["code", "acceptEdits"]);
 });
 
 test("how full the context is arrives with the reply and is kept with it; junk is dropped", async t => {
@@ -102,7 +114,7 @@ test("how full the context is arrives with the reply and is kept with it; junk i
   assert.equal((await finish({ used: 9e9, window: 200000 })).used, 800000, "absurd counts are capped");
 });
 
-test("the page is told whether the computer can do plain chat and permission modes", async t => {
+test("the page is told whether the computer can do permission modes", async t => {
   const { s } = await ready(t);
   assert.equal((await s.api("/api/state")).body.agent.modes, true);
   const old = await startSite({ appVersion: "1.3.1" });
@@ -158,7 +170,8 @@ test("Claude Code runs with Claude Code's own instructions, in auto, with every 
   assert.equal(flag(args, "--model"), "claude-opus-5-5");
   assert.equal(flag(args, "--effort"), "high");
   for (const f of ["--system-prompt", "--system-prompt-file", "--append-system-prompt", "--tools", "--strict-mcp-config", "--disable-slash-commands"]) assert.ok(!args.includes(f), `${f} is not passed: Claude Code uses its defaults`);
-  // switching between Claude and Claude Code in one chat needs the prompt built fresh, which this Claude Code can do
+  // a chat an older version started in plain Claude carries on with Claude Code's own prompt, which needs the prompt built
+  // fresh each time; this Claude Code can do that
   assert.equal(flag(args, "--system-prompt-snapshot"), "off");
   // older versions of this program left "You are <name>" behind; it is cleaned up and never read
   assert.equal(pc.alive(pc.pid()), true);
@@ -174,20 +187,13 @@ test("how freely Claude Code acts is passed to it, and nothing outside the offer
   assert.equal(flag(await runWith("auto run"), "--permission-mode"), "auto", "bypassPermissions can't be asked for from the page");
 });
 
-test("plain Claude has no tools, no servers, no skills and a chat prompt instead of Claude Code's", async t => {
+test("a message from an older page that asks for plain Claude runs as Claude Code, with every tool", async t => {
   const { chat, runWith } = await boot(t);
   await chat({ text: "chat run", mode: "claude", perm: "plan" });
   const args = await runWith("chat run");
-  assert.equal(flag(args, "--tools"), "", "an empty tool list");
-  assert.ok(args.includes("--strict-mcp-config"));
-  assert.ok(args.includes("--disable-slash-commands"));
-  assert.ok(!args.includes("--permission-mode"), "no tools, so nothing to ask permission for");
-  const prompt = flag(args, "--system-prompt");
-  assert.match(prompt, /^You are Claude, an AI assistant made by Anthropic/);
-  assert.match(prompt, /can't browse the web, run code, or read or change files/);
-  assert.match(prompt, /switch to Claude Code/);
-  assert.equal(flag(args, "--system-prompt-snapshot"), "off");
-  assert.equal(flag(args, "--effort"), "high", "effort still applies");
+  for (const f of ["--system-prompt", "--tools", "--strict-mcp-config", "--disable-slash-commands"]) assert.ok(!args.includes(f), `${f} is not passed`);
+  assert.equal(flag(args, "--permission-mode"), "plan");
+  assert.equal(flag(args, "--effort"), "high");
 });
 
 test("the system prompt is only rebuilt each time when this Claude Code can do that", async t => {
@@ -206,21 +212,16 @@ test("an older message that names no mode runs as Claude Code", async t => {
   assert.ok(!args.includes("--tools"));
 });
 
-test("files in plain Claude: text is put in the message, other kinds are said to be unreadable, and no paths are given out", async t => {
+test("attached files are saved on the computer and listed by path, with text files' contents in the message", async t => {
   const { chat, runWith, pc } = await boot(t);
   const files = [{ name: "notes.txt", type: "text/plain", data: Buffer.from("remember the milk").toString("base64") }, { name: "photo.png", type: "image/png", data: Buffer.from([137, 80, 78, 71]).toString("base64") }];
+  // an older page may still say plain Claude: the files go to Claude Code all the same
   await chat({ text: "look at these", mode: "claude", files });
   await runWith("look at these");
   const prompt = pc.claudeRuns().find(r => r.prompt.includes("look at these")).prompt;
-  assert.match(prompt, /<file name="notes\.txt">\nremember the milk\n<\/file>/);
-  assert.match(prompt, /can't open them\. Switch to Claude Code for that: photo\.png/);
-  assert.doesNotMatch(prompt, /Attached files:/, "no list of paths it can't open");
-  assert.doesNotMatch(prompt, /uploads\//);
-  // in Claude Code the same files are listed by path, for its file tools
-  await chat({ text: "look again", mode: "code", files });
-  await runWith("look again");
-  const code = pc.claudeRuns().find(r => r.prompt.includes("look again")).prompt;
-  assert.match(code, /Attached files:\n- uploads\/[^\n]*notes\.txt\n- uploads\/[^\n]*photo\.png/);
+  assert.match(prompt, /Attached files:\n- uploads\/[^\n]*notes\.txt\n- uploads\/[^\n]*photo\.png/);
+  assert.match(prompt, /<file name="uploads\/[^"]*notes\.txt">\nremember the milk\n<\/file>/);
+  assert.doesNotMatch(prompt, /can't open them/);
 });
 
 test("the reply says how full the context is, from the last request and the model's window", async t => {

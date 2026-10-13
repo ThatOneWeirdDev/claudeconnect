@@ -31,7 +31,11 @@ test("a new name and logo take effect at once, on the page, the locked page and 
   assert.equal((await s.asOwner("/favicon")).headers.get("content-type"), "image/png", "the tab icon falls back to the logo");
   const locked = await (await s.mf.dispatchFetch(s.origin + "/", { headers: { "x-test-anonymous": "1" } })).text();
   assert.match(locked, /<title>My Place<\/title>/);
-  // Fable 5.1 can always be sent to
+  // Fable 5.1 isn't a setting: it can be sent to whenever there are usage credits
+  const now = Math.floor(Date.now() / 1000);
+  agent.send({ type: "limits", limits: { status: "allowed", overageStatus: "allowed", windows: { five_hour: { pct: 10, resetsAt: now + 3600 }, seven_day: { pct: 5, resetsAt: now + 86400 } } } });
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal((await s.api("/api/state")).body.fable.available, true);
   const send = s.asOwner("/api/send", { method: "POST", body: JSON.stringify({ text: "hi", model: "claude-fable-5-1" }) });
   const run = await agent.next(m => m.type === "run");
   assert.equal(run.model, "claude-fable-5-1");

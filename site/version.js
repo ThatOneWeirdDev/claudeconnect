@@ -32,8 +32,8 @@ export function validRef(s) {
   return typeof s === "string" && REF_RE.test(s) && !s.includes("..");
 }
 
-// The computer settings an update may ask about. Matches COMPUTER_KEYS in worker.js.
-export const QUESTION_KEYS = ["autostart", "credits"];
+// The computer settings an update may ask about, as a yes or no. (The credit balance used to be one; it's always read now.)
+export const QUESTION_KEYS = ["autostart"];
 
 // A release manifest is data from the internet: keep only what the site shows or compares.
 export function cleanManifest(j) {

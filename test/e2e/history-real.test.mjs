@@ -175,30 +175,19 @@ test("a chat started on the site is one of Claude Code's own, listed once, and c
   assert.deepEqual(view.body.messages.map(m => m.content), ["started on the site", "You said: started on the site", "typed in the terminal", "heard in the terminal"]);
 });
 
-test("the computer can limit sharing to the working folder: other projects aren't listed, opened or continued", async t => {
-  const { pc, site, list, open, send } = await boot(t, { history: "workspace", fixtures: standard });
-  const chats = await until(async () => {
-    const l = await list();
-    return l.length ? l : null;
-  }, "the list");
-  assert.deepEqual(chats.map(c => c.id), [A]);
-  assert.equal((await open(B)).status, 404, "not listed, so not there to open");
-  // a chat that was already on the site (shared earlier, say, while it was set to share everything) can't be carried on either
-  await site.seed({ chats: [{ id: B, title: "Why is checkout slow?", created: Date.now() - 5000, updated: Date.now() - 5000 }] });
-  const done = await send({ chatId: B, text: "try to continue" });
-  assert.match(done.message.meta.error, /started outside .*, and TestConnect is set to only open chats from there/);
-  assert.equal(pc.claudeRuns().filter(r => r.prompt.includes("try to continue")).length, 0);
-  assert.equal((await site.api("/api/state")).body.agent.history, true);
-});
-
-test("the computer can turn sharing off: nothing is listed, and the site's own chats still work", async t => {
-  const { site, list, send } = await boot(t, { history: "off", fixtures: standard });
-  await sleep(1500);
-  assert.deepEqual(await list(), []);
-  assert.equal((await site.api("/api/state")).body.agent.history, false);
-  const done = await send({ text: "still works" });
-  assert.equal(done.message.meta.error, null);
-  assert.equal((await list()).length, 1);
+test("every chat on the computer is listed: a setting from before that narrowed it down, or turned it off, is ignored", async t => {
+  for (const history of ["workspace", "off"]) {
+    const { site, list, send, open } = await boot(t, { history, fixtures: standard });
+    const chats = await until(async () => {
+      const l = await list();
+      return l.length >= 3 ? l : null;
+    }, "the list with " + history);
+    assert.ok(chats.some(c => c.id === B), "other projects too");
+    assert.equal((await site.api("/api/state")).body.agent.history, true);
+    assert.equal((await open(B)).status, 200, "and opened");
+    const done = await send({ chatId: B, text: "carry on " + history });
+    assert.equal(done.message.meta.error, null);
+  }
 });
 
 test("something that isn't a setting we know is the same as the usual one", async t => {

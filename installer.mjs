@@ -11,6 +11,7 @@ import crypto from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { SLUG_RE, NAME_RE, toSlug, cleanSiteName, cleanAddress } from "./site/names.js";
 import { MAX_IMG, sniffImage, checkImage } from "./site/image.js";
+import { QUESTION_KEYS } from "./site/version.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = process.platform === "win32";
@@ -122,6 +123,44 @@ function findClaude() {
     if (v.status === 0) return { cmd: q(local), path: local, version: (String(v.stdout).match(/\d+\.\d+\.\d+/) || [""])[0] };
   }
   return null;
+}
+
+// Claude Code, installed and signed in with a Claude plan: setup, and `edit` when you switch to paying for Claude.
+async function setUpClaudeCode() {
+  let claude = findClaude();
+  if (!claude) {
+    note("Not installed yet, installing it now.");
+    const r = IS_WIN
+      ? sh(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"`)
+      : sh(`curl -fsSL https://claude.ai/install.sh | bash`);
+    claude = findClaude();
+    if (r.status !== 0 || !claude) fail("Claude Code didn't install. Install it from https://claude.ai/install and run this again.");
+  }
+  note(`Claude Code ${claude.version} is installed.`);
+  if (!signedIn(claude.cmd)) {
+    note("Sign in with your Claude account in the browser window that opens.");
+    sh(`${claude.cmd} auth login`);
+    if (!signedIn(claude.cmd)) fail("Claude Code isn't signed in yet. Run this again when you're ready to sign in.");
+  }
+  note("Signed in with your Claude plan.");
+  return claude;
+}
+
+// The free plan needs the Claude app (or, failing that, a Chrome, Edge or Brave to open claude.ai in). Nothing to install here:
+// the program on this computer opens the app when a message comes in, and types it there.
+async function checkClaudeApp() {
+  step("Checking the Claude app");
+  note("Claude Code needs a paid plan, so replies will come from the Claude app on this computer: each message is typed into it, and the reply read back as it's written.");
+  // where the release keeps it: next to this file in a download, flattened into the install folder afterwards
+  const helpers = await import(existsSync(join(HERE, "agent", "app.mjs")) ? "./agent/app.mjs" : "./app.mjs").catch(() => null);
+  const app = helpers ? helpers.claudeAppPath() : "";
+  const browser = helpers ? helpers.browserPath() : "";
+  if (app) note("The Claude app is installed. Make sure you're signed in to it.");
+  else if (browser) note("The Claude app isn't installed, so a browser window of its own, signed in to claude.ai, is used instead. To use the app, install it from https://claude.ai/download.");
+  else {
+    note("Install the Claude app from https://claude.ai/download and sign in to it. Messages wait until it's there.");
+    if (tty) openUrl("https://claude.ai/download");
+  }
 }
 
 function signedIn(cmd) {
@@ -525,7 +564,7 @@ async function remoteUpdate(manifest) {
     cfg.version = manifest.version;
     cfg.repo = REPO;
     cfg.ref = REF;
-    delete cfg.fable; // Fable 5.1 is always in the model picker now
+    delete cfg.fable; // there is no Fable 5.1 setting any more: it shows whenever there are usage credits
     writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
     await report("computer", "done");
     at = "restart";
@@ -657,7 +696,7 @@ async function remoteSettings(old, job) {
     const cfg = readJson(CONFIG) || old;
     cfg.displayName = displayName;
     delete cfg.aiName; // older installs saved a name for the AI; Claude runs with its own default instructions now
-    delete cfg.fable; // Fable 5.1 is always in the model picker now
+    delete cfg.fable; // there is no Fable 5.1 setting any more: it shows whenever there are usage credits
     writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
     await report("computer", "done");
     at = "restart";
@@ -857,7 +896,6 @@ if (REMOTE_OP) {
 // change it. The name, logo and tab icon are redeployed in place like Settings on the site does it; the theme and whether usage
 // credits are used are kept on the site; the rest only touches this computer. A new address, or deleting the site, comes last.
 const THEME_NAMES = { system: "System", light: "Light", dark: "Dark" };
-const SCOPE_NAMES = { all: "all of them", workspace: "only the ones from the working folder", off: "none" };
 
 // The site's own settings, read and changed with this computer's key. Null if the site can't be reached.
 async function sitePrefs(cfg, change) {
@@ -932,21 +970,9 @@ async function editSettings() {
   // This computer
   const auto = autostartOn();
   if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
-  const credits = old.credits !== false;
-  if (await yes(`${credits ? "Stop showing" : "Show"} your usage credit balance on the site? It's ${credits ? "shown" : "not shown"} now. This reads your Claude Code sign-in on this computer to ask Claude for it; the sign-in itself never leaves this computer.`)) local.credits = !credits;
-  const scope = SCOPE_NAMES[old.history] ? old.history : "all";
-  if (await yes(`Change which of Claude Code's chats from this computer the site lists? Now: ${SCOPE_NAMES[scope]}.`)) {
-    for (;;) {
-      const a = String(await ask("  All, folder (only the working folder's) or none? ", "")).trim().toLowerCase();
-      if (!a) break;
-      const v = { all: "all", folder: "workspace", workspace: "workspace", none: "off", off: "off" }[a];
-      if (v) {
-        if (v !== scope) local.history = v;
-        break;
-      }
-      console.log("  Type all, folder or none.");
-    }
-  }
+  // whether you pay for Claude: Claude Code answers, or the Claude app on this computer does
+  const plan = old.plan === "free" ? "free" : "paid";
+  if (await yes(plan === "paid" ? "Switch to the free plan? Now you pay for Claude, so Claude Code answers; on the free plan the Claude app on this computer does." : "Do you pay for Claude now (Pro, Max, Team or Enterprise)? Now it's the free plan, so the Claude app answers; with a paid plan Claude Code does.")) local.plan = plan === "paid" ? "free" : "paid";
   const ws = old.workspace || join(HOME, name);
   if (await yes(`Change the working folder, where Claude Code works and files you attach go? Now: ${tilde(ws)}.`)) {
     for (;;) {
@@ -967,7 +993,7 @@ async function editSettings() {
   }
 
   // Plan usage
-  if (site) {
+  if (site && (local.plan || plan) === "paid") {
     const on = site.useCredits !== false;
     if (await yes(`${on ? "Stop using" : "Use"} usage credits from the site? They're ${on ? "used" : "not used"} now. ${on ? "Turned off, new messages wait while you're at a plan limit, and Fable 5.1, which only runs on them, is paused." : "Turned on, replies carry on past a plan limit, paid from your credits, and Fable 5.1 can be used."}`)) prefs.useCredits = !on;
   }
@@ -1014,8 +1040,7 @@ async function editSettings() {
     "favicon" in job && `tab icon: ${job.favicon ? "new" : "the logo"}`,
     prefs.theme && `theme: ${THEME_NAMES[prefs.theme]}`,
     "autostart" in local && `start at login: ${local.autostart ? "yes" : "no"}`,
-    "credits" in local && `usage credit balance: ${local.credits ? "shown" : "not shown"}`,
-    local.history && `Claude Code chats on the site: ${SCOPE_NAMES[local.history]}`,
+    local.plan && `Claude plan: ${local.plan === "paid" ? "paid (Claude Code answers)" : "free (the Claude app answers)"}`,
     local.workspace && `working folder: ${tilde(local.workspace)}`,
     "useCredits" in prefs && `usage credits from the site: ${prefs.useCredits ? "used" : "not used"}`,
     address && `address: ${address} (a new link; the old one stops working)`
@@ -1040,7 +1065,20 @@ async function editSettings() {
       failed = true;
     }
   }
-  const cfgChange = Object.fromEntries(["credits", "history", "workspace"].filter(k => k in local).map(k => [k, local[k]]));
+  // Claude Code has to be there, and signed in, before it can answer
+  if (local.plan === "paid") {
+    try {
+      JOB = true;
+      await setUpClaudeCode();
+    } catch (e) {
+      console.log(`  ${failure(e)}`);
+      delete local.plan;
+      failed = true;
+    } finally {
+      JOB = false;
+    }
+  } else if (local.plan === "free") await checkClaudeApp();
+  const cfgChange = Object.fromEntries(["plan", "workspace"].filter(k => k in local).map(k => [k, local[k]]));
   if (Object.keys(cfgChange).length) {
     // written while the program here is stopped, so it can't save its own copy over this
     const write = () => {
@@ -1109,14 +1147,11 @@ async function quickUpdate() {
   const cfg = installedConfig();
   console.log(bold(`\nUpdating ${cfg.displayName || "ClaudeConnect"} to ${payload.version}`) + dim("  your chats and settings are kept"));
   // what this version asks that the installed one didn't: a y/n each, before anything changes
-  const asks = (Array.isArray(payload.questions) ? payload.questions : []).filter(q => q && ["autostart", "credits"].includes(q.key) && typeof q.label === "string" && newerThan(q.since, cfg.version || "0.0.0") && !newerThan(q.since, payload.version));
+  const asks = (Array.isArray(payload.questions) ? payload.questions : []).filter(q => q && QUESTION_KEYS.includes(q.key) && typeof q.label === "string" && newerThan(q.since, cfg.version || "0.0.0") && !newerThan(q.since, payload.version));
   for (const q of asks) {
     if (q.help) note(q.help);
     const a = /^y/i.test(await ask(`  ${q.label} ${q.default ? "[Y/n]" : "[y/N]"} `, q.default ? "y" : "n"));
-    if (q.key === "credits") {
-      cfg.credits = a;
-      writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-    } else if (q.key === "autostart") spawnSync(process.execPath, [join(DIR, "agent.mjs"), "autostart", a ? "on" : "off"], { stdio: "ignore" });
+    if (q.key === "autostart") spawnSync(process.execPath, [join(DIR, "agent.mjs"), "autostart", a ? "on" : "off"], { stdio: "ignore" });
   }
   JOB = true;
   await remoteUpdate(payload);
@@ -1136,23 +1171,18 @@ if (!prior.accountId) {
 }
 const known = prior.displayName || "ClaudeConnect";
 
-step("Checking Claude Code");
-let claude = findClaude();
-if (!claude) {
-  note("Not installed yet, installing it now.");
-  const r = IS_WIN
-    ? sh(`powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"`)
-    : sh(`curl -fsSL https://claude.ai/install.sh | bash`);
-  claude = findClaude();
-  if (r.status !== 0 || !claude) fail("Claude Code didn't install. Install it from https://claude.ai/install and run this again.");
+// Whether you pay for Claude. Claude Code needs a paid plan; without one, replies come from the Claude app on this computer,
+// typed into it. Asked once, when there's nothing set up yet; after that it's in Settings and `<command> edit`.
+let plan = flag("--free") ? "free" : flag("--paid") ? "paid" : prior.plan === "free" ? "free" : "paid";
+if (!prior.accountId && !flag("--free") && !flag("--paid")) {
+  step("Your Claude plan");
+  plan = /^y/i.test(await ask("  Do you pay for Claude (Pro, Max, Team or Enterprise)? [Y/n] ", "y")) ? "paid" : "free";
 }
-note(`Claude Code ${claude.version} is installed.`);
-if (!signedIn(claude.cmd)) {
-  note("Sign in with your Claude account in the browser window that opens.");
-  sh(`${claude.cmd} auth login`);
-  if (!signedIn(claude.cmd)) fail("Claude Code isn't signed in yet. Run this again when you're ready to sign in.");
-}
-note("Signed in with your Claude plan.");
+let claude = null;
+if (plan === "paid") {
+  step("Checking Claude Code");
+  claude = await setUpClaudeCode();
+} else await checkClaudeApp();
 
 step("Checking your Cloudflare sign-in");
 token = cloudflareToken();
@@ -1297,13 +1327,15 @@ mkdirSync(workspace, { recursive: true });
 mkdirSync(binDir, { recursive: true });
 const agentPath = join(DIR, "agent.mjs");
 const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
-const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
+const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF, plan };
 if (same && prior.id) cfg.id = prior.id;
+if (same && prior.appPort) cfg.appPort = prior.appPort;
+if (same && prior.appRefused) cfg.appRefused = prior.appRefused;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;
   cfg.tokenExp = prior.tokenExp;
 }
-if (claude.path) cfg.claudePath = claude.path;
+if (claude && claude.path) cfg.claudePath = claude.path;
 if (process.env.CLAUDECONNECT_CF_API) cfg.api = API;
 writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 if (legacy) {

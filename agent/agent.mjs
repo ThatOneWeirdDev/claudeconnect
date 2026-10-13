@@ -4,8 +4,10 @@ import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, sta
 import { join, basename, dirname, extname, relative, resolve as resolvePath, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import http from "node:http";
 import os from "node:os";
-import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID, within } from "./sessions.mjs";
+import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID } from "./sessions.mjs";
+import { createApp, resetsFrom, claudeAppPath, browserPath } from "./app.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -22,14 +24,10 @@ const PID_PATH = join(HERE, "agent.pid");
 const OLD_SYSTEM_PATH = join(HERE, "system-prompt.txt"); // older versions wrote "You are <name>" here; nothing reads it now
 const SETTINGS_PATH = join(HERE, "claude-settings.json");
 const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|jsonl|xml|html?|css|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|c|h|cpp|hpp|cs|php|sh|ps1|bat|sql|ya?ml|toml|ini|cfg|log|tex)$/i;
-// "Claude" is plain chat: no tools, no folder, a short chat prompt in place of Claude Code's. "Claude Code" is the real thing,
-// with its own default instructions. The permission mode only applies to Claude Code; "auto" means whatever this computer is set to.
-const CHAT_PROMPT = [
-  "You are Claude, an AI assistant made by Anthropic, talking with the person in a chat window.",
-  "Answer directly and conversationally. Use Markdown when it helps, and put code in fenced blocks that name the language.",
-  "In this chat you can't browse the web, run code, or read or change files, so don't offer to. If the person wants that, tell them to switch to Claude Code with the switch under the message box."
-].join(" ");
-const PERMS = new Set(["auto", "acceptEdits", "plan"]);
+// Every message runs as Claude Code, with its own default instructions. The permission mode says how freely it acts: "auto"
+// means whatever this computer is set to, and "default" asks you on the site before anything that needs permission.
+const PERMS = new Set(["auto", "acceptEdits", "plan", "default"]);
+const PERMIT_PATH = join(HERE, "permit.mjs");
 const ARTIFACT_MAX = 1900000;
 const ARTIFACT_TOTAL = 8000000;
 
@@ -50,8 +48,12 @@ const SLUG = String(cfg.name || "claudeconnect").replace(/[^a-z0-9-]/gi, "").toL
 // Both can be changed from the site while this runs (Settings → General → This computer).
 let WORKSPACE = cfg.workspace || join(os.homedir(), NAME);
 const API = cfg.api || "https://api.cloudflare.com/client/v4";
-// Which of the chats Claude Code has saved on this computer the site may list and open: "all", "workspace" (only the working folder) or "off".
-let HISTORY = ["all", "workspace", "off"].includes(cfg.history) ? cfg.history : "all";
+// Every chat Claude Code has saved on this computer is listed on the site. (Older versions let you narrow that down; there's no
+// setting for it anymore.)
+const HISTORY = "all";
+// "paid": a Claude plan, so replies come from Claude Code. "free": no paid plan, so they come from the Claude app, typed into it
+// (app.mjs). Asked at setup, and changed in Settings or with `<command> edit`.
+let PLAN = cfg.plan === "free" ? "free" : "paid";
 
 function saveConfig() {
   try {
@@ -262,6 +264,7 @@ if (cmd === "status") {
   console.log(`Version: ${VERSION}`);
   console.log(`Site: ${cfg.site}`);
   console.log(`Workspace: ${WORKSPACE}`);
+  console.log(`Replies come from: ${PLAN === "free" ? "the Claude app (free plan)" : "Claude Code (your Claude plan)"}`);
   console.log(`Starts at login: ${existsSync(startupPaths().file) ? "yes" : "no"}`);
   process.exit(0);
 }
@@ -320,6 +323,8 @@ function childEnv() {
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
+  // a question on the site can take a while to be answered
+  env.MCP_TOOL_TIMEOUT = env.MCP_TOOL_TIMEOUT || String(15 * 60000);
   return env;
 }
 
@@ -397,13 +402,22 @@ function versionAtLeast(v, want) {
 
 let CLAUDE = findClaude();
 let CLAUDE_VERSION = "";
-// Newer Claude Code records a chat's system prompt on its first request and reuses it on every resume. Switching between
-// Claude and Claude Code in one chat needs the prompt rendered fresh each time, and older versions don't have the switch.
+// Newer Claude Code records a chat's system prompt on its first request and reuses it on every resume, which would keep a
+// chat's instructions from before an update; it's rendered fresh each time where Claude Code can do that.
 let FRESH_PROMPT = false;
+// Whether this Claude Code can ask someone for permission through a tool (--permission-prompt-tool): then it asks you on the site.
+let CAN_ASK = false;
 let WARNING = "";
 let WARNING_CODE = "";
 
 async function checkClaude() {
+  if (PLAN === "free") {
+    // no Claude Code needed: the Claude app (or a browser to fall back on) is
+    const found = claudeAppPath() || browserPath();
+    WARNING = found ? "" : "The Claude app isn't installed. Install it from claude.ai/download and sign in.";
+    WARNING_CODE = found ? "" : "app_missing";
+    return;
+  }
   CLAUDE = findClaude();
   if (!CLAUDE) {
     CLAUDE_VERSION = "";
@@ -416,6 +430,7 @@ async function checkClaude() {
   CLAUDE_VERSION = m ? m[0] : "";
   const help = await capture(["--help"], "", 30000);
   FRESH_PROMPT = /--system-prompt-snapshot/.test(help.stdout);
+  CAN_ASK = /--permission-prompt-tool/.test(help.stdout) && existsSync(PERMIT_PATH);
   const a = await capture(["auth", "status"], "", 30000);
   let method = "";
   try {
@@ -538,7 +553,8 @@ function send(obj) {
         continue;
       } catch {}
     }
-    if (obj.type !== "delta" && obj.type !== "beat" && obj.type !== "status" && obj.type !== "sessions" && obj.type !== "transcript") outbox.push(c);
+    // what only matters while it's happening isn't kept for later
+    if (!["delta", "replace", "beat", "status", "sessions", "transcript", "remote", "remote_done", "app"].includes(obj.type)) outbox.push(c);
   }
 }
 
@@ -562,22 +578,24 @@ function saveFiles(files, chatId, base = WORKSPACE) {
     const buf = Buffer.from(String(f.data || ""), "base64");
     writeFileSync(p, buf);
     const textLike = TEXT_EXT.test(name) || /^text\//.test(f.type || "") || /json|xml/.test(f.type || "");
-    return { name, rel: inside(p, base) ? relative(base, p).split("\\").join("/") : p, size: buf.length, text: textLike && buf.length <= 200000 ? buf.toString("utf8") : null };
+    return { name, path: p, rel: inside(p, base) ? relative(base, p).split("\\").join("/") : p, size: buf.length, text: textLike && buf.length <= 200000 ? buf.toString("utf8") : null };
   });
 }
 
-function composePrompt(prompt, saved, chat) {
+function composePrompt(prompt, saved) {
   if (!saved.length) return prompt;
   let out = prompt || "Take a look at the attached files.";
-  if (chat) {
-    // no file tools in plain chat: say which attachments can't be read instead of pointing at paths it can't open
-    const unread = saved.filter(f => f.text === null);
-    if (unread.length) out += "\n\n(Attached, but this chat can't open them. Switch to Claude Code for that: " + unread.map(f => f.name).join(", ") + ")";
-    for (const f of saved) if (f.text !== null) out += `\n\n<file name="${f.name.replace(/"/g, "'")}">\n${f.text}\n</file>`;
-    return out;
-  }
   out += "\n\nAttached files:\n" + saved.map(f => `- ${f.rel}`).join("\n");
   for (const f of saved) if (f.text !== null) out += `\n\n<file name="${f.rel.replace(/"/g, "'")}">\n${f.text}\n</file>`;
+  return out;
+}
+
+// The text files' contents, for when the Claude app won't take the files themselves.
+function inlineFiles(saved) {
+  let out = "";
+  const unread = saved.filter(f => f.text === null);
+  for (const f of saved) if (f.text !== null) out += `\n\n<file name="${f.name.replace(/"/g, "'")}">\n${f.text}\n</file>`;
+  if (unread.length) out += "\n\n(Also attached, but they couldn't be added in the Claude app: " + unread.map(f => f.name).join(", ") + ")";
   return out;
 }
 
@@ -621,13 +639,13 @@ function runClaude(m, prompt, sessionArgs, pre, where = WORKSPACE) {
       if (st.text.endsWith("\n\n")) return;
       addText(st.text.endsWith("\n") ? "\n" : "\n\n");
     };
-    const chat = m.mode === "claude";
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", m.model, "--settings", SETTINGS_PATH];
-    if (chat) args.push("--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--system-prompt", CHAT_PROMPT);
-    else {
-      args.push("--permission-mode", PERMS.has(m.perm) && m.perm !== "auto" ? m.perm : cfg.permissionMode || "auto");
-      if (versionAtLeast(CLAUDE_VERSION, "2.1.259")) args.push("--permission-prompts", "none");
-    }
+    // Anything that needs permission is asked on the site (permit.mjs). A Claude Code that can't do that asks nobody, since
+    // nobody is at the terminal, and "ask first" falls back to auto there.
+    const perm = PERMS.has(m.perm) && m.perm !== "auto" && (m.perm !== "default" || m.permit) ? m.perm : cfg.permissionMode || "auto";
+    args.push("--permission-mode", perm);
+    if (m.permit) args.push("--mcp-config", m.permit, "--permission-prompt-tool", "mcp__claudeconnect__approve");
+    else if (versionAtLeast(CLAUDE_VERSION, "2.1.259")) args.push("--permission-prompts", "none");
     if (FRESH_PROMPT) args.push("--system-prompt-snapshot", "off");
     if (m.effort) args.push("--effort", m.effort);
     args.push(...sessionArgs);
@@ -770,8 +788,9 @@ function limitsFrom(info) {
   return out;
 }
 
-function noteLimits(info) {
-  const got = limitsFrom(info);
+// `built`: a reading already in this shape (the Claude app's, from claude.ai's own usage numbers)
+function noteLimits(info, built) {
+  const got = built ? info : limitsFrom(info);
   if (!got) return;
   // every event describes the whole current state, apart from windows it didn't see this time
   LIMITS = { ...got, windows: { ...((LIMITS && LIMITS.windows) || {}), ...got.windows } };
@@ -783,7 +802,7 @@ let probing = false;
 
 // A one-token message to the cheapest model, only to read the current percentages. Nothing is saved and no tools are offered.
 async function probeLimits() {
-  if (probing || procs.size || !CLAUDE) return;
+  if (probing || procs.size || !CLAUDE || PLAN !== "paid") return;
   probing = true;
   try {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--model", "claude-haiku-5-5", "--no-session-persistence", "--tools", "", "--system-prompt", "Reply with: ok"];
@@ -825,19 +844,39 @@ function claudeSignIn() {
     o = JSON.parse(raw).claudeAiOauth;
   } catch {}
   if (!o || typeof o.accessToken !== "string" || !o.accessToken) return null;
-  if (Number(o.expiresAt) && Number(o.expiresAt) < Date.now() + 30000) return { expired: true };
+  const sub = typeof o.subscriptionType === "string" && /^[a-z_]{1,20}$/.test(o.subscriptionType) ? o.subscriptionType : "";
+  if (Number(o.expiresAt) && Number(o.expiresAt) < Date.now() + 30000) return { expired: true, sub };
   let org = "";
   try {
     const g = JSON.parse(readFileSync(process.env.CLAUDE_CONFIG_DIR ? join(CLAUDE_DIR, ".claude.json") : join(os.homedir(), ".claude.json"), "utf8"));
     org = (g.oauthAccount && g.oauthAccount.organizationUuid) || "";
   } catch {}
-  return { token: o.accessToken, org: UUID.test(String(org)) ? org : "" };
+  return { token: o.accessToken, org: UUID.test(String(org)) ? org : "", sub };
+}
+
+// Which Claude plan this is ("pro", "max" and so on), from Claude Code's sign-in, for the site to show. Read now and then.
+let SUB = { at: 0, v: "" };
+function subscription() {
+  if (PLAN === "free") return "free";
+  if (Date.now() - SUB.at > 10 * 60000) {
+    const s = claudeSignIn();
+    SUB = { at: Date.now(), v: (s && s.sub) || "" };
+  }
+  return SUB.v;
 }
 
 // Use one of the account's limit resets, the way Claude Code's own "use a reset" does, then read everything again.
 async function claimReset(m) {
   const reply = o => send({ type: "reset_result", req: m.req, ...o });
-  if (!creditsOn()) return reply({ result: "unavailable", reason: "turned_off" });
+  if (!/^[a-z0-9_]{1,40}$/.test(String(m.program)) || !/^[a-z0-9_-]{1,40}$/.test(String(m.grant))) return reply({ result: "error", reason: "bad_request" });
+  if (PLAN === "free") {
+    // through the Claude app's own sign-in
+    const r = await app().useReset(m.program, m.grant, randomBytes(16).toString("hex")).catch(() => null);
+    const j = r && r.result;
+    if (!j || typeof j !== "object") return reply({ result: "error", reason: String((r && r.error) || "app").slice(0, 40) });
+    reply({ result: String(j.result || "error"), reason: typeof j.reason === "string" ? j.reason : "", resetsLeft: Number.isFinite(j.resets_left) ? j.resets_left : null, cleared: Array.isArray(j.cleared) ? j.cleared : [] });
+    return appUsage().catch(() => {});
+  }
   const s = claudeSignIn();
   if (!s || s.expired || !s.org) return reply({ result: "unavailable", reason: s && s.expired ? "expired" : "signin" });
   if (!/^[a-z0-9_]{1,40}$/.test(String(m.program)) || !/^[a-z0-9_-]{1,40}$/.test(String(m.grant))) return reply({ result: "error", reason: "bad_request" });
@@ -860,36 +899,47 @@ async function claimReset(m) {
   probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
 }
 
+// The usage credit balance is always read with Claude Code's sign-in (there's no setting for it anymore). The free plan has none.
 function creditsOn() {
-  return cfg.credits !== false;
+  return PLAN === "paid";
 }
 
-// This computer's own settings, which the site shows and can change: starting at login, and reading the credit balance.
+// This computer's own settings, which the site shows and can change: starting at login, the working folder, and whether you pay
+// for Claude. (`credits` and `history` are what they always are now; they're still said for a site from before.)
 // Answers to an update's new questions arrive the same way, once the new version is running.
 function computerSettings() {
-  return { autostart: existsSync(startupPaths().file), credits: creditsOn(), history: HISTORY, workspace: WORKSPACE };
+  return { autostart: existsSync(startupPaths().file), workspace: WORKSPACE, plan: PLAN, subscription: subscription(), credits: creditsOn(), history: HISTORY };
 }
 
-function setComputer(m) {
+async function setComputer(m) {
   const v = m.values && typeof m.values === "object" ? m.values : {};
   try {
     if (typeof v.autostart === "boolean" && v.autostart !== existsSync(startupPaths().file)) autostart(v.autostart);
-    if (typeof v.credits === "boolean" && v.credits !== creditsOn()) {
-      cfg.credits = v.credits;
-      saveConfig();
-      if (v.credits) readCredits().catch(() => {});
-    }
   } catch (e) {
     log("Couldn't change a setting:", e.message || e);
   }
   let error = "";
-  // which of Claude Code's chats the site can list and open
-  if (["all", "workspace", "off"].includes(v.history) && v.history !== HISTORY) {
-    HISTORY = cfg.history = v.history;
+  // whether you pay for Claude: Claude Code answers, or the Claude app does
+  if ((v.plan === "free" || v.plan === "paid") && v.plan !== PLAN) {
+    PLAN = cfg.plan = v.plan;
     saveConfig();
-    lastSessions = "";
-    if (HISTORY === "off") send({ type: "sessions", sessions: [] });
-    else reportSessions(true);
+    SUB.at = 0;
+    log(PLAN === "free" ? "Replies now come from the Claude app on this computer." : "Replies now come from Claude Code, with your Claude plan.");
+    // the checks can take a while; the site is answered first, and told what they found after
+    checkClaude()
+      .catch(() => {})
+      .finally(() => {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify(helloMessage()));
+        if (PLAN === "paid") {
+          if (APP) APP.close();
+          lastSessions = "";
+          reportSessions(true);
+          probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
+        } else {
+          send({ type: "sessions", sessions: [] });
+          reportApp(true);
+        }
+      });
   }
   // the folder Claude Code works in; it's made if it isn't there
   if (typeof v.workspace === "string" && v.workspace.trim() && v.workspace.trim() !== WORKSPACE) {
@@ -957,25 +1007,145 @@ async function readCredits() {
     out.balance = { amount: p.amount, currency: typeof p.currency === "string" ? p.currency : "", promos: promos.slice(0, 10).map(t => ({ amount: t.remaining_amount_minor_units, currency: typeof t.currency === "string" ? t.currency : "", expires: Date.parse(t.expires_at) || null, name: typeof t.name === "string" ? t.name : "" })) };
   }
   // Limit resets: Claude gives subscribers resets they can use whenever they like (cedar_ember), and reports any other reset
-  // program the same way. Each grant says how many are left, whether it can be used now, and which limits it clears.
-  for (const program of ["cedar_ember", "juniper_tide"]) {
-    const r = u && u[program];
-    if (!r || typeof r !== "object" || !Array.isArray(r.grants)) continue;
-    (out.resets = out.resets || []).push({
-      program,
-      eligible: r.eligible === true,
-      atLimit: r.at_limit === true,
-      cooldownUntil: typeof r.cooldown_until === "string" ? r.cooldown_until : "",
-      grants: r.grants.filter(g => g && typeof g.id === "string").map(g => ({ id: g.id, label: typeof g.label === "string" ? g.label : "", left: num(g.resets_left), total: num(g.resets_total), usableNow: g.usable_now === true, needsLimit: g.use_requires_limit === true, paused: g.paused === true, endsAt: typeof g.ends_at === "string" ? g.ends_at : "", clears: Array.isArray(g.clears) ? g.clears.filter(c => typeof c === "string") : [] }))
-    });
-  }
+  // program the same way. Each grant says how many are left, whether it can be used now, which limits it clears, and, when
+  // Claude says, how often it comes back (every day or every week).
+  const resets = resetsFrom(u);
+  if (resets.length) out.resets = resets;
   if (!out.extra && !out.balance && !out.dollars && !out.resets) out.error = "unavailable";
   send({ type: "credits", credits: out });
 }
 
+// ---- asking you for permission. Claude Code's questions (through permit.mjs) are shown on the site, over the chat, and the
+// answer you give there goes back to it. Only programs started here with the token can ask.
+const PERMIT_TOKEN = randomBytes(24).toString("base64url");
+const asks = new Map();
+let permitPort = null;
+
+function permitServer() {
+  if (permitPort) return permitPort;
+  permitPort = new Promise(resolve => {
+    const srv = http.createServer((req, res) => {
+      const reply = (code, o) => {
+        res.writeHead(code, { "content-type": "application/json" });
+        res.end(JSON.stringify(o));
+      };
+      if (req.headers["x-token"] !== PERMIT_TOKEN) return reply(403, { error: "forbidden" });
+      const m = String(req.url || "").match(/^\/permit(?:\/([0-9a-f]{16}))?$/);
+      if (!m) return reply(404, { error: "not found" });
+      if (req.method === "GET" && m[1]) {
+        const a = asks.get(m[1]);
+        if (!a) return reply(200, { allow: false, message: "That question was closed." });
+        if (!a.answer) return reply(200, { pending: true });
+        asks.delete(m[1]);
+        return reply(200, a.answer);
+      }
+      if (req.method !== "POST" || m[1]) return reply(405, { error: "no" });
+      let body = "";
+      req.on("data", d => {
+        body += d;
+        if (body.length > 4000000) req.destroy();
+      });
+      req.on("end", () => {
+        let b = {};
+        try {
+          b = JSON.parse(body);
+        } catch {}
+        const rec = procs.get(String(b.run || ""));
+        const id = randomBytes(8).toString("hex");
+        if (!rec) {
+          asks.set(id, { runId: "", answer: { allow: false, message: "That reply is over." } });
+          return reply(200, { id });
+        }
+        const q = askText(String(b.tool || ""), b.input);
+        asks.set(id, { runId: b.run, chatId: rec.chatId, answer: null, at: Date.now() });
+        send({ type: "remote", runId: b.run, chatId: rec.chatId, id, kind: "permission", tool: String(b.tool || "").slice(0, 80), title: q.title, detail: q.detail });
+        log(`Asking on the site: ${q.title}`);
+        reply(200, { id });
+      });
+    });
+    srv.on("error", () => resolve(0));
+    srv.listen(0, "127.0.0.1", () => resolve(srv.address().port));
+    srv.unref();
+  });
+  return permitPort;
+}
+
+// What Claude Code wants to do, in words, for the site to show.
+function askText(tool, input) {
+  const i = input && typeof input === "object" ? input : {};
+  const s = (v, n = 4000) => String(v === undefined || v === null ? "" : v).slice(0, n);
+  const file = p => (p ? basename(String(p)) : "a file");
+  switch (tool) {
+    case "Bash":
+    case "PowerShell":
+      return { title: i.description ? `Run a command: ${s(i.description, 120)}` : "Run a command", detail: s(i.command) };
+    case "Write":
+      return { title: `Create ${file(i.file_path)}`, detail: `${s(i.file_path, 500)}\n\n${s(i.content, 2500)}` };
+    case "Edit":
+      return { title: `Change ${file(i.file_path)}`, detail: `${s(i.file_path, 500)}\n\n- ${s(i.old_string, 1200).split("\n").join("\n- ")}\n+ ${s(i.new_string, 1200).split("\n").join("\n+ ")}` };
+    case "MultiEdit":
+      return { title: `Change ${file(i.file_path)}`, detail: `${s(i.file_path, 500)}\n\n${(Array.isArray(i.edits) ? i.edits : []).length} changes` };
+    case "NotebookEdit":
+      return { title: `Change ${file(i.notebook_path)}`, detail: s(i.notebook_path, 500) };
+    case "Read":
+      return { title: `Read ${file(i.file_path)}`, detail: s(i.file_path, 500) };
+    case "Glob":
+    case "Grep":
+      return { title: tool === "Grep" ? `Search files for ${s(i.pattern, 80)}` : `Look for ${s(i.pattern, 80)}`, detail: s(i.path || i.pattern, 500) };
+    case "WebFetch":
+      return { title: "Open a web page", detail: s(i.url, 500) };
+    case "WebSearch":
+      return { title: "Search the web", detail: s(i.query, 500) };
+    case "ExitPlanMode":
+      return { title: "Carry out this plan", detail: s(i.plan) };
+    default: {
+      const label = tool.startsWith("mcp__") ? "Use " + tool.split("__").slice(1).join(" › ") : `Use ${tool || "a tool"}`;
+      let detail = "";
+      try {
+        detail = JSON.stringify(i, null, 2);
+      } catch {}
+      return { title: label.slice(0, 160), detail: s(detail) };
+    }
+  }
+}
+
+// The MCP server that asks on the site, for one reply. Null when this Claude Code can't ask.
+async function permitConfig(m) {
+  if (!CAN_ASK) return null;
+  const port = await permitServer();
+  if (!port) return null;
+  const file = join(HERE, `permit-${String(m.runId).replace(/[^A-Za-z0-9-]/g, "")}.json`);
+  const env = { CLAUDECONNECT_PERMIT: `http://127.0.0.1:${port}`, CLAUDECONNECT_PERMIT_TOKEN: PERMIT_TOKEN, CLAUDECONNECT_RUN: m.runId };
+  try {
+    writeFileSync(file, JSON.stringify({ mcpServers: { claudeconnect: { type: "stdio", command: process.execPath, args: [PERMIT_PATH], env } } }), { mode: 0o600 });
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+// A reply that's over has nothing more to ask: anything still open is a no, and its window goes from the site.
+function closeAsks(runId) {
+  for (const [id, a] of asks) {
+    if (a.runId !== runId || a.answer) continue;
+    a.answer = { allow: false, message: "The reply ended before anyone answered." };
+    send({ type: "remote_done", runId, chatId: a.chatId, id });
+  }
+}
+
+function answerAsk(m) {
+  const a = asks.get(String(m.id || ""));
+  if (!a || a.answer || a.runId !== m.runId) return false;
+  const allow = m.answer === "allow";
+  a.answer = { allow, message: allow ? "" : "The person using ClaudeConnect said no to this." };
+  send({ type: "remote_done", runId: a.runId, chatId: a.chatId, id: m.id });
+  log(allow ? "Allowed on the site." : "Said no on the site.");
+  return true;
+}
+
 async function handleRun(m) {
   const t0 = Date.now();
-  procs.set(m.runId, { stopped: false, child: null });
+  procs.set(m.runId, { stopped: false, child: null, chatId: m.chatId });
   const beat = setInterval(() => send({ type: "beat", runId: m.runId, chatId: m.chatId }), 15000);
   const label = { "claude-fable-5-1": "Fable 5.1", "claude-opus-5-5": "Opus 5.5", "claude-sonnet-5-5": "Sonnet 5.5", "claude-haiku-5-5": "Haiku 5.5" }[m.model] || m.model;
   log(`Message received, running ${label}${m.effort ? " at " + m.effort + " effort" : ""}`);
@@ -991,10 +1161,10 @@ async function handleRun(m) {
     const dir = file ? sessionCwd(file) : "";
     if (dir) {
       if (!isDirectory(dir)) refused = `This chat was started in ${dir}, which isn't on this computer anymore, so it can't be continued from here.`;
-      else if (HISTORY !== "all" && !within(dir, WORKSPACE)) refused = `This chat was started outside ${WORKSPACE}, and ${COMMAND} is set to only open chats from there.`;
       else where = dir;
     }
   }
+  let permit = null;
   try {
     if (!CLAUDE) await checkClaude();
     if (refused) {
@@ -1003,21 +1173,29 @@ async function handleRun(m) {
       result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: "", code: -1, error: `${NAME} is missing a piece it needs to answer. Run the setup again to fix it, then restart ${COMMAND}.` };
     } else {
       const saved = saveFiles(m.files, m.chatId, where);
-      const prompt = composePrompt(m.prompt, saved, m.mode === "claude");
+      const prompt = composePrompt(m.prompt, saved);
+      permit = await permitConfig(m);
+      const run = { ...m, permit };
       const primary = m.resume ? ["--resume", m.sessionId] : ["--session-id", m.sessionId];
       const alternate = m.resume ? ["--session-id", m.sessionId] : ["--resume", m.sessionId];
-      result = await runClaude(m, prompt, primary, undefined, where);
+      result = await runClaude(run, prompt, primary, undefined, where);
       const msg = String((result.final && result.final.result) || "") + " " + result.stderr;
       const retry = !procs.get(m.runId).stopped && !result.st.text && ((m.resume && /no conversation found|not found/i.test(msg)) || (!m.resume && /already in use|already exists/i.test(msg)));
       if (retry) {
         result.st.started = false;
-        result = await runClaude(m, prompt, alternate, result.st, where);
+        result = await runClaude(run, prompt, alternate, result.st, where);
       }
     }
   } catch (e) {
     result = { st: { text: "", thinking: "", thinkingMs: 0, tools: [], writes: [], started: false, model: "" }, final: null, stderr: String(e.message || e), code: -1 };
   }
   clearInterval(beat);
+  closeAsks(m.runId);
+  if (permit) {
+    try {
+      unlinkSync(permit);
+    } catch {}
+  }
   const rec = procs.get(m.runId) || {};
   procs.delete(m.runId);
   const f = result.final;
@@ -1032,6 +1210,55 @@ async function handleRun(m) {
   send({ type: "done", runId: m.runId, chatId: m.chatId, text, thinking: result.st.thinking || "", thinkingMs: result.st.thinkingMs || 0, artifacts, error, started: result.st.started, tools: result.st.tools, sync: syncState(m.sessionId), context: contextOf(f, result.st, m.model), cost: f && typeof f.total_cost_usd === "number" ? f.total_cost_usd : null, denials: f && Array.isArray(f.permission_denials) ? f.permission_denials.length : 0, model: result.st.model || m.model, ms: Date.now() - t0 });
   setTimeout(() => reportSessions(false), 300); // a new or longer chat shows up in the site's list straight away
   log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s${artifacts.length ? `, with ${artifacts.length} file${artifacts.length === 1 ? "" : "s"}` : ""}`);
+}
+
+// ---- the free plan: replies come from the Claude app on this computer, typed into it (app.mjs)
+let APP = null;
+function app() {
+  if (!APP) APP = createApp({ dir: HERE, cfg, saveConfig, log, WS });
+  return APP;
+}
+let appInfoSent = "";
+function reportApp(force) {
+  if (PLAN !== "free") return;
+  const info = app().info();
+  const sig = JSON.stringify(info);
+  if (!force && sig === appInfoSent) return;
+  appInfoSent = sig;
+  send({ type: "app", app: info });
+}
+
+async function handleAppRun(m) {
+  const t0 = Date.now();
+  procs.set(m.runId, { stopped: false, child: null, chatId: m.chatId, app: true });
+  const beat = setInterval(() => send({ type: "beat", runId: m.runId, chatId: m.chatId }), 15000);
+  log(`Message received, typing it into the Claude app${m.model && m.model !== "app-default" ? ` (${m.model})` : ""}`);
+  let res;
+  try {
+    const saved = saveFiles(m.files, m.chatId);
+    res = await app().run({ ...m, files: saved, inline: inlineFiles(saved) }, ev => send({ ...ev, runId: m.runId, chatId: m.chatId }), () => !!(procs.get(m.runId) || {}).stopped);
+  } catch (e) {
+    res = { text: "", error: String((e && e.message) || e) };
+  }
+  clearInterval(beat);
+  const rec = procs.get(m.runId) || {};
+  procs.delete(m.runId);
+  const error = rec.stopped || res.stopped ? "Stopped." : res.error || null;
+  send({ type: "done", runId: m.runId, chatId: m.chatId, text: res.text || "", thinking: res.thinking || "", thinkingMs: 0, artifacts: [], error, started: !!res.started, tools: [], sync: null, context: null, cost: null, denials: 0, model: res.model || m.model, modelName: res.modelName || "", ms: Date.now() - t0 });
+  log(error ? `Finished with a problem: ${String(error).slice(0, 160)}` : `Answered in ${((Date.now() - t0) / 1000).toFixed(1)}s, from the Claude app`);
+  // the app's models and the plan's usage, as they are now
+  setTimeout(() => {
+    app().readModels().catch(() => {}).finally(() => reportApp(false));
+    appUsage().catch(() => {});
+  }, 500);
+}
+
+// claude.ai's usage reading, through the app: the same windows Plan usage shows for Claude Code.
+async function appUsage() {
+  const u = await app().usage().catch(() => null);
+  if (!u) return;
+  if (u.limits) noteLimits(u.limits, true);
+  send({ type: "credits", credits: u.resets && u.resets.length ? { resets: u.resets } : { error: u.error === "signin" ? "signin" : "unavailable" } });
 }
 
 function isDirectory(p) {
@@ -1160,7 +1387,7 @@ async function startAdmin(m) {
 // The chats Claude Code has saved on this computer, so the site can list them next to its own.
 let lastSessions = "";
 function reportSessions(force) {
-  if (HISTORY === "off" || !ws || ws.readyState !== 1) return;
+  if (PLAN !== "paid" || !ws || ws.readyState !== 1) return;
   let list;
   try {
     list = listSessions({ workspace: WORKSPACE, scope: HISTORY });
@@ -1173,14 +1400,17 @@ function reportSessions(force) {
   send({ type: "sessions", sessions: list });
 }
 setInterval(() => reportSessions(false), 15000).unref();
+// the credit balance now and then, so the site knows when there are credits again (or none)
+setInterval(() => {
+  if (PLAN === "paid" && ws && ws.readyState === 1 && !procs.size) readCredits().catch(() => {});
+}, 30 * 60000).unref();
 
 function handleTranscript(m) {
   const reply = o => send({ type: "transcript", req: m.req, sessionId: m.sessionId, ...o });
-  if (HISTORY === "off" || !UUID.test(String(m.sessionId))) return reply({ ok: false, error: "unavailable" });
+  if (PLAN !== "paid" || !UUID.test(String(m.sessionId))) return reply({ ok: false, error: "unavailable" });
   try {
     const file = findSession(m.sessionId);
     if (!file) return reply({ ok: false, error: "missing" });
-    if (HISTORY === "workspace" && !within(sessionCwd(file), WORKSPACE)) return reply({ ok: false, error: "unavailable" });
     const r = readSession(file, { from: Number(m.from) || 0, maxTurns: 300 });
     reply({ ok: true, turns: r.turns, trimmed: r.trimmed, messages: r.messages, mtime: r.mtime });
   } catch {
@@ -1214,20 +1444,48 @@ function onMessage(raw) {
   }
   if (m.type === "run") {
     send({ type: "ack", runId: m.runId, chatId: m.chatId });
-    handleRun(m).catch(e => log("Run failed:", e.message || e));
+    (PLAN === "free" ? handleAppRun(m) : handleRun(m)).catch(e => log("Run failed:", e.message || e));
   } else if (m.type === "stop") stopRun(m);
+  else if (m.type === "remote_answer") remoteAnswer(m).catch(e => log("Couldn't pass on the answer:", e.message || e));
+  else if (m.type === "app_refresh") refreshApp();
   else if (m.type === "token") saveSignIn(m.token, m.exp);
   else if (m.type === "update") startUpdate(m).catch(e => log("Update failed to start:", e.message || e));
   else if (m.type === "admin") startAdmin(m).catch(e => log("Couldn't start that:", e.message || e));
-  else if (m.type === "limits_refresh") probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
+  else if (m.type === "limits_refresh") {
+    if (PLAN === "free") appUsage().catch(() => {});
+    else probeLimits().catch(() => {}).finally(() => readCredits().catch(() => {}));
+  }
   else if (m.type === "transcript") handleTranscript(m);
-  else if (m.type === "computer") setComputer(m);
+  else if (m.type === "computer") setComputer(m).catch(e => log("Couldn't change a setting:", e.message || e));
   else if (m.type === "site") saveSite(m);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
 
+// An answer from the site to what's waiting on the computer: Claude Code's question, or a window in the Claude app.
+async function remoteAnswer(m) {
+  if (PLAN === "free") {
+    if (APP) await APP.remoteAnswer(m);
+  } else answerAsk(m);
+}
+
+// The Claude app's models, read from its own menu, for the site's model picker. Opens the app if it has to.
+let refreshing = false;
+function refreshApp() {
+  if (PLAN !== "free" || refreshing) return;
+  refreshing = true;
+  app()
+    .readModels()
+    .catch(e => log("Couldn't read the Claude app's models:", e.message || e))
+    .finally(() => {
+      refreshing = false;
+      reportApp(true);
+    });
+}
+
+// What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `app` the Claude app.
 function helloMessage() {
-  return { type: "hello", agent: VERSION, caps: ["update", "admin", "limits", "modes", ...(HISTORY === "off" ? [] : ["history"]), ...(creditsOn() ? ["credits", "resets"] : []), "computer"], computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] };
+  const caps = ["update", "admin", "limits", "computer", "plan", "remote", "resets", ...(PLAN === "paid" ? ["modes", "history", "credits", ...(CAN_ASK ? ["ask"] : [])] : ["app"])];
+  return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()] };
 }
 
 let pingTimer = null;
@@ -1308,6 +1566,12 @@ async function connect() {
     if (LIMITS) send({ type: "limits", limits: LIMITS });
     lastSessions = "";
     setTimeout(() => reportSessions(true), 400);
+    if (PLAN === "free") setTimeout(() => {
+      reportApp(true);
+      appUsage().catch(() => {});
+    }, 600);
+    // whether there are usage credits (Fable 5.1 is only offered then), read with Claude Code's sign-in
+    else setTimeout(() => readCredits().catch(() => {}), 1500);
     setTimeout(() => {
       if (finished) return;
       if (!announced) {
@@ -1341,7 +1605,7 @@ function retry() {
   }), wait);
 }
 
-log(`${NAME} ${VERSION} starting on ${os.hostname()}. Working folder: ${WORKSPACE}`);
+log(`${NAME} ${VERSION} starting on ${os.hostname()}. ${PLAN === "free" ? "Replies come from the Claude app." : `Working folder: ${WORKSPACE}`}`);
 connect().catch(e => {
   log("Connection problem:", e.message || e);
   retry();

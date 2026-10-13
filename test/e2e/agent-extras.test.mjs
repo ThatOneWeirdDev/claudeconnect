@@ -87,7 +87,7 @@ test("with the balance turned on, the computer reads it from Claude's account wi
   assert.ok(!readFileSync(join(pc.dir, "agent.log"), "utf8").includes("sk-ant"));
 });
 
-test("turned off, Claude's sign-in isn't touched; with it on and the sign-in expired, the site is told why", async t => {
+test("the balance is always read, even on an install that turned it off before; with the sign-in expired, the site is told why and nothing is sent", async t => {
   const seen = [];
   const api = http.createServer((req, res) => {
     seen.push(req.url);
@@ -95,51 +95,40 @@ test("turned off, Claude's sign-in isn't touched; with it on and the sign-in exp
   });
   await new Promise(r => api.listen(0, "127.0.0.1", r));
   t.after(() => api.close());
-  const off = await boot(t, { anthropic: `http://127.0.0.1:${api.address().port}` });
-  assert.equal((await off.site.api("/api/state")).body.agent.credits, false);
-  await off.site.post("/api/limits/refresh");
-  await sleep(1500);
-  assert.deepEqual(seen, []);
-  assert.equal((await off.site.api("/api/credits")).body, null);
-
-  const on = await boot(t, { credits: true, anthropic: `http://127.0.0.1:${api.address().port}` });
-  mkdirSync(join(on.pc.home, ".claude"), { recursive: true });
-  writeFileSync(join(on.pc.home, ".claude", ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "old", expiresAt: Date.now() - 1000 } }));
-  await on.site.post("/api/limits/refresh");
-  const c = await until(async () => (await on.site.api("/api/credits")).body, "a reading");
+  // credits: false is what `edit` or the site saved before there was no setting for it
+  const { site, pc } = await boot(t, { credits: false, anthropic: `http://127.0.0.1:${api.address().port}` });
+  assert.equal((await site.api("/api/state")).body.agent.credits, true);
+  mkdirSync(join(pc.home, ".claude"), { recursive: true });
+  writeFileSync(join(pc.home, ".claude", ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "old", expiresAt: Date.now() - 1000 } }));
+  await site.post("/api/limits/refresh");
+  const c = await until(async () => {
+    const b = (await site.api("/api/credits")).body;
+    return b && b.error === "expired" ? b : null;
+  }, "a reading");
   assert.equal(c.error, "expired");
   assert.deepEqual(seen, [], "an expired sign-in isn't sent anywhere");
 });
 
-test("the balance is on unless it's been turned off, and the site can turn it off and on", async t => {
+test("starting at login and the working folder change from the site, without a restart; the balance and the chat list aren't settings anymore", async t => {
   const { site, pc } = await boot(t, { credits: null });
-  let st = (await site.api("/api/state")).body.agent;
-  assert.equal(st.credits, true, "on for an install that never said");
-  assert.deepEqual([st.computer.autostart, st.computer.credits, st.computer.history], [false, true, "all"]);
-  const off = await site.post("/api/computer", { credits: false });
-  assert.equal(off.status, 200, off.text);
-  assert.deepEqual([off.body.computer.autostart, off.body.computer.credits], [false, false]);
-  assert.equal(JSON.parse(pc.read("config.json")).credits, false, "kept on the computer");
-  st = (await site.api("/api/state")).body.agent;
-  assert.equal(st.credits, false);
-  assert.equal((await site.post("/api/computer", { credits: true })).body.computer.credits, true);
-  // starting at login, from the site
+  // what the computer says about itself comes in its hello, a moment after it connects
+  let st = await until(async () => {
+    const a = (await site.api("/api/state")).body.agent;
+    return a.computer ? a : null;
+  }, "the computer's hello");
+  assert.equal(st.credits, true);
+  assert.equal(st.plan, "paid");
+  assert.deepEqual([st.computer.autostart, st.computer.history, st.computer.plan], [false, "all", "paid"]);
+  // the old switches do nothing now
+  for (const old of [{ credits: false }, { history: "off" }, { nonsense: true }]) assert.equal((await site.post("/api/computer", old)).status, 400, JSON.stringify(old));
+  assert.notEqual(JSON.parse(pc.read("config.json")).credits, false, "nothing was turned off on the computer");
+  // starting at login (a startup item), from the site
   const auto = await site.post("/api/computer", { autostart: true });
+  assert.equal(auto.status, 200, auto.text);
   assert.equal(auto.body.computer.autostart, true);
   assert.ok(readFileSync(join(pc.home, ".config", "autostart", "claudeconnect-test-site.desktop"), "utf8").includes("agent.mjs"));
   assert.equal((await site.post("/api/computer", { autostart: false })).body.computer.autostart, false);
-  assert.equal((await site.post("/api/computer", { nonsense: true })).status, 400);
-});
-
-test("which chats the site sees and the working folder change from the site, without a restart", async t => {
-  const { site, pc } = await boot(t, { credits: null });
-  let c = (await site.api("/api/state")).body.agent.computer;
-  assert.equal(c.history, "all");
-  assert.equal(c.workspace, join(pc.home, "ws"));
-  const off = await site.post("/api/computer", { history: "off" });
-  assert.equal(off.body.computer.history, "off");
-  assert.equal(JSON.parse(pc.read("config.json")).history, "off");
-  await until(async () => (await site.api("/api/state")).body.agent.history === false, "the site to stop asking for chats");
+  // the working folder
   const folder = join(pc.home, "Projects", "new");
   const moved = await site.post("/api/computer", { workspace: folder });
   assert.equal(moved.status, 200, moved.text);
@@ -193,7 +182,7 @@ test("limit resets on the account are listed, and one can be used from the site"
   writeFileSync(join(pc.home, ".claude.json"), JSON.stringify({ oauthAccount: { organizationUuid: ORG } }));
   await site.post("/api/limits/refresh");
   const c = await until(async () => (await site.api("/api/credits")).body?.resets, "the resets");
-  assert.deepEqual(c[0].grants[0], { id: "launch_reset", label: "Limit reset", left: 1, total: 1, usableNow: true, needsLimit: true, paused: false, endsAt: "", clears: ["five_hour", "seven_day"] });
+  assert.deepEqual(c[0].grants[0], { id: "launch_reset", label: "Limit reset", left: 1, total: 1, usableNow: true, needsLimit: true, paused: false, endsAt: "", every: "", nextAt: "", clears: ["five_hour", "seven_day"] });
   assert.equal(c[0].atLimit, true);
   const used = await site.post("/api/resets/use", { program: "cedar_ember", grant: "launch_reset" });
   assert.equal(used.status, 200, used.text);
