@@ -1399,19 +1399,46 @@ setInterval(() => reportSessions(false), 15000).unref();
 // The newest release, read from here too and passed to the site. The site reads it itself, but from Cloudflare's servers
 // GitHub can be slow to answer, or turn it away for a while; from this computer it's another way of hearing of it.
 const RAW = String(process.env.CLAUDECONNECT_RAW || "https://raw.githubusercontent.com").replace(/\/+$/, "");
-async function checkRelease() {
+// The newest release, read from this computer's own connection (GitHub often turns Cloudflare's shared servers away, so the
+// site can't count on reading it itself), and told to the site. The manifest is read at the commit the branch is at, an
+// address that's new with every commit, so GitHub's five-minute cache never holds a new version back; that commit comes from
+// git's own address, which isn't counted against GitHub's hourly allowance. Every minute, and when "Check again" asks (`req`).
+const GIT = process.env.CLAUDECONNECT_GIT || (process.env.CLAUDECONNECT_RAW ? "" : "https://github.com");
+let lastSha = "";
+let lastRelease = null;
+async function branchSha(repo, ref) {
+  if (!GIT) return null;
+  try {
+    const r = await fetch(`${GIT}/${repo}.git/info/refs?service=git-upload-pack`, { headers: { "user-agent": `git/2.45 ClaudeConnect/${VERSION}` }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return null;
+    const text = (await r.text()).slice(0, 4000000);
+    const m = new RegExp(`([0-9a-f]{40}) refs/heads/${ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[\n\0])`).exec(text);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+async function checkRelease(req) {
   if (!ws || ws.readyState !== 1) return;
   const repo = cfg.repo || "ThatOneWeirdDev/claudeconnect";
   const ref = cfg.ref || "main";
-  try {
-    const r = await fetch(`${RAW}/${repo}/${ref}/manifest.json?cb=${Date.now().toString(36)}`, { headers: { accept: "application/json", "cache-control": "no-cache" }, signal: AbortSignal.timeout(15000) });
-    if (!r.ok) return;
-    const j = JSON.parse((await r.text()).slice(0, 100000));
-    if (!j || typeof j.version !== "string") return;
-    send({ type: "release", repo, ref, release: { version: j.version, released: j.released || "", notes: j.notes || [], questions: j.questions || [] } });
-  } catch {}
+  const answer = o => send({ type: "release", repo, ref, ...(req ? { req } : {}), ...o });
+  const sha = await branchSha(repo, ref);
+  if (sha && sha === lastSha && lastRelease) return answer({ release: lastRelease });
+  for (const url of [...(sha ? [`${RAW}/${repo}/${sha}/manifest.json`] : []), `${RAW}/${repo}/${ref}/manifest.json`]) {
+    try {
+      const r = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const j = JSON.parse((await r.text()).slice(0, 100000));
+      if (!j || typeof j.version !== "string") continue;
+      lastRelease = { version: j.version, released: j.released || "", notes: j.notes || [], questions: j.questions || [] };
+      lastSha = url.includes(`/${sha}/`) ? sha : "";
+      return answer({ release: lastRelease });
+    } catch {}
+  }
+  answer({ error: "unreachable" });
 }
-setInterval(() => checkRelease(), 3 * 60000).unref();
+setInterval(() => checkRelease(), 60000).unref();
 // the credit balance now and then, so the site knows when there are credits again (or none)
 setInterval(() => {
   if (ws && ws.readyState === 1 && !procs.size) readCredits().catch(() => {});
@@ -1467,6 +1494,7 @@ function onMessage(raw) {
   else if (m.type === "computer") setComputer(m).catch(e => log("Couldn't change a setting:", e.message || e));
   else if (m.type === "site") saveSite(m);
   else if (m.type === "fs_list" || m.type === "fs_read" || m.type === "fs_trash" || m.type === "fs_write") handleFiles(m);
+  else if (m.type === "release_check") checkRelease(m.req);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
 
@@ -1519,7 +1547,7 @@ function handleFiles(m) {
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `files` the file browser.
 function helloMessage() {
   // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
-  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") ? ["ultracode"] : [])];
+  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") ? ["ultracode"] : [])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()], command: COMMAND, site: siteName() };
 }
 

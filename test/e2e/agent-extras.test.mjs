@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { startSite } from "../helpers/site.mjs";
 import { makeComputer } from "../helpers/computer.mjs";
+import { startGithub, buildRelease } from "../helpers/github.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ORG = "0a1b2c3d-1111-4222-8333-444455556666";
@@ -229,4 +230,33 @@ test("a name changed in Settings while the computer was away reaches it when it'
   // and the page's own copy of it
   const page = await (await site.asOwner("/")).text();
   assert.match(page, /"command":"AwayName"/);
+});
+
+test("the computer reads the newest release itself, at the commit main is at, and the site shows it however far behind GitHub's cache is", async t => {
+  const site = await startSite({ appVersion: "2.2.0" });
+  await site.claim();
+  site.releaseStatus = 429; // GitHub turning Cloudflare's servers away, as it does
+  const fresh = buildRelease({}, "2.3.0", { notes: ["Read at the commit"] });
+  const stale = JSON.stringify(buildRelease({}, "2.2.0").manifest);
+  const github = await startGithub(fresh, { sha: "c".repeat(40), staleBranch: stale });
+  const pc = makeComputer({ site, githubUrl: github.url });
+  pc.env.CLAUDECONNECT_GIT = github.url;
+  pc.startAgent();
+  t.after(async () => {
+    pc.cleanup();
+    await github.close();
+    await site.stop();
+  });
+  const u = await until(async () => {
+    const b = (await site.api("/api/update")).body;
+    return b.latest === "2.3.0" && b;
+  }, "the site to hear of the new version from the computer");
+  assert.equal(u.available, true);
+  assert.deepEqual(u.notes, ["Read at the commit"]);
+  assert.ok(github.hits.some(h => h === "/ThatOneWeirdDev/claudeconnect.git/info/refs?service=git-upload-pack"));
+  assert.ok(github.hits.some(h => h === `/ThatOneWeirdDev/claudeconnect/${"c".repeat(40)}/manifest.json`), "the manifest at the commit, not the branch's cached one");
+  // and Check again asks the computer, which answers at once
+  const again = (await site.post("/api/update/check")).body;
+  assert.equal(again.latest, "2.3.0");
+  assert.equal(again.error, "");
 });

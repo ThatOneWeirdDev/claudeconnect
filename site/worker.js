@@ -12,6 +12,8 @@ const ISS_RE = /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/;
 // "ultracode" is xhigh effort plus Claude Code's multi-agent workflows for the reply (`--effort ultracode`). A Claude Code
 // too old to know it ignores it and uses its default effort.
 const ALL_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultracode"];
+// Haiku 5.5 has Low to Max, and no Ultracode.
+const HAIKU_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 // Every message runs as Claude Code ("code"). Its permission mode says how freely it acts: "auto" is whatever the computer is set to (normally auto), "plan" only plans, and
 // "default" asks on the site before anything that needs permission (only when the computer can ask, cap "ask").
 const PERMS = ["auto", "acceptEdits", "plan", "default"];
@@ -19,7 +21,7 @@ const MODELS = {
   "claude-fable-5-1": { name: "Fable 5.1", efforts: ALL_EFFORTS },
   "claude-opus-5-5": { name: "Opus 5.5", efforts: ALL_EFFORTS },
   "claude-sonnet-5-5": { name: "Sonnet 5.5", efforts: ALL_EFFORTS },
-  "claude-haiku-5-5": { name: "Haiku 5.5", efforts: ALL_EFFORTS }
+  "claude-haiku-5-5": { name: "Haiku 5.5", efforts: HAIKU_EFFORTS }
 };
 const DEFAULT_MODEL = "claude-opus-5-5";
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,11 +59,13 @@ function cleanRemote(m) {
   if (m.kind === "permission") return { id: m.id, kind: "permission", tool: str(m.tool, 80), title: str(m.title, 200) || "Asking for permission", detail: str(m.detail, 6000), at: Date.now() };
   return null;
 }
-// A new release is looked for at most this often. GitHub's own cache is skipped (see checkLatest), so a merge to main reaches
-// an open page within about a minute and a half; a page opened after a long gap waits for the answer instead of showing the old one.
+// A new release is looked for at most this often (sooner again after a look that failed). The manifest is read at the commit
+// the branch is at (see checkLatest), so GitHub's five-minute cache doesn't hold it back, and a merge to main reaches an open
+// page within about a minute. The computer looks too, every minute, and tells the site.
 const CHECK_EVERY = 60000;
-const CHECK_RETRY = 120000;
-const CHECK_WAIT = 5 * 60000;
+const CHECK_RETRY = 30000;
+// how long a report from the computer stands in for the site's own look
+const HEARD_FOR = 10 * 60000;
 const UPDATE_LOG_KEEP = 8;
 // The most chats listed in the sidebar (and the most the computer is asked to report). Matches MAX_SESSIONS in agent/sessions.mjs.
 const CHAT_LIST_MAX = 3000;
@@ -188,6 +192,20 @@ function parseRange(h) {
   if (!m || (!m[1] && !m[2])) return null;
   if (!m[1]) return { suffix: Number(m[2]) };
   return { start: Number(m[1]), ...(m[2] ? { end: Number(m[2]) } : {}) };
+}
+
+// The commit a branch is at, from git's own address on GitHub (which isn't the API, so it isn't counted against an hourly
+// allowance): a file read at that commit is never a cached copy from before it. Null when it can't be told.
+async function branchSha(git, repo, ref) {
+  try {
+    const r = await fetch(`${git}/${repo}.git/info/refs?service=git-upload-pack`, { headers: { "user-agent": "git/2.45 ClaudeConnect-site" }, cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return null;
+    const text = (await r.text()).slice(0, 4000000);
+    const m = new RegExp(`([0-9a-f]{40}) refs/heads/${ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[\n\0])`).exec(text);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 // What the computer said went wrong, as an answer to the page.
@@ -1331,16 +1349,25 @@ export class ChatgqlHub extends DurableObject {
     const raw = String(this.env.UPDATE_RAW || "https://raw.githubusercontent.com").replace(/\/+$/, "");
     // GitHub's API, the second place to look (none when a test points the site somewhere else)
     const api = this.env.UPDATE_API !== undefined ? String(this.env.UPDATE_API).replace(/\/+$/, "") : this.env.UPDATE_RAW ? "" : "https://api.github.com";
-    return { repo, ref, raw, api, label: `${repo}@${ref}` };
+    // git's own address, which says the commit the branch is at
+    const git = this.env.UPDATE_GIT !== undefined ? String(this.env.UPDATE_GIT).replace(/\/+$/, "") : this.env.UPDATE_RAW ? "" : "https://github.com";
+    return { repo, ref, raw, api, git, label: `${repo}@${ref}` };
   }
 
   // The newest release as the computer read it, for the same place the site reads from. Newer than what the site has: it's
   // what the site goes by.
   async noteRelease(m) {
+    await this.keepRelease(m);
+    if (m.req) this.gotTranscript(m); // the answer to a "Check again"
+  }
+  async keepRelease(m) {
     const src = this.updateSource();
-    if (`${m.repo}@${m.ref}` !== src.label) return;
+    if (`${m.repo}@${m.ref}`.toLowerCase() !== src.label.toLowerCase()) return;
     const release = cleanManifest(m.release);
     if (!release) return;
+    // While the computer is telling the site, the site doesn't ask GitHub itself every minute (GitHub turns Cloudflare's
+    // shared servers away, and warns that asking again while turned away can get them blocked).
+    this.heardAt = Date.now();
     const c = this.latest || (await this.ctx.storage.get("latest")) || null;
     if (c && c.source === src.label && c.release && !isNewer(release.version, c.release.version)) return;
     this.latest = { at: Date.now(), source: src.label, release, error: "" };
@@ -1353,27 +1380,43 @@ export class ChatgqlHub extends DurableObject {
       const src = this.updateSource();
       const prev = this.latest || (await this.ctx.storage.get("latest")) || null;
       const entry = { at: Date.now(), source: src.label, release: prev && prev.source === src.label ? prev.release : null, error: "" };
-      // raw.githubusercontent.com serves each file from a cache that can be five minutes behind (a new query string gets past
-      // it), and from Cloudflare's shared servers it can also turn requests away for a while: then GitHub's API is asked.
+      // raw.githubusercontent.com keeps each address in a cache for five minutes (a query string doesn't get past it), so the
+      // manifest is read at the commit the branch is at now, an address that's new with every commit. From Cloudflare's shared
+      // servers GitHub can also turn requests away for a while: then the branch's own address, then GitHub's API, are asked.
+      const sha = src.git ? await branchSha(src.git, src.repo, src.ref) : null;
       const from = [
-        { url: `${src.raw}/${src.repo}/${src.ref}/manifest.json?cb=${Date.now().toString(36)}`, accept: "application/json" },
+        ...(sha ? [{ url: `${src.raw}/${src.repo}/${sha}/manifest.json`, accept: "application/json" }] : []),
+        { url: `${src.raw}/${src.repo}/${src.ref}/manifest.json`, accept: "application/json" },
         ...(src.api ? [{ url: `${src.api}/repos/${src.repo}/contents/manifest.json?ref=${encodeURIComponent(src.ref)}`, accept: "application/vnd.github.raw+json" }] : [])
       ];
+      const errors = [];
       for (const f of from) {
         try {
-          const r = await fetch(f.url, { headers: { "user-agent": "ClaudeConnect-site", accept: f.accept, "cache-control": "no-cache" }, signal: AbortSignal.timeout(5000) });
+          const r = await fetch(f.url, { headers: { "user-agent": "ClaudeConnect-site (github.com/ThatOneWeirdDev/claudeconnect)", accept: f.accept }, cache: "no-store", signal: AbortSignal.timeout(5000) });
           if (!r.ok) throw new Error(r.status === 404 ? "No release has been published at that address yet." : `GitHub answered ${r.status}.`);
           const text = await r.text();
           if (text.length > 100000) throw new Error("The release information was too large.");
           const release = cleanManifest(JSON.parse(text));
           if (!release) throw new Error("The release information couldn't be read.");
-          entry.release = release;
+          // a copy of the manifest that's behind (a cache GitHub keeps for a few minutes) never takes back a newer release
+          // the computer already reported
+          const known = this.latest && this.latest.source === src.label ? this.latest.release : null;
+          entry.release = known && isNewer(known.version, release.version) ? known : release;
           entry.error = "";
+          errors.length = 0;
           break;
         } catch (e) {
-          entry.error = entry.error || String((e && e.message) || e).slice(0, 160);
+          errors.push(String((e && e.message) || e).slice(0, 120));
         }
       }
+      // none answered: why each one didn't (the release known before is kept), in the Worker's logs too
+      if (errors.length) {
+        entry.error = [...new Set(errors)].join(" ");
+        console.error(`Looking for a new release at ${src.label} failed: ${entry.error}`);
+      }
+      // a release the computer reported while this was being asked is kept
+      const now = this.latest && this.latest.source === src.label ? this.latest.release : null;
+      if (now && (!entry.release || isNewer(now.version, entry.release.version))) entry.release = now;
       this.latest = entry;
       await this.ctx.storage.put("latest", entry);
       return entry;
@@ -1412,11 +1455,28 @@ export class ChatgqlHub extends DurableObject {
     if (c && c.source !== src.label) c = null;
     const age = c ? Date.now() - c.at : Infinity;
     // asked again once a minute, and waited for: work left running after the answer isn't sure to finish on Cloudflare
-    if (force || !c || age > envNum(this.env.UPDATE_WAIT_MS, CHECK_WAIT) || age > (c.error ? envNum(this.env.UPDATE_RETRY_MS, CHECK_RETRY) : envNum(this.env.UPDATE_CHECK_MS, CHECK_EVERY))) c = await this.checkLatest();
+    const heard = this.heardAt && Date.now() - this.heardAt < envNum(this.env.UPDATE_HEARD_MS, HEARD_FOR);
+    if (force || !c || (!heard && age > (c.error ? envNum(this.env.UPDATE_RETRY_MS, CHECK_RETRY) : envNum(this.env.UPDATE_CHECK_MS, CHECK_EVERY)))) {
+      // "Check again" asks the computer too, which reads GitHub from its own connection, and waits a moment for it
+      const asked = force ? this.askAgent({ type: "release_check" }, 10000, "release") : null;
+      c = await this.checkLatest();
+      const reply = asked ? await asked : null;
+      if (reply && cleanManifest(reply.release)) {
+        // the computer read it: that's an answer, whatever GitHub told Cloudflare (the newest known is kept, see keepRelease)
+        c = { ...(this.latest && this.latest.source === src.label ? this.latest : c), at: Date.now(), error: "" };
+        this.latest = c;
+        await this.ctx.storage.put("latest", c);
+      }
+    }
     this.latest = c;
     const current = appVersion(this.env);
     const latest = c && c.release ? c.release : null;
-    const run = await this.updateRun();
+    let run = await this.updateRun();
+    // an update that didn't finish stops standing in the way once there's a newer release to update to
+    if (run && run.state === "error" && run.to && latest && isNewer(latest.version, run.to)) {
+      await this.ctx.storage.delete("update");
+      run = null;
+    }
     const log = (await this.ctx.storage.get("updateLog")) || [];
     // The installed version's patch notes: from the log if it was installed by an update, else from the release if that is the one running.
     const logged = log.find(e => e.version === current);
@@ -1788,7 +1848,12 @@ export class ChatgqlHub extends DurableObject {
     const caps = info.caps || [];
     // Claude Code, with its models, effort and permission mode
     const model = MODELS[b.model] ? b.model : DEFAULT_MODEL;
-    let effort = MODELS[model].efforts.includes(b.effort) ? b.effort : null;
+    // an effort the model doesn't have runs as the highest it has at or below it, as Claude Code does (Ultracode is Extra
+    // high with workflows, so it becomes Extra high)
+    const has = MODELS[model].efforts;
+    const asked = has.includes(b.effort) ? b.effort : b.effort === "ultracode" ? "xhigh" : b.effort;
+    const below = ALL_EFFORTS.includes(asked) ? ALL_EFFORTS.slice(0, ALL_EFFORTS.indexOf(asked) + 1).filter(x => has.includes(x)) : [];
+    let effort = below.length ? below[below.length - 1] : null;
     // a computer whose Claude Code doesn't know ultracode gets the effort it stands on
     if (effort === "ultracode" && !caps.includes("ultracode")) effort = "xhigh";
     const mode = "code";

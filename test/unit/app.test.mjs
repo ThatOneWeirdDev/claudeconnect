@@ -35,7 +35,7 @@ test("the usage chart and token counting are gone", () => {
   assert.doesNotMatch(readFileSync(join(ROOT, "site", "worker.js"), "utf8"), /recordUsage|buildUsage|\/api\/usage/);
 });
 
-test("the model and effort are a pill in the message box, where ChatGPT has Think, and every model has every effort", () => {
+test("the model and effort are a pill in the message box, where ChatGPT has Think, and each model has the efforts it has", () => {
   // one pill with the model, then the effort in grey; no effort button or stairs anywhere else, and nothing of it at the top
   assert.match(html, /<div class="c-trail">\s*<button type="button" class="c-pill" id="modelBtn"[^>]*><svg[\s\S]*?<\/svg><span id="modelName">[^<]*<\/span><span class="sub" id="effortName">/);
   assert.doesNotMatch(/<header class="top">([\s\S]*?)<\/header>/.exec(html)[1], /modelBtn/);
@@ -44,9 +44,21 @@ test("the model and effort are a pill in the message box, where ChatGPT has Thin
   assert.match(script, /put\("effortName", EFF_LABEL\[e\]\)/);
   // a model with no effort setting has nothing after its name
   assert.match(script, /\$\("effortName"\)\.hidden = !effortsOf\(m\)\.length/);
-  // Claude Code gives every model every effort now, Haiku 5.5 included; Ultracode only when the computer's Claude Code knows it
-  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF", "medium"]]);
+  // each model lists only the efforts it has: Low to Max on all, Ultracode on all but Haiku 5.5, and only when the computer's
+  // Claude Code knows it; the defaults are Claude Code's
+  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF_HAIKU", "medium"]]);
   assert.match(script, /const EFF = \["low", "medium", "high", "xhigh", "max", "ultracode"\];/);
+  assert.match(script, /const EFF_HAIKU = \["low", "medium", "high", "xhigh", "max"\];/);
+  const worker = readFileSync(join(ROOT, "site", "worker.js"), "utf8");
+  assert.match(worker, /"claude-haiku-5-5": \{ name: "Haiku 5\.5", efforts: HAIKU_EFFORTS \}/);
+  // one it doesn't have runs as the highest it has below it: Ultracode picked on another model is Extra high on Haiku
+  const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
+  const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
+  const ctx = { DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: { "claude-haiku-5-5": "ultracode" }, state: { agent: { ultracode: true } } } };
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = ["low", "medium", "high", "xhigh", "max"]; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor"].map(lift).join("") + "this.effortFor = effortFor; this.effortsOf = effortsOf; this.modelOf = modelOf;", ctx);
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.effortsOf(ctx.modelOf("claude-haiku-5-5")))), ["low", "medium", "high", "xhigh", "max"]);
+  assert.equal(ctx.effortFor("claude-haiku-5-5"), "xhigh");
+  assert.ok(ctx.effortsOf(ctx.modelOf("claude-opus-5-5")).includes("ultracode"));
   assert.match(script, /e !== "ultracode" \|\| !!\(S\.state && S\.state\.agent && S\.state\.agent\.ultracode\)/);
   assert.doesNotMatch(html, /answers without an effort setting/);
 });
@@ -56,7 +68,7 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
   const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = EFF.filter(e => e !== "ultracode"); const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
   let menu = ctx.popEffort();
   assert.match(menu, /^<hr><div class="mh">Effort<\/div>/, "under the models, after a line");
   assert.deepEqual([...menu.matchAll(/data-effort="(\w+)"/g)].map(m => m[1]), ["low", "medium", "high", "xhigh", "max", "ultracode"]);
@@ -68,7 +80,7 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
   ctx.S.state.agent.ultracode = false;
   menu = ctx.popEffort();
   assert.doesNotMatch(menu, /ultracode/i, "a computer whose Claude Code doesn't know it");
-  assert.match(menu, /data-effort="medium"[^>]*aria-checked="true"/, "and a stored Ultracode falls back to the default");
+  assert.match(menu, /data-effort="xhigh"[^>]*aria-checked="true"/, "and a stored Ultracode runs as Extra high, as Claude Code does");
   // a pick there changes the effort of the model that's picked, and the switcher shows it
   assert.match(script, /const eff = e\.target\.closest\("\[data-effort\]"\);\n  if \(eff\) return pick\(\(\) => \{ S\.efforts\[modelNow\(\)\] = eff\.dataset\.effort;/);
   assert.match(lift("popModel"), /popEffort\(\) \+ noteHtml\(\)/);
@@ -395,10 +407,17 @@ test("the Updates panel shows the patch notes of the installed version, the upda
   assert.match(script, /function notesList\(notes\) \{\n  return `<ul class="notes">\$\{\(notes \|\| \[\]\)\.map\(n => `<li>\$\{esc\(n\)\}<\/li>`\)/);
 });
 
-test("everything the owner can change is behind a confirmation or a typed name", () => {
-  assert.match(script, /confirm\(`Delete \$\{CFG\.name\}/);
-  assert.match(script, /confirm\(`Set up \$\{SET\.address\}/);
+test("everything the owner can change is behind a confirmation or a typed name, asked in the page's own dialog", () => {
+  assert.match(script, /askConfirm\(\{ title: `Delete \$\{CFG\.name\} and every chat in it\?`/);
+  assert.match(script, /askConfirm\(\{ title: `Set up \$\{SET\.address\}/);
   assert.match(script, /SET\.confirm !== CFG\.name/);
+  // never the browser's own alert, confirm or prompt
+  assert.doesNotMatch(script, /(^|[^.\w])(alert|confirm|prompt)\(/m);
+  assert.doesNotMatch(script, /window\.(alert|confirm|prompt)/);
+  // the dialog: a title, a line about it, Cancel and the action (red when it can't be undone, with Cancel ready)
+  assert.match(html, /<dialog class="dlg small ask" id="askDlg"[^>]*>\s*<form method="dialog" class="ask-box">\s*<h2 id="askTitle"><\/h2>\s*<p id="askText"><\/p>\s*<div class="ask-acts"><button class="btn ghost" type="submit" value="no" id="askNo">Cancel<\/button><button class="btn primary" type="submit" value="yes" id="askYes">OK<\/button><\/div>/);
+  assert.match(lift("askConfirm"), /\$\(danger \? "askNo" : "askYes"\)\.focus\(\);/);
+  for (const what of ["Delete \"", "Move \"", "Discard your changes", "Use a limit reset now", "Cancel the move", "\"${baseOf(ed.path)}\" changed on your computer"]) assert.ok(script.includes("askConfirm({ title: `" + what) || script.includes('askConfirm({ title: "' + what), what);
 });
 
 test("user-controlled text reaches the page escaped", () => {
@@ -450,7 +469,7 @@ function picker(state, extra = {}) {
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
   const ctx = { TICK: "", I: { info: "", lock: "" }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = EFF.filter(e => e !== "ultracode"); const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
   return ctx;
 }
 

@@ -89,7 +89,7 @@ export async function startSite(opts = {}) {
   const access = makeAccess();
   const jwt = access.sign();
   // Tests change `release` and `releaseStatus` on the object startSite returns, so this one object is both what they hold and what the mock reads.
-  const site = { release: opts.release || null, releaseStatus: 200, apiRelease: null, fetched: [], dir, access, jwt, agentSecret: (opts.vars && opts.vars.AGENT_SECRET) || AGENT_SECRET, claimCode: (opts.vars && opts.vars.CLAIM_CODE) || CLAIM_CODE };
+  const site = { release: opts.release || null, releaseStatus: 200, apiRelease: null, sha: null, fetched: [], dir, access, jwt, agentSecret: (opts.vars && opts.vars.AGENT_SECRET) || AGENT_SECRET, claimCode: (opts.vars && opts.vars.CLAIM_CODE) || CLAIM_CODE };
   const mf = new Miniflare({
     host: "127.0.0.1",
     port: opts.port || 0,
@@ -124,6 +124,11 @@ export async function startSite(opts = {}) {
             site.fetched.push(request.url);
             if (site.releaseStatus !== 200) return new Response("nope", { status: site.releaseStatus });
             return site.release ? Response.json(site.release) : new Response("not found", { status: 404 });
+          }
+          // git's own address, saying which commit main is at (`site.sha`), when a test turns it on with UPDATE_GIT
+          if (url.origin === "https://git.test" && url.pathname.endsWith(".git/info/refs")) {
+            site.fetched.push(request.url);
+            return site.sha ? new Response(`001e# service=git-upload-pack\n0000015b${"f".repeat(40)} HEAD\0multi_ack\n003f${site.sha} refs/heads/main\n0000`) : new Response("not found", { status: 404 });
           }
           // GitHub's API, where the site looks when raw.githubusercontent.com won't answer: `site.apiRelease`
           if (url.origin === "https://api.test" && url.pathname.endsWith("/contents/manifest.json")) {

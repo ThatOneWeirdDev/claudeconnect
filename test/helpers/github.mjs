@@ -16,6 +16,8 @@ export async function startGithub(release, opts = {}) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://x");
     hits.push(req.url);
+    // git's own address: which commit main is on (opts.sha), as git's smart HTTP lists it
+    if (/^\/[^/]+\/[^/]+\.git\/info\/refs$/.test(url.pathname)) return opts.sha ? res.writeHead(200).end(`001e# service=git-upload-pack\n0000003f${opts.sha} refs/heads/main\n0000`) : res.writeHead(404).end();
     // GitHub's API: which commit a branch is on (opts.sha)
     const api = /^\/api\/repos\/[^/]+\/[^/]+\/commits\/([^/]+)$/.exec(url.pathname);
     if (api) return opts.sha ? res.writeHead(200).end(opts.sha) : res.writeHead(404).end();

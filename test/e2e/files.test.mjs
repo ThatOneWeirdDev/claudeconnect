@@ -22,6 +22,15 @@ async function until(fn, what, ms = 30000) {
   throw new Error("timed out waiting for " + what);
 }
 
+// Answers the page's own dialog (it never uses the browser's), and gives back what it asked.
+async function answer(page, yes) {
+  await page.until(`document.getElementById("askDlg").open`, "the page's dialog");
+  const said = await page.evaluate(`document.getElementById("askTitle").textContent + "\\n" + document.getElementById("askText").textContent`);
+  await page.evaluate(`document.getElementById("${yes ? "askYes" : "askNo"}").click()`);
+  await page.until(`!document.getElementById("askDlg").open`, "the dialog closed");
+  return said;
+}
+
 // a 1×1 PNG
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
@@ -203,10 +212,10 @@ test("the file browser in the page: opened from Settings, full screen, showing p
   await page.until(`(document.querySelector("#fbVBody img") || {}).naturalWidth === 1`, "the picture, loaded");
 
   // to the Trash, after asking
-  await page.evaluate(`window.confirm = m => (window.asked = m, true)`);
   await page.evaluate(`document.querySelector('[data-fb="trash"]').click()`);
+  const asked = await answer(page, true);
+  assert.match(asked, /^Move "dot\.png" to the Trash\?\nIt goes to the Trash on your computer \(the Recycle Bin on Windows\)\. It isn't deleted: you can put it back from there\.$/);
   await page.until(`!document.querySelector('[data-fb-open="dot.png"]')`, "the picture gone from the list");
-  assert.match(await page.evaluate(`window.asked`), /^Move "dot\.png" to the Trash on your computer\?[\s\S]*you can put it back from the Trash/);
   assert.equal(existsSync(join(ws, "photos", "dot.png")), false);
   assert.match(await page.evaluate(`document.getElementById("toast").textContent`), /Moved "dot\.png" to the Trash\./);
 
@@ -309,9 +318,8 @@ test("a text file is edited in the page, saved with Save, keeping its line endin
   await page.evaluate(`(() => { const t = document.getElementById("fbEdit"); t.value += "c\\n"; t.dispatchEvent(new Event("input")); })()`);
   await page.until(`document.querySelector("#fbVHead small").textContent === "Edited, not saved"`, "the change noted");
   // leaving it asks first; saying no keeps it
-  await page.evaluate(`window.confirm = m => (window.asked = m, false)`);
   await page.evaluate(`document.querySelector('[data-fb-place="ws"]').click()`);
-  assert.match(await page.evaluate(`window.asked`), /^Discard your changes to "dos\.txt"\?/);
+  assert.match(await answer(page, false), /^Discard your changes to "dos\.txt"\?\nThey haven't been saved\.$/);
   assert.equal(await page.evaluate(`!!document.getElementById("fbEdit")`), true);
   await page.evaluate(`document.querySelector('[data-fb="save"]').click()`);
   await page.until(`!document.getElementById("fbEdit") && /Saved "dos\\.txt"\\./.test(document.getElementById("toast").textContent)`, "saved");

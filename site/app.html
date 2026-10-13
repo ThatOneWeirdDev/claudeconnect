@@ -18,7 +18,7 @@
   --border-0:#ececec;--border:rgba(13,13,13,.10);--border-2:rgba(13,13,13,.15);
   --hover:#f0f0f0;--hover-2:#e8e8e8;--select:#ececec;
   --solid:#000000;--solid-ink:#ffffff;--solid-hover:#303030;--solid-off:#d7d7d7;--solid-off-ink:#f4f4f4;
-  --btn:#181818;--btn-ink:#ffffff;--btn-hover:#303030;--pill:#f0f0f0;
+  --btn:#181818;--btn-ink:#ffffff;--btn-hover:#303030;--pill:#f0f0f0;--tip:#0d0d0d;--tip-ink:#ffffff;
   --link:#2c68c6;--blue:#2c68c6;--focus:#2c68c6;--toggle:#2c68c6;--toggle-off:#dfdfdf;--accent:#2c68c6;--avatar:#1abc9c;
   --danger:#e02e2a;--danger-text:#ba2623;--danger-soft:color-mix(in oklab,#fa423e 8%,transparent);
   --warn:#b9480d;--warn-soft:color-mix(in oklab,#fb6a22 8%,transparent);--ok:#008635;
@@ -40,7 +40,7 @@
     --border-0:#1a1a1a;--border:rgba(255,255,255,.10);--border-2:rgba(255,255,255,.16);
     --hover:#1a1a1a;--hover-2:#262626;--select:#1a1a1a;
     --solid:#ffffff;--solid-ink:#000000;--solid-hover:#ececec;--solid-off:#676767;--solid-off-ink:#2f2f2f;
-    --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;--pill:#222222;
+    --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;--pill:#222222;--tip:#3a3a3a;--tip-ink:#ffffff;
     --link:#80a9e0;--blue:#80a9e0;--focus:#2c68c6;--toggle:#2c68c6;--toggle-off:#414141;--accent:#2c68c6;--avatar:#1abc9c;
     --danger:#e02e2a;--danger-text:#fa423e;--danger-soft:color-mix(in oklab,#fa423e 16%,transparent);
     --warn:#ff8549;--warn-soft:color-mix(in oklab,#fb6a22 16%,transparent);--ok:#04b84c;
@@ -61,7 +61,7 @@
   --border-0:#1a1a1a;--border:rgba(255,255,255,.10);--border-2:rgba(255,255,255,.16);
   --hover:#1a1a1a;--hover-2:#262626;--select:#1a1a1a;
   --solid:#ffffff;--solid-ink:#000000;--solid-hover:#ececec;--solid-off:#676767;--solid-off-ink:#2f2f2f;
-  --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;--pill:#222222;
+  --btn:#f3f3f3;--btn-ink:#0d0d0d;--btn-hover:#ededed;--pill:#222222;--tip:#3a3a3a;--tip-ink:#ffffff;
   --link:#80a9e0;--blue:#80a9e0;--focus:#2c68c6;--toggle:#2c68c6;--toggle-off:#414141;--accent:#2c68c6;--avatar:#1abc9c;
   --danger:#e02e2a;--danger-text:#fa423e;--danger-soft:color-mix(in oklab,#fa423e 16%,transparent);
   --warn:#ff8549;--warn-soft:color-mix(in oklab,#fb6a22 16%,transparent);--ok:#04b84c;
@@ -77,6 +77,12 @@
 }
 *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
 [hidden]{display:none!important}
+/* a tooltip like ChatGPT's: a small label under an icon button, on hover or keyboard focus. Near the right edge it lines up
+   with the button's right side instead, so it stays on screen. */
+[data-tip]{position:relative}
+[data-tip]::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:20;padding:5px 9px;border-radius:8px;background:var(--tip);color:var(--tip-ink);font-size:12px;line-height:16px;font-weight:500;letter-spacing:0;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;box-shadow:0 4px 12px rgba(0,0,0,.18)}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{opacity:1;transition-delay:.15s}
+[data-tip-end]::after{left:auto;right:0;transform:none}
 .sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 html,body{height:100%}
 body{margin:0;background:var(--surface);color:var(--text);font-family:ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:14px;line-height:1.4286;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-synthesis-weight:none;overflow:hidden}
@@ -531,11 +537,34 @@ svg{display:block;flex:none}
 .fb-vbody .p-img img{max-height:100%;object-fit:contain}
 .fb-media{display:grid;place-items:center;min-height:100%;padding:32px 24px}
 .fb-media video{display:block;max-width:100%;max-height:calc(100dvh - 190px);border-radius:12px;background:#000;box-shadow:var(--shadow)}
-.fb-audio{display:flex;flex-direction:column;align-items:center;gap:16px;width:min(480px,100%);padding:28px 24px;border-radius:20px;background:var(--surface);box-shadow:var(--shadow-s);text-align:center}
-.fb-audio .fb-ico{width:72px;height:72px;border-radius:18px}
-.fb-audio .fb-ico svg{width:34px;height:34px}
-.fb-audio b{font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fb-audio audio{width:100%}
+/* the page's own audio player */
+.player{display:flex;flex-direction:column;align-items:center;width:min(460px,100%);padding:28px 24px 22px;border-radius:24px;background:var(--surface);box-shadow:var(--shadow-s);text-align:center}
+.player audio{display:none}
+.pl-art{width:96px;height:96px;border-radius:22px;margin-bottom:18px}
+.pl-art svg{width:44px;height:44px}
+.pl-name{max-width:100%;font-weight:600;font-size:16px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-sub{color:var(--text-3);font-size:12px;line-height:16px;margin-top:2px}
+.pl-bar{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:10px;width:100%;margin-top:20px}
+.pl-t{font-size:12px;line-height:16px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.pl-t:first-child{text-align:right}
+.pl-t:last-child{text-align:left}
+.player input[type=range]{--p:0%;-webkit-appearance:none;appearance:none;width:100%;height:16px;margin:0;background:none;cursor:pointer}
+.player input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--text) var(--p),var(--border-2) var(--p))}
+.player input[type=range]::-moz-range-track{height:4px;border-radius:999px;background:linear-gradient(to right,var(--text) var(--p),var(--border-2) var(--p))}
+.player input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-4px;border-radius:50%;background:var(--text);border:0}
+.player input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--text);border:0}
+.pl-ctl{display:grid;grid-template-columns:1fr auto auto auto 1fr;align-items:center;gap:10px;width:100%;margin-top:14px}
+.pl-play{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--solid);color:var(--solid-ink)}
+.pl-play:hover{opacity:.88}
+.pl-play svg{width:26px;height:26px}
+.pl-ctl .icon-btn{width:40px;height:40px;border-radius:50%;color:var(--text-2)}
+.pl-ctl .icon-btn:hover{color:var(--text)}
+.pl-ctl .icon-btn svg{width:24px;height:24px}
+.pl-rate{justify-self:start;min-width:44px;height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--text-2);font-variant-numeric:tabular-nums}
+.pl-rate:hover{background:var(--hover);color:var(--text)}
+.pl-vol{justify-self:end;display:flex;align-items:center;gap:2px}
+.pl-vol .icon-btn svg{width:20px;height:20px}
+.pl-vol input[type=range]{width:72px}
 .fb-note{margin:0;padding:8px 18px;border-bottom:1px solid var(--border-0);background:var(--surface);color:var(--text-3);font-size:12px;line-height:16px}
 .fb-vbody .p-code{min-height:0}
 /* narrower: the places are a row of chips over the list */
@@ -562,6 +591,13 @@ svg{display:block;flex:none}
 }
 
 /* ---- dialogs: Settings (tabs on the left, the close button above them), Plan usage, and the update checklist */
+/* asking before something is done, in the page's own small dialog, never the browser's */
+.dlg.ask{width:min(440px,calc(100vw - 24px))}
+.ask-box{margin:0;padding:22px 22px 18px}
+.ask-box h2{margin:0;font-size:18px;line-height:26px;font-weight:600;overflow-wrap:anywhere}
+.ask-box p{margin:8px 0 0;color:var(--text-2);font-size:14px;line-height:21px;white-space:pre-line;overflow-wrap:anywhere}
+.ask-box p:empty{display:none}
+.ask-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
 .dlg{width:min(680px,calc(100vw - 24px));height:min(600px,calc(100dvh - 32px));padding:0;border:0;border-radius:16px;background:var(--elevated);color:var(--text);box-shadow:var(--shadow);overflow:hidden}
 .dlg[open]{display:flex;flex-direction:column;animation:pop .35s cubic-bezier(.19,1,.22,1)}
 .dlg.small{width:min(480px,calc(100vw - 24px));height:fit-content;max-height:calc(100dvh - 32px)}
@@ -831,6 +867,13 @@ svg{display:block;flex:none}
     <section class="fb-view" id="fbView" aria-label="Preview"><div class="fb-vhead" id="fbVHead"></div><div class="fb-vbody" id="fbVBody"></div></section>
   </div>
 </div>
+<dialog class="dlg small ask" id="askDlg" aria-labelledby="askTitle" aria-describedby="askText">
+  <form method="dialog" class="ask-box">
+    <h2 id="askTitle"></h2>
+    <p id="askText"></p>
+    <div class="ask-acts"><button class="btn ghost" type="submit" value="no" id="askNo">Cancel</button><button class="btn primary" type="submit" value="yes" id="askYes">OK</button></div>
+  </form>
+</dialog>
 <dialog class="dlg" id="setDlg" aria-labelledby="setTitle">
   <div class="dlg-head">
     <div><h2 id="setTitle">Settings</h2><p id="setSub"></p></div>
@@ -851,6 +894,8 @@ svg{display:block;flex:none}
 (() => {
 const EFF = ["low", "medium", "high", "xhigh", "max", "ultracode"];
 const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max", ultracode: "Ultracode" };
+// Each model lists only the efforts it has: Haiku 5.5 has Low to Max, and no Ultracode.
+const EFF_HAIKU = ["low", "medium", "high", "xhigh", "max"];
 const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
 // the built-in logo, the same as the site's own (DEFAULT_MARK in worker.js)
@@ -859,7 +904,7 @@ const ALL_MODELS = [
   { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable, for long and hard tasks", efforts: EFF, def: "high", tag: "Uses usage credits", credits: true },
   { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Deep reasoning for complex work", efforts: EFF, def: "medium" },
   { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work", efforts: EFF, def: "medium" },
-  { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks", efforts: EFF, def: "medium" }
+  { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks", efforts: EFF_HAIKU, def: "medium" }
 ];
 const MAX_BYTES = 15 * 1024 * 1024;
 const $ = id => document.getElementById(id);
@@ -932,6 +977,12 @@ I.back = LINE + '<path d="M15 5l-7 7 7 7"/></svg>';
 I.eye = LINE + '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
 I.refresh = LINE + '<path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>';
 I.k_audio = LINE + '<path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>';
+I.play = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.6v12.8a1 1 0 0 0 1.52.85l10.4-6.4a1 1 0 0 0 0-1.7L9.52 4.75A1 1 0 0 0 8 5.6Z"/></svg>';
+I.pause = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4.2" height="14" rx="1.2"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.2"/></svg>';
+I.rew = LINE + '<path d="M4 12a8 8 0 1 0 2.34-5.66"/><path d="M4 4v4.5h4.5"/><text x="12" y="15.2" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">10</text></svg>';
+I.ffw = LINE + '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/><text x="12" y="15.2" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">10</text></svg>';
+I.vol = LINE + '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>';
+I.volOff = LINE + '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z"/><path d="m16 9.5 5 5"/><path d="m21 9.5-5 5"/></svg>';
 I.house = LINE + '<path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19v-8.5Z"/></svg>';
 I.drive = LINE + '<rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5 13 7.5 5.5A2 2 0 0 1 9.4 4h5.2a2 2 0 0 1 1.9 1.5L19 13"/><path d="M7 16.5h.01"/></svg>';
 I.star = LINE + '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></svg>';
@@ -952,12 +1003,16 @@ function modelOf(id) { return MODELS_BY_ID[id] || MODELS_BY_ID[DEFAULT_MODEL]; }
 function effortsOf(m) {
   return m.efforts.filter(e => e !== "ultracode" || !!(S.state && S.state.agent && S.state.agent.ultracode));
 }
+// The effort picked for a model; one it doesn't have becomes the highest it has at or below it, as Claude Code does, and
+// Ultracode (Extra high with workflows) becomes Extra high. With none picked, the model's own default.
 function effortFor(id) {
   const m = modelOf(id);
   const list = effortsOf(m);
   if (!list.length) return null;
   const e = S.efforts[id];
-  return list.includes(e) ? e : m.def;
+  if (list.includes(e)) return e;
+  const below = EFF.slice(0, EFF.indexOf(e === "ultracode" ? "xhigh" : e) + 1).filter(x => list.includes(x));
+  return e && below.length ? below[below.length - 1] : m.def;
 }
 function runLabel(model, effort) {
   const m = modelOf(model);
@@ -969,6 +1024,24 @@ function fmtSize(n) {
   if (n < 1048576) return Math.round(n / 1024) + " KB";
   if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
   return (n / 1073741824).toFixed(1) + " GB";
+}
+// Asks before something is done, in the page's own dialog (never the browser's confirm or alert): a title, a line or two
+// about it, and its two buttons. Resolves to true for the first. Something that can't be taken back is red, with Cancel
+// ready for Enter.
+function askConfirm({ title, text = "", ok = "OK", cancel = "Cancel", danger = false }) {
+  const d = $("askDlg");
+  if (d.open) d.close();
+  $("askTitle").textContent = title;
+  $("askText").textContent = text;
+  $("askYes").textContent = ok;
+  $("askYes").className = "btn " + (danger ? "danger" : "primary");
+  $("askNo").textContent = cancel;
+  return new Promise(resolve => {
+    d.returnValue = "";
+    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
+    d.showModal();
+    $(danger ? "askNo" : "askYes").focus();
+  });
 }
 function toast(msg, ms) {
   const t = $("toast");
@@ -1328,6 +1401,7 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (e.key !== "Escape") return;
+  if ($("askDlg").open) return; // it closes as Cancel by itself
   if (F.open) {
     if (!$("remote").hidden) return;
     if (F.edit) cancelEdit();
@@ -1470,7 +1544,7 @@ function renameChat(id) {
 }
 async function deleteChat(id) {
   const c = S.chats.find(x => x.id === id);
-  if (!confirm(`Delete "${(c && c.title) || "this chat"}"? This can't be undone.`)) return;
+  if (!(await askConfirm({ title: `Delete "${(c && c.title) || "this chat"}"?`, text: "It's gone from the site. This can't be undone.", ok: "Delete", danger: true }))) return;
   try {
     await apiJson(`/api/chats/${id}`, { method: "DELETE" });
   } catch (e) {
@@ -2256,15 +2330,18 @@ function openFiles(path, pick, from, root) {
 // where an artifact is: its folder, with it picked
 function revealFile(path, root) { openFiles(parentOf(path), baseOf(path), "", root || "ws"); }
 // Whether what's being edited may be left: unsaved changes are only dropped when you say so.
-function leaveEdit() {
+async function leaveEdit() {
   if (!F.edit) return true;
-  if (F.edit.dirty && !confirm(`Discard your changes to "${baseOf(F.edit.path)}"?`)) return false;
-  F.edit = null;
-  F.shown = "";
+  const ed = F.edit;
+  if (ed.dirty && !(await askConfirm({ title: `Discard your changes to "${baseOf(ed.path)}"?`, text: "They haven't been saved.", ok: "Discard", cancel: "Keep editing", danger: true }))) return false;
+  if (F.edit === ed) {
+    F.edit = null;
+    F.shown = "";
+  }
   return true;
 }
-function closeFiles() {
-  if (!F.open || !leaveEdit()) return;
+async function closeFiles() {
+  if (!F.open || !(await leaveEdit())) return;
   F.open = false;
   F.seq++;
   F.sel = null;
@@ -2315,7 +2392,7 @@ function renderFiles() {
   const parts = F.path ? F.path.split("/") : [];
   const crumbs = [`<button type="button" data-fb-go="" title="${esc((F.list && F.list.root) || label)}"${parts.length ? "" : ' aria-current="page"'}>${esc(label)}</button>`]
     .concat(parts.map((p, i) => `<span class="sep">${I.chev}</span><button type="button" data-fb-go="${esc(parts.slice(0, i + 1).join("/"))}"${i === parts.length - 1 ? ' aria-current="page"' : ""}>${esc(p)}</button>`)).join("");
-  patchHtml($("fbHead"), `<div class="fb-title"><h2 id="fbTitle" class="sr">Files</h2><nav class="crumbs" aria-label="Folder">${crumbs}</nav></div>${modeSwitch("files")}<div class="fb-tools"><button class="icon-btn" type="button" data-fb="hidden" aria-pressed="${F.hidden}" title="${F.hidden ? "Hide hidden files" : "Show hidden files"}" aria-label="Show hidden files">${I.eye}</button><button class="icon-btn" type="button" data-fb="refresh" title="Refresh" aria-label="Refresh">${I.refresh}</button><button class="icon-btn" type="button" data-fb="close" title="Close" aria-label="Close the file browser">${I.x}</button></div>`);
+  patchHtml($("fbHead"), `<div class="fb-title"><h2 id="fbTitle" class="sr">Files</h2><nav class="crumbs" aria-label="Folder">${crumbs}</nav></div>${modeSwitch("files")}<div class="fb-tools"><button class="icon-btn" type="button" data-fb="hidden" aria-pressed="${F.hidden}" data-tip="${F.hidden ? "Hide hidden files" : "Show hidden files"}" data-tip-end aria-label="Show hidden files">${I.eye}</button><button class="icon-btn" type="button" data-fb="refresh" data-tip="Refresh this folder" data-tip-end aria-label="Refresh this folder">${I.refresh}</button><button class="icon-btn" type="button" data-fb="close" data-tip="Close" data-tip-end aria-label="Close the file browser">${I.x}</button></div>`);
   const cr = $("fbHead").querySelector(".crumbs");
   cr.scrollLeft = cr.scrollWidth;
   patchHtml($("fbPlaces"), `<div class="mh">Places</div>` + F.places.map(p => `<button type="button" class="fb-place${p.id === F.root ? " on" : ""}" data-fb-place="${esc(p.id)}" title="${esc(p.path)}"${p.id === F.root ? ' aria-current="true"' : ""}>${PLACE_ICON[p.id] || (p.id.startsWith("drive-") ? I.drive : I.folder)}<span>${esc(p.label)}</span></button>`).join(""));
@@ -2329,7 +2406,7 @@ function renderFiles() {
       const p = joinPath(F.path, e.name);
       const sub = e.dir ? (e.link ? "Folder · link" : "Folder") : e.broken ? "Link to nothing" : `${fmtSize(e.size)} · ${fbWhen(e.mtime)}`;
       const on = !!F.sel && F.sel.path === p;
-      return `<div class="fb-row${on ? " on" : ""}" role="listitem"><button type="button" class="fb-open" data-fb-open="${esc(e.name)}"${on ? ' aria-current="true"' : ""}><span class="fb-ico k-${e.kind}">${FICON[e.kind] || I.file}</span><span class="tx"><b>${esc(e.name)}</b><small>${esc(sub)}</small></span></button><button type="button" class="icon-btn" data-fb-trash="${esc(e.name)}" title="Move to Trash" aria-label="${esc(`Move ${e.name} to the Trash`)}"${F.busy ? " disabled" : ""}>${I.trash}</button></div>`;
+      return `<div class="fb-row${on ? " on" : ""}" role="listitem"><button type="button" class="fb-open" data-fb-open="${esc(e.name)}"${on ? ' aria-current="true"' : ""}><span class="fb-ico k-${e.kind}">${FICON[e.kind] || I.file}</span><span class="tx"><b>${esc(e.name)}</b><small>${esc(sub)}</small></span></button><button type="button" class="icon-btn" data-fb-trash="${esc(e.name)}" data-tip="Move to Trash" data-tip-end aria-label="${esc(`Move ${e.name} to the Trash`)}"${F.busy ? " disabled" : ""}>${I.trash}</button></div>`;
     }).join("");
   }
   patchHtml($("fbList"), html);
@@ -2356,8 +2433,8 @@ function renderFileView() {
   const ed = F.edit && F.edit.path === f.path && F.edit.root === F.root ? F.edit : null;
   const tools = ed
     ? `<button class="btn ghost" type="button" data-fb="cancel"${ed.saving ? " disabled" : ""}>Cancel</button><button class="btn primary" type="button" data-fb="save"${ed.saving || ed.loading ? " disabled" : ""}>${ed.saving ? "Saving…" : "Save"}</button>`
-    : `${editable(f) ? `<button class="icon-btn" type="button" data-fb="edit" title="Edit" aria-label="Edit">${I.pencil}</button>` : ""}<a class="icon-btn" href="${fsUrl(f.path, true)}" download="${esc(f.name)}" title="Download" aria-label="Download">${I.download}</a><button class="icon-btn danger" type="button" data-fb="trash" title="Move to Trash" aria-label="Move to Trash"${F.busy ? " disabled" : ""}>${I.trash}</button>`;
-  patchHtml(head, `<button class="icon-btn only-narrow" type="button" data-fb="back" aria-label="Back to the folder">${I.back}</button><div class="p-title"><b>${esc(f.name)}${ed && ed.dirty ? " •" : ""}</b><small>${esc(ed ? (ed.dirty ? "Edited, not saved" : "Editing") : `${FKIND[f.kind] || "File"} · ${fmtSize(f.size)}${f.mtime ? " · " + fbWhen(f.mtime) : ""}`)}</small></div>${tools}`);
+    : `${editable(f) ? `<button class="icon-btn" type="button" data-fb="edit" data-tip="Edit" data-tip-end aria-label="Edit">${I.pencil}</button>` : ""}<a class="icon-btn" href="${fsUrl(f.path, true)}" download="${esc(f.name)}" data-tip="Download" data-tip-end aria-label="Download">${I.download}</a><button class="icon-btn danger" type="button" data-fb="trash" data-tip="Move to Trash" data-tip-end aria-label="Move to Trash"${F.busy ? " disabled" : ""}>${I.trash}</button>`;
+  patchHtml(head, `<button class="icon-btn only-narrow" type="button" data-fb="back" data-tip="Back to the folder" aria-label="Back to the folder">${I.back}</button><div class="p-title"><b>${esc(f.name)}${ed && ed.dirty ? " •" : ""}</b><small>${esc(ed ? (ed.dirty ? "Edited, not saved" : "Editing") : `${FKIND[f.kind] || "File"} · ${fmtSize(f.size)}${f.mtime ? " · " + fbWhen(f.mtime) : ""}`)}</small></div>${tools}`);
   // being edited, the editor stays as it is
   if (ed) return;
   // the file itself is only shown again when it's another file, or changed: a song keeps playing while the list refreshes
@@ -2366,7 +2443,7 @@ function renderFileView() {
   F.shown = key;
   const src = fsUrl(f.path) + `&v=${f.mtime || 0}`;
   if (f.kind === "image") body.innerHTML = `<div class="p-img"><img src="${src}" alt="${esc(f.name)}"></div>`;
-  else if (f.kind === "audio") body.innerHTML = `<div class="fb-media"><div class="fb-audio"><span class="fb-ico k-audio">${I.k_audio}</span><b>${esc(f.name)}</b><audio controls preload="metadata" src="${src}"></audio></div></div>`;
+  else if (f.kind === "audio") { body.innerHTML = playerHtml(f, src); setupPlayer(body.querySelector(".player"), key, f); return; }
   else if (f.kind === "video") body.innerHTML = `<div class="fb-media"><video controls playsinline preload="metadata" src="${src}"></video></div>`;
   else if (f.kind === "pdf") body.innerHTML = `<iframe src="${src}" title="${esc(f.name)}"></iframe>`;
   else if (f.kind === "text") return showText(f, key);
@@ -2374,6 +2451,67 @@ function renderFileView() {
   const media = body.querySelector("img,audio,video");
   if (media) media.addEventListener("error", () => { if (F.shown === key) body.innerHTML = noPreview(f.kind === "image" ? "This picture can't be shown in the browser." : `This ${f.kind === "audio" ? "audio" : "video"} can't be played in the browser.`, f); });
 }
+// A song or any other sound plays in the page's own player, drawn like the rest of the page rather than the browser's: play and
+// pause, ten seconds back and forward, a bar to drag, the time, the volume and the speed.
+const RATES = [1, 1.25, 1.5, 2, 0.75];
+function fmtTime(t) {
+  if (!isFinite(t) || t < 0) return "0:00";
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = String(Math.floor(t % 60)).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+function playerHtml(f, src) {
+  return `<div class="fb-media"><div class="player" role="group" aria-label="${esc(`Audio player: ${f.name}`)}"><audio preload="metadata" src="${src}"></audio>` +
+    `<span class="fb-ico k-audio pl-art">${I.k_audio}</span><b class="pl-name">${esc(f.name)}</b><small class="pl-sub">${esc(fmtSize(f.size))}</small>` +
+    `<div class="pl-bar"><span class="pl-t" data-pl-cur>0:00</span><input class="pl-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position" data-pl-seek><span class="pl-t" data-pl-dur>0:00</span></div>` +
+    `<div class="pl-ctl"><button class="pl-rate" type="button" data-pl="rate" data-tip="Speed" aria-label="Speed">1×</button>` +
+    `<button class="icon-btn" type="button" data-pl="back" data-tip="Back 10 seconds" aria-label="Back 10 seconds">${I.rew}</button>` +
+    `<button class="pl-play" type="button" data-pl="play" aria-label="Play">${I.play}</button>` +
+    `<button class="icon-btn" type="button" data-pl="fwd" data-tip="Forward 10 seconds" aria-label="Forward 10 seconds">${I.ffw}</button>` +
+    `<span class="pl-vol"><button class="icon-btn" type="button" data-pl="mute" data-tip="Mute" aria-label="Mute">${I.vol}</button><input type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" data-pl-vol></span></div></div></div>`;
+}
+function setupPlayer(root, key, f) {
+  const a = root.querySelector("audio");
+  const seek = root.querySelector("[data-pl-seek]");
+  const vol = root.querySelector("[data-pl-vol]");
+  const play = root.querySelector('[data-pl="play"]');
+  const mute = root.querySelector('[data-pl="mute"]');
+  let dragging = false;
+  const fill = (el, frac) => el.style.setProperty("--p", `${Math.max(0, Math.min(1, frac)) * 100}%`);
+  const paint = () => {
+    const d = isFinite(a.duration) ? a.duration : 0;
+    if (!dragging) seek.value = d ? Math.round((a.currentTime / d) * 1000) : 0;
+    fill(seek, seek.value / 1000);
+    root.querySelector("[data-pl-cur]").textContent = fmtTime(dragging && d ? (seek.value / 1000) * d : a.currentTime);
+    root.querySelector("[data-pl-dur]").textContent = fmtTime(d);
+    const label = a.paused ? "Play" : "Pause";
+    if (play.getAttribute("aria-label") !== label) { play.innerHTML = a.paused ? I.play : I.pause; play.setAttribute("aria-label", label); }
+    const quiet = a.muted || a.volume === 0;
+    mute.innerHTML = quiet ? I.volOff : I.vol;
+    mute.dataset.tip = quiet ? "Unmute" : "Mute";
+    mute.setAttribute("aria-label", mute.dataset.tip);
+    vol.value = a.muted ? 0 : a.volume;
+    fill(vol, vol.value);
+  };
+  for (const ev of ["timeupdate", "loadedmetadata", "durationchange", "play", "pause", "ended", "volumechange", "ratechange"]) a.addEventListener(ev, paint);
+  a.addEventListener("error", () => { if (F.shown === key) $("fbVBody").innerHTML = noPreview("This audio can't be played in the browser.", f); });
+  seek.addEventListener("input", () => { dragging = true; paint(); });
+  seek.addEventListener("change", () => { if (isFinite(a.duration)) a.currentTime = (seek.value / 1000) * a.duration; dragging = false; paint(); });
+  vol.addEventListener("input", () => { a.volume = Number(vol.value); a.muted = a.volume === 0; });
+  root.addEventListener("click", e => {
+    const b = e.target.closest("[data-pl]");
+    if (!b) return;
+    const act = b.dataset.pl;
+    if (act === "play") a.paused ? a.play().catch(() => {}) : a.pause();
+    else if (act === "back") a.currentTime = Math.max(0, a.currentTime - 10);
+    else if (act === "fwd") a.currentTime = Math.min(a.duration || 0, a.currentTime + 10);
+    else if (act === "mute") { a.muted = !(a.muted || a.volume === 0); if (!a.muted && a.volume === 0) a.volume = 1; }
+    else if (act === "rate") { a.playbackRate = RATES[(RATES.indexOf(a.playbackRate) + 1) % RATES.length]; b.textContent = `${a.playbackRate}×`; }
+  });
+  // space plays and pauses while the player has focus, as in a music app
+  root.addEventListener("keydown", e => { if (e.key === " " && !e.target.matches("input")) { e.preventDefault(); play.click(); } });
+  paint();
+}
+
 // The start of a text file, coloured like code.
 async function showText(f, key) {
   const body = $("fbVBody");
@@ -2431,8 +2569,8 @@ async function startEdit() {
   renderFileView();
   ta.focus();
 }
-function cancelEdit() {
-  if (!leaveEdit()) return;
+async function cancelEdit() {
+  if (!(await leaveEdit())) return;
   renderFileView();
 }
 async function saveEdit(force) {
@@ -2456,7 +2594,7 @@ async function saveEdit(force) {
   } catch (e) {
     ed.saving = false;
     renderFileView();
-    if (e.data && e.data.code === "changed" && confirm(`"${baseOf(ed.path)}" changed on your computer since you opened it here. Save your version over it?`)) return saveEdit(true);
+    if (e.data && e.data.code === "changed" && (await askConfirm({ title: `"${baseOf(ed.path)}" changed on your computer`, text: "It changed there since you opened it here. Save your version over it, or cancel and keep editing (copy your changes, then reopen it to see the other version).", ok: "Save over it", danger: true }))) return saveEdit(true);
     if (e.message !== "Signed out" && !(e.data && e.data.code === "changed")) toast(e.message);
   }
 }
@@ -2465,8 +2603,8 @@ async function trashFile(name) {
   const e = F.list && F.list.entries.find(x => x.name === name);
   if (!e || F.busy) return;
   const path = joinPath(F.path, name);
-  if (F.edit && F.edit.path === path && !leaveEdit()) return;
-  if (!confirm(`Move "${name}" to the Trash on your computer?${e.dir ? " Everything in it goes too." : ""}\n\nIt isn't deleted: you can put it back from the Trash (the Recycle Bin on Windows).`)) return;
+  if (F.edit && F.edit.path === path && !(await leaveEdit())) return;
+  if (!(await askConfirm({ title: `Move "${name}" to the Trash?`, text: `${e.dir ? "The folder and everything in it go" : "It goes"} to the Trash on your computer (the Recycle Bin on Windows). It isn't deleted: you can put it back from there.`, ok: "Move to Trash", danger: true }))) return;
   F.busy = path;
   renderFiles();
   try {
@@ -2486,19 +2624,22 @@ $("files").addEventListener("click", e => {
   const view = e.target.closest("[data-view]");
   if (view) { if (view.dataset.view === "chat") closeFiles(); return; }
   const place = e.target.closest("[data-fb-place]");
-  if (place) { if (leaveEdit()) loadFiles("", undefined, place.dataset.fbPlace); return; }
+  if (place) { leaveEdit().then(ok => ok && loadFiles("", undefined, place.dataset.fbPlace)); return; }
   const go = e.target.closest("[data-fb-go]");
-  if (go) { if (leaveEdit()) loadFiles(go.dataset.fbGo); return; }
+  if (go) { leaveEdit().then(ok => ok && loadFiles(go.dataset.fbGo)); return; }
   const open = e.target.closest("[data-fb-open]");
   if (open) {
     const x = F.list && F.list.entries.find(y => y.name === open.dataset.fbOpen);
     if (!x) return;
     const p = joinPath(F.path, x.name);
     if (F.edit && F.edit.path === p) return;
-    if (!leaveEdit()) return;
-    if (x.dir) return loadFiles(p);
-    F.sel = { ...x, path: p };
-    return renderFiles();
+    leaveEdit().then(ok => {
+      if (!ok) return;
+      if (x.dir) return loadFiles(p);
+      F.sel = { ...x, path: p };
+      renderFiles();
+    });
+    return;
   }
   const tr = e.target.closest("[data-fb-trash]");
   if (tr) return trashFile(tr.dataset.fbTrash);
@@ -2507,7 +2648,7 @@ $("files").addEventListener("click", e => {
   const act = b.dataset.fb;
   if (act === "close") closeFiles();
   else if (act === "refresh") loadFiles(F.path);
-  else if (act === "back") { if (leaveEdit()) { F.sel = null; renderFiles(); } }
+  else if (act === "back") leaveEdit().then(ok => { if (ok) { F.sel = null; renderFiles(); } });
   else if (act === "trash" && F.sel) trashFile(F.sel.name);
   else if (act === "edit") startEdit();
   else if (act === "save") saveEdit();
@@ -2731,7 +2872,7 @@ const RESET_SAID = {
 };
 async function useReset(btn) {
   if (U.resetting) return;
-  if (!confirm(`Use a limit reset now? It clears your ${btn.dataset.clears}.`)) return;
+  if (!(await askConfirm({ title: "Use a limit reset now?", text: `It clears your ${btn.dataset.clears}.`, ok: "Use it" }))) return;
   U.resetting = btn.dataset.grant;
   renderUsage();
   renderLimitNote();
@@ -2994,7 +3135,7 @@ function updatesHtml() {
     return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}${questionsHtml(u)}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and you can close this while it runs.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
   }
   const earlier = (u.history || []).length ? `<details class="earlier" data-k="history"${UP.open.history ? " open" : ""}><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
-  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(newerThan(CFG.version, u.current) ? CFG.version : u.current))}${updateAvailable(u) ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
+  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(newerThan(CFG.version, u.current) ? CFG.version : u.current))}${updateAvailable(u) || u.error ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
 }
 // What a new version asks, answered here before it's installed. The answers are kept by the site and given to the new version
 // once it's running on the computer.
@@ -3160,11 +3301,11 @@ $("setBody").addEventListener("keydown", e => {
 async function doAct(act) {
   if (act === "files") { closeSettings(); return openFiles("", undefined, "settings"); }
   if (act === "move") {
-    if (!confirm(`Set up ${SET.address}${hostParts().suffix}?\n\nThe new site is created first and this one keeps working until you've turned on Cloudflare Access for it. Then this site is deleted, along with its chats.`)) return;
+    if (!(await askConfirm({ title: `Set up ${SET.address}${hostParts().suffix}?`, text: `The new site is created first and this one keeps working until you've turned on Cloudflare Access for it. Then this site is deleted, along with its chats.`, ok: "Set it up" }))) return;
     return adminCall("/api/admin/move", { address: SET.address });
   }
   if (act === "delete") {
-    if (!confirm(`Delete ${CFG.name} and every chat in it? This can't be undone.`)) return;
+    if (!(await askConfirm({ title: `Delete ${CFG.name} and every chat in it?`, text: "The site, its chats and its setup on your computer are removed. The working folder is kept. This can't be undone.", ok: "Delete", danger: true }))) return;
     return adminCall("/api/admin/delete", { confirm: SET.confirm });
   }
   if (act === "update") {
@@ -3190,7 +3331,7 @@ async function doAct(act) {
     return doAct("update");
   }
   if (act === "cancel") {
-    if (!confirm("Cancel the move? The new site is removed and this one stays as it is.")) return;
+    if (!(await askConfirm({ title: "Cancel the move?", text: "The new site is removed and this one stays as it is.", ok: "Cancel the move", cancel: "Keep going", danger: true }))) return;
     try { applyUpdate(await apiJson("/api/admin/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })); } catch (e) { toast(e.message); }
     return renderSettings();
   }
