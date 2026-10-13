@@ -101,6 +101,14 @@ test("when GitHub turns the site away, the release is still heard of: from GitHu
   assert.equal(u.latest, "1.3.0", "the newest, and only for the place the site updates from");
   assert.deepEqual(u.notes, ["From the computer"]);
   assert.equal((await s.api("/api/state")).body.update.available, true);
+
+  // GitHub answers again, but with a copy from before (its cache can be minutes behind): the newer one stays
+  s.releaseStatus = 200;
+  s.release = RELEASE;
+  u = (await s.post("/api/update/check")).body;
+  assert.equal(u.latest, "1.3.0", "an older copy never takes a newer release back");
+  assert.equal(u.error, "");
+  assert.equal(u.available, true);
 });
 
 test("a release published since the last look shows at the next look a minute on, without waiting for a background check", async t => {
@@ -353,21 +361,62 @@ test("the owner's browser can't start an update from another origin", async t =>
   assert.equal((await s.api("/api/update")).body.run, null);
 });
 
-test("a new release is looked for every minute, getting past GitHub's cache", async t => {
-  const s = await ready({ vars: { UPDATE_CHECK_MS: "150" } });
+test("a new release is looked for every minute, at the commit main is at, so GitHub's cache doesn't hold it back", async t => {
+  const s = await ready({ vars: { UPDATE_CHECK_MS: "150", UPDATE_GIT: "https://git.test" } });
   t.after(() => s.stop());
+  s.sha = "a".repeat(40);
   await s.api("/api/update");
-  assert.match(s.fetched[0], /manifest\.json\?cb=[0-9a-z]+$/, "a changing query string, so GitHub's five-minute cache is skipped");
-  // with no click on Check again, the next look after the interval sees the new release
+  assert.deepEqual(s.fetched.slice(0, 2), ["https://git.test/ThatOneWeirdDev/claudeconnect.git/info/refs?service=git-upload-pack", `https://raw.test/ThatOneWeirdDev/claudeconnect/${"a".repeat(40)}/manifest.json`], "the branch's commit, then the manifest at it: an address that's new with every commit");
+  // with no click on Check again, the next look after the interval sees the new release, at its own commit
   s.release = { ...RELEASE, version: "1.2.1", notes: ["Faster"] };
+  s.sha = "b".repeat(40);
   assert.equal((await s.api("/api/update")).body.latest, "1.2.0", "within the interval the answer is the one it has");
   await sleep(250);
-  await s.api("/api/update"); // starts the look in the background
-  await sleep(150);
   const u = (await s.api("/api/update")).body;
   assert.equal(u.latest, "1.2.1");
   assert.deepEqual(u.notes, ["Faster"]);
-  assert.notEqual(s.fetched[0], s.fetched[1], "each look is its own address");
+  assert.ok(s.fetched.includes(`https://raw.test/ThatOneWeirdDev/claudeconnect/${"b".repeat(40)}/manifest.json`));
+  // git's address not answering: the branch's own address is read instead
+  s.sha = null;
+  await sleep(200);
+  assert.equal((await s.api("/api/update")).body.latest, "1.2.1");
+  assert.equal(s.fetched.at(-1), "https://raw.test/ThatOneWeirdDev/claudeconnect/main/manifest.json");
+});
+
+test("Check again asks the computer too, and waits a moment for what it read", async t => {
+  const s = await ready({ release: { ...RELEASE, version: "1.1.0" } });
+  t.after(() => s.stop());
+  s.releaseStatus = 429; // GitHub turning Cloudflare away
+  const agent = await connectAgent(s, { agent: "1.1.0", caps: ["update", "admin", "limits", "modes", "history", "files", "release"] });
+  t.after(() => agent.close());
+  const checking = s.post("/api/update/check");
+  const ask = await agent.next(m => m.type === "release_check");
+  agent.send({ type: "release", req: ask.req, repo: "ThatOneWeirdDev/claudeconnect", ref: "main", release: { ...RELEASE, version: "1.4.0", notes: ["From the computer"] } });
+  const u = (await checking).body;
+  assert.equal(u.latest, "1.4.0");
+  assert.equal(u.available, true);
+  assert.equal(u.error, "", "what the computer read is an answer");
+  // a computer that couldn't read it either: the site's own reason stands
+  const again = s.post("/api/update/check");
+  const ask2 = await agent.next(m => m.type === "release_check");
+  agent.send({ type: "release", req: ask2.req, repo: "ThatOneWeirdDev/claudeconnect", ref: "main", error: "unreachable" });
+  assert.equal((await again).body.latest, "1.4.0");
+});
+
+test("an update that didn't finish stops standing in the way once a newer release is out", async t => {
+  const s = await ready();
+  t.after(() => s.stop());
+  const agent = await connectAgent(s, { agent: "1.1.0" });
+  t.after(() => agent.close());
+  const { body: started } = await s.post("/api/update/start", { to: "1.2.0" });
+  await progress(s, { id: started.run.id, step: "download", status: "error", message: "No space left." });
+  let u = (await s.api("/api/update")).body;
+  assert.equal(u.run.state, "error", "the failure is shown");
+  s.release = { ...RELEASE, version: "1.2.1" };
+  u = (await s.post("/api/update/check")).body;
+  assert.equal(u.run, null, "a newer release: Update again, not the old failure");
+  assert.equal(u.available, true);
+  assert.equal(u.latest, "1.2.1");
 });
 
 test("the usual look is every minute, not every half hour", () => {
@@ -376,8 +425,8 @@ test("the usual look is every minute, not every half hour", () => {
   assert.doesNotMatch(src, /30 \* 60000/);
 });
 
-test("a page opened after a long gap is answered with a fresh look, not the old one", async t => {
-  const s = await ready({ vars: { UPDATE_WAIT_MS: "200" } });
+test("a page opened after a gap is answered with a fresh look, not the old one", async t => {
+  const s = await ready({ vars: { UPDATE_CHECK_MS: "200" } });
   t.after(() => s.stop());
   assert.equal((await s.api("/api/update")).body.latest, "1.2.0");
   s.release = { ...RELEASE, version: "1.3.0" };
@@ -457,4 +506,23 @@ test("the log keeps the last few updates only", async t => {
   const log = await s.getStorage("updateLog");
   assert.ok(log.length <= 10);
   assert.equal(log[0].version, "1.1.14", "newest first");
+});
+
+test("while the computer tells the site about releases, the site doesn't ask GitHub itself, except on Check again", async t => {
+  const s = await ready({ vars: { UPDATE_CHECK_MS: "100" } });
+  t.after(() => s.stop());
+  await s.api("/api/update");
+  const agent = await connectAgent(s, { agent: "1.1.0" });
+  t.after(() => agent.close());
+  agent.send({ type: "release", repo: "thatoneweirddev/ClaudeConnect", ref: "main", release: { ...RELEASE, version: "1.3.0" } });
+  await sleep(150);
+  const before = s.fetched.length;
+  await sleep(250);
+  let u = (await s.api("/api/update")).body;
+  await sleep(250);
+  u = (await s.api("/api/update")).body;
+  assert.equal(u.latest, "1.3.0", "the repo's name matched whatever its letter case");
+  assert.equal(s.fetched.length, before, "no look of its own while the computer is reporting");
+  await s.post("/api/update/check");
+  assert.ok(s.fetched.length > before, "Check again still looks");
 });

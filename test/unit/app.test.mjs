@@ -35,17 +35,30 @@ test("the usage chart and token counting are gone", () => {
   assert.doesNotMatch(readFileSync(join(ROOT, "site", "worker.js"), "utf8"), /recordUsage|buildUsage|\/api\/usage/);
 });
 
-test("the model switcher is at the top, like ChatGPT's: the model and its effort, and every model has every effort", () => {
-  // one button in the top bar with the model, then the effort in grey; no effort button or stairs anywhere else
-  assert.match(html, /<header class="top">[\s\S]*?<button class="ms" id="modelBtn"[^>]*><span id="modelName">[^<]*<\/span><span class="sub" id="effortName">[\s\S]*?<\/header>/);
+test("the model and effort are a pill in the message box, where ChatGPT has Think, and each model has the efforts it has", () => {
+  // one pill with the model, then the effort in grey; no effort button or stairs anywhere else, and nothing of it at the top
+  assert.match(html, /<div class="c-trail">\s*<button type="button" class="c-pill" id="modelBtn"[^>]*><svg[\s\S]*?<\/svg><span id="modelName">[^<]*<\/span><span class="sub" id="effortName">/);
+  assert.doesNotMatch(/<header class="top">([\s\S]*?)<\/header>/.exec(html)[1], /modelBtn/);
   assert.doesNotMatch(html, /id="effortBtn"|id="effortMenu"|class="stairs"|pickerBtn|picker-btn|renderPickerBtn|id="topTitle"/);
   assert.match(script, /put\("modelName", m\.name\)/);
   assert.match(script, /put\("effortName", EFF_LABEL\[e\]\)/);
   // a model with no effort setting has nothing after its name
   assert.match(script, /\$\("effortName"\)\.hidden = !effortsOf\(m\)\.length/);
-  // Claude Code gives every model every effort now, Haiku 5.5 included; Ultracode only when the computer's Claude Code knows it
-  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF", "medium"]]);
+  // each model lists only the efforts it has: Low to Max on all, Ultracode on all but Haiku 5.5, and only when the computer's
+  // Claude Code knows it; the defaults are Claude Code's
+  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF_HAIKU", "medium"]]);
   assert.match(script, /const EFF = \["low", "medium", "high", "xhigh", "max", "ultracode"\];/);
+  assert.match(script, /const EFF_HAIKU = \["low", "medium", "high", "xhigh", "max"\];/);
+  const worker = readFileSync(join(ROOT, "site", "worker.js"), "utf8");
+  assert.match(worker, /"claude-haiku-5-5": \{ name: "Haiku 5\.5", efforts: HAIKU_EFFORTS \}/);
+  // one it doesn't have runs as the highest it has below it: Ultracode picked on another model is Extra high on Haiku
+  const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
+  const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
+  const ctx = { DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: { "claude-haiku-5-5": "ultracode" }, state: { agent: { ultracode: true } } } };
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = ["low", "medium", "high", "xhigh", "max"]; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor"].map(lift).join("") + "this.effortFor = effortFor; this.effortsOf = effortsOf; this.modelOf = modelOf;", ctx);
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.effortsOf(ctx.modelOf("claude-haiku-5-5")))), ["low", "medium", "high", "xhigh", "max"]);
+  assert.equal(ctx.effortFor("claude-haiku-5-5"), "xhigh");
+  assert.ok(ctx.effortsOf(ctx.modelOf("claude-opus-5-5")).includes("ultracode"));
   assert.match(script, /e !== "ultracode" \|\| !!\(S\.state && S\.state\.agent && S\.state\.agent\.ultracode\)/);
   assert.doesNotMatch(html, /answers without an effort setting/);
 });
@@ -55,7 +68,7 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
   const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = EFF.filter(e => e !== "ultracode"); const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
   let menu = ctx.popEffort();
   assert.match(menu, /^<hr><div class="mh">Effort<\/div>/, "under the models, after a line");
   assert.deepEqual([...menu.matchAll(/data-effort="(\w+)"/g)].map(m => m[1]), ["low", "medium", "high", "xhigh", "max", "ultracode"]);
@@ -67,21 +80,26 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
   ctx.S.state.agent.ultracode = false;
   menu = ctx.popEffort();
   assert.doesNotMatch(menu, /ultracode/i, "a computer whose Claude Code doesn't know it");
-  assert.match(menu, /data-effort="medium"[^>]*aria-checked="true"/, "and a stored Ultracode falls back to the default");
+  assert.match(menu, /data-effort="xhigh"[^>]*aria-checked="true"/, "and a stored Ultracode runs as Extra high, as Claude Code does");
   // a pick there changes the effort of the model that's picked, and the switcher shows it
   assert.match(script, /const eff = e\.target\.closest\("\[data-effort\]"\);\n  if \(eff\) return pick\(\(\) => \{ S\.efforts\[modelNow\(\)\] = eff\.dataset\.effort;/);
   assert.match(lift("popModel"), /popEffort\(\) \+ noteHtml\(\)/);
 });
 
-test("the message box is one row like ChatGPT's: + on the left, the permission pill, ring and send on the right; no mode switch and no record button", () => {
+test("the message box is one row like ChatGPT's: + on the left, the model and permission pills, ring and the blue send on the right; no mode switch and no record button", () => {
   const lead = /<div class="c-lead">([\s\S]*?)<\/div>/.exec(html)[1];
   assert.ok(lead.indexOf('id="attachBtn"') >= 0, "+ on the left");
   assert.doesNotMatch(html, /id="thinkBtn"/, "the free plan's Thinking pill went with it");
   const trail = /<div class="c-trail">([\s\S]*?)<\/form>/.exec(html)[1];
   const at = id => trail.indexOf(`id="${id}"`);
-  assert.ok(at("permBtn") >= 0 && at("permBtn") < at("ctxBtn") && at("ctxBtn") < at("sendBtn"), "the permission pill, the context ring, then send");
-  assert.match(html, /<textarea id="input" rows="1" placeholder="Ask anything"/);
-  assert.match(html, /\.composer\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;grid-template-areas:"lead main trail";[^}]*min-height:56px;padding:10px;border-radius:28px/);
+  assert.ok(at("modelBtn") >= 0 && at("modelBtn") < at("permBtn") && at("permBtn") < at("ctxBtn") && at("ctxBtn") < at("sendBtn"), "the model pill, the permission pill, the context ring, then send");
+  // "Ask ChatGPT", here with the site's name, kept up to date when it's renamed
+  assert.match(html, /<textarea id="input" rows="1" placeholder="Ask __SITE_NAME__"/);
+  assert.match(lift("applySite"), /\$\("input"\)\.placeholder = `Ask \$\{CFG\.name\}`;/);
+  assert.match(html, /\.composer\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;grid-template-areas:"lead main trail";[^}]*min-height:56px;padding:10px;border-radius:30px/);
+  // ChatGPT's round blue button, there whether or not there's anything to send
+  assert.match(html, /\.send\{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var\(--accent\);color:#fff;/);
+  assert.match(html, /\.send\[disabled\]\{background:var\(--accent\);color:#fff;opacity:1;cursor:default\}/);
   assert.match(html, /\.composer\.tall\{grid-template-areas:"chips chips chips" "main main main" "lead \. trail"/);
   assert.match(html, /\.msg \.think\{/);
   // everything runs as Claude Code: there's nothing to switch between
@@ -137,9 +155,10 @@ test("the colours are ChatGPT's, and the two dark blocks (System when the comput
   const forced = /:root\[data-theme="dark"\]\{\n([\s\S]*?)\n\}/.exec(html)[1];
   const tidy = b => b.split("\n").map(l => l.trim()).join("\n");
   assert.equal(tidy(system), tidy(forced));
-  // a few of the values that make it look like ChatGPT: the page, the sidebar, the text, the user's bubble, send
-  for (const v of ["--surface:#ffffff", "--surface-2:#f9f9f9", "--text:#0d0d0d", "--text-2:#5d5d5d", "--user:rgba(233,233,233,.5)", "--solid:#000000", "--solid-off:#d7d7d7"]) assert.ok(light.includes(v), v);
-  for (const v of ["--surface:#212121", "--surface-2:#181818", "--text:#ffffff", "--composer:#303030", "--user:rgba(50,50,50,.85)", "--solid:#ffffff", "--solid-off:#676767"]) assert.ok(forced.includes(v), v);
+  // the values taken from ChatGPT's page as it is now: one colour for the page and the sidebar, the message box, the hover
+  // and the switch at the top, its blue button and blue links, and the teal avatar
+  for (const v of ["--surface:#ffffff", "--surface-2:#ffffff", "--text:#0d0d0d", "--text-2:#5d5d5d", "--composer:#f3f3f3", "--accent:#2c68c6", "--avatar:#1abc9c"]) assert.ok(light.includes(v), v);
+  for (const v of ["--surface:#000000", "--surface-2:#000000", "--surface-3:#1b1b1b", "--composer:#1b1b1b", "--hover:#1a1a1a", "--border-0:#1a1a1a", "--seg:#131313", "--seg-on:#1b1b1b", "--text:#f3f3f3", "--text-2:#b4b4b4", "--nav:#cccccc", "--accent:#2c68c6", "--link:#80a9e0", "--pill:#222222", "--avatar:#1abc9c"]) assert.ok(forced.includes(v), v);
   // every variable used in light is set again for dark
   const names = b => [...b.matchAll(/(--[\w-]+):/g)].map(m => m[1]).sort();
   assert.deepEqual(names(forced), names(light).filter(n => n !== "--mono"));
@@ -172,12 +191,24 @@ test("the page calls its assistant by the site's name, never Claude", () => {
   assert.deepEqual(shown.split("\n").filter(l => /Claude/.test(l)).map(l => l.trim().slice(0, 80)), []);
 });
 
-test("the top bar has the model switcher, the update button and the chat's ⋯; the sidebar has ChatGPT's shortcuts", () => {
+test("the top bar has ChatGPT's switch (Chat | Files), the update button and the chat's ⋯; the sidebar is ChatGPT's", () => {
   const top = /<header class="top">([\s\S]*?)<\/header>/.exec(html)[1];
-  const at = id => top.indexOf(`id="${id}"`);
-  assert.ok(at("openSide") < at("modelBtn") && at("modelBtn") < at("updatePill") && at("updatePill") < at("chatMore"));
-  // the update button is a plain one in the top bar (ChatGPT's ghost button), and only an icon on a phone
-  assert.match(lift("renderPill"), /else if \(updateAvailable\(u\)\) \{ text = "Update"; short = ""; \}/);
+  const at = id => top.indexOf(id);
+  assert.ok(at('id="openSide"') < at('class="views"') && at('class="views"') < at('id="updatePill"') && at('id="updatePill"') < at('id="chatMore"'));
+  assert.match(top, /<div class="views" role="tablist" aria-label="View"><button type="button" role="tab" data-view="chat" aria-selected="true" class="on">Chat<\/button><button type="button" role="tab" data-view="files" aria-selected="false" class="alt"><svg[\s\S]*?<\/svg>Files<\/button><\/div>/);
+  assert.match(script, /document\.querySelector\('\.top \[data-view="files"\]'\)\.onclick = showFiles;/);
+  // an update waiting is blue text at the top and a pill beside you, like ChatGPT's two Upgrades
+  assert.match(lift("renderPill"), /else if \(updateAvailable\(u\)\) \{ text = "Update"; short = ""; cls \+= " up"; \}/);
+  assert.match(lift("renderPill"), /\$\("sideUp"\)\.hidden = !\(updateAvailable\(u\) && !run && !pageIsStale\(\)\);/);
+  assert.match(html, /\.pill\.up\{color:var\(--blue\);/);
+  // the sidebar: the site's name as a wordmark, search and close beside it, New chat lit on a new chat, Files, then Recents
+  const side = /<aside class="side"[\s\S]*?<\/aside>/.exec(html)[0];
+  const s = id => side.indexOf(id);
+  assert.ok(s('id="brand"') < s('id="searchBtn"') && s('id="searchBtn"') < s('id="hideSide"') && s('id="hideSide"') < s('id="newChat"') && s('id="newChat"') < s('id="filesNav"') && s('id="filesNav"') < s(">Recents<"));
+  assert.match(html, /\.brand\{display:flex;[^}]*font-size:18px;line-height:24px;font-weight:600/);
+  assert.match(lift("renderBar"), /\$\("newChat"\)\.classList\.toggle\("on", !S\.chatId\);/);
+  assert.match(html, /\.side:not\(\.searching\) #searchRow\{display:none\}/);
+  assert.ok(side.indexOf('id="profileBtn"') < side.indexOf('id="sideUp"'));
   assert.match(html, /\.pill\.solo\{width:40px;padding:0;justify-content:center\}/);
   // the chat's ⋯ is there in a chat, with the same Rename and Delete as its row in the sidebar
   assert.match(lift("renderBar"), /\$\("chatMore"\)\.hidden = !S\.chatId;/);
@@ -187,7 +218,8 @@ test("the top bar has the model switcher, the update button and the chat's ⋯; 
   assert.match(html, /<kbd data-keys="shift\+o" aria-hidden="true">Ctrl Shift O<\/kbd>/);
   assert.match(html, /<kbd data-keys="k" aria-hidden="true">Ctrl K<\/kbd>/);
   assert.match(script, /if \(k === "o" && e\.shiftKey\) \{\n    e\.preventDefault\(\);\n    newChat\(true\);/);
-  assert.match(script, /\} else if \(k === "k" && !e\.shiftKey\) \{[\s\S]*?\$\("search"\)\.focus\(\);/);
+  assert.match(script, /\} else if \(k === "k" && !e\.shiftKey\) \{[\s\S]*?startSearch\(\);/);
+  assert.match(script, /function startSearch\(\) \{ \$\("side"\)\.classList\.add\("searching"\); \$\("search"\)\.focus\(\); \}/);
 });
 
 test("a message, a reply and a code block are laid out like ChatGPT's", () => {
@@ -375,10 +407,17 @@ test("the Updates panel shows the patch notes of the installed version, the upda
   assert.match(script, /function notesList\(notes\) \{\n  return `<ul class="notes">\$\{\(notes \|\| \[\]\)\.map\(n => `<li>\$\{esc\(n\)\}<\/li>`\)/);
 });
 
-test("everything the owner can change is behind a confirmation or a typed name", () => {
-  assert.match(script, /confirm\(`Delete \$\{CFG\.name\}/);
-  assert.match(script, /confirm\(`Set up \$\{SET\.address\}/);
+test("everything the owner can change is behind a confirmation or a typed name, asked in the page's own dialog", () => {
+  assert.match(script, /askConfirm\(\{ title: `Delete \$\{CFG\.name\} and every chat in it\?`/);
+  assert.match(script, /askConfirm\(\{ title: `Set up \$\{SET\.address\}/);
   assert.match(script, /SET\.confirm !== CFG\.name/);
+  // never the browser's own alert, confirm or prompt
+  assert.doesNotMatch(script, /(^|[^.\w])(alert|confirm|prompt)\(/m);
+  assert.doesNotMatch(script, /window\.(alert|confirm|prompt)/);
+  // the dialog: a title, a line about it, Cancel and the action (red when it can't be undone, with Cancel ready)
+  assert.match(html, /<dialog class="dlg small ask" id="askDlg"[^>]*>\s*<form method="dialog" class="ask-box">\s*<h2 id="askTitle"><\/h2>\s*<p id="askText"><\/p>\s*<div class="ask-acts"><button class="btn ghost" type="submit" value="no" id="askNo">Cancel<\/button><button class="btn primary" type="submit" value="yes" id="askYes">OK<\/button><\/div>/);
+  assert.match(lift("askConfirm"), /\$\(danger \? "askNo" : "askYes"\)\.focus\(\);/);
+  for (const what of ["Delete \"", "Move \"", "Discard your changes", "Use a limit reset now", "Cancel the move", "\"${baseOf(ed.path)}\" changed on your computer"]) assert.ok(script.includes("askConfirm({ title: `" + what) || script.includes('askConfirm({ title: "' + what), what);
 });
 
 test("user-controlled text reaches the page escaped", () => {
@@ -430,7 +469,7 @@ function picker(state, extra = {}) {
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
   const ctx = { TICK: "", I: { info: "", lock: "" }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = EFF.filter(e => e !== "ultracode"); const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
   return ctx;
 }
 
