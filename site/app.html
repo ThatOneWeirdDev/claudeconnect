@@ -427,7 +427,8 @@ svg{display:block;flex:none}
 .hero code{font-family:var(--mono);font-size:.875em;font-weight:500;background:var(--inline);box-shadow:inset 0 0 0 1px var(--inline-ring);padding:1px .3rem;border-radius:4px}
 .hero a{color:var(--link)}
 .main.is-empty .thread{display:none}
-.main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:56px;overflow-y:auto}
+/* ChatGPT's empty page: the greeting and the message box a little above the middle, the box's centre about 46% of the way down */
+.main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:calc(16vh + 56px);overflow-y:auto}
 .main.is-empty .hero{display:block}
 /* under the empty box, like ChatGPT's "Write or edit" and "Search the web" */
 .main.is-empty .legal{display:none}
