@@ -1,13 +1,12 @@
 {
   "name": "claudeconnect",
-  "version": "2.4.0",
-  "released": "2026-10-13",
+  "version": "2.5.0",
+  "released": "2026-10-14",
   "notes": [
-    "The page is sized like ChatGPT now: the sidebar, the 784-pixel message box with its 36-pixel buttons, the greeting, the suggestions lined up with the message box, and the Chat | Files switch all match ChatGPT's measurements, and the empty page sits centred the way ChatGPT's does.",
-    "No logo on the page any more, just the tab icon. It also shows at the top of the sidebar when the sidebar is folded away. Settings and the installer only ask for the tab icon.",
-    "Images, under New chat in the sidebar, opens ChatGPT's Images page. The file browser is opened from the Chat | Files switch at the top.",
-    "The file browser is no longer in Settings, since it has its own place on the home page.",
-    "The effort levels match what Claude Code itself lists for each model: Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 5.5 all have Low, Medium, High, Extra high and Max, so all four have Ultracode too. Ultracode is hidden if workflows are turned off in Claude Code on your computer."
+    "The empty page is just the greeting and the message box, centred in the window: the Write or edit, Search the web and Browse files rows under it are gone.",
+    "Files opens in place of the chat, so the sidebar stays and the Chat | Files switch doesn't move. Chat (or Esc) goes back, so the file browser has no close button. Picking a chat or New chat in the sidebar goes back too.",
+    "Effort is a slider in the model menu, from Faster to Smarter, with the model's default marked Recommended, instead of a list.",
+    "The send arrow has ChatGPT's weight, and icons take the colour of the text beside them, as ChatGPT's do."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
@@ -21,7 +20,7 @@
     "agent/trash.mjs": "98380aad5dee3b9a38882285df88d0f52126bf7444ed95b155a762ad97ed09dc",
     "agent/permit.mjs": "d6607a5da852305283dd8216b891f0d7925a1bc114c49dcf5226f59dfaebc1d6",
     "site/worker.js": "8a4fd8055e1fe95538c5bd7ff0bb541f55dbbac55cdd9eb09327126955c3b5ec",
-    "site/app.html": "b7eac2721b0aa68aa49b9e8ad1059b6838d8c277795f1586e56eee5ef859934f",
+    "site/app.html": "befaad92545ab1b7067fcd7a706f0828a5d7e194b53c95c90ccfb6fbe9ead88f",
     "site/version.js": "2c56b3032c090182dd54d5dd93151a7b401350b5bdf5aa67ed783ab8fcedee69",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
