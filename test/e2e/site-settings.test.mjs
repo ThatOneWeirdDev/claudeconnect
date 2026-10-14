@@ -22,7 +22,8 @@ test("a new name and logo take effect at once, on the page, the locked page and 
   // the page is served with it, with no redeploy
   const page = await (await s.asOwner("/")).text();
   assert.match(page, /<title>My Place<\/title>/);
-  assert.match(page, new RegExp(`<img src="/logo\\?v=${r.body.v}"`));
+  assert.match(page, new RegExp(`<img src="/favicon\\?v=${r.body.v}"`), "the page shows the tab icon, never a separate logo");
+  assert.doesNotMatch(page, /src="\/logo/);
   assert.match(page, new RegExp(`href="/favicon\\?v=${r.body.v}"`));
   assert.doesNotMatch(page, /"fable"/);
   const logo = await s.asOwner(`/logo?v=${r.body.v}`);

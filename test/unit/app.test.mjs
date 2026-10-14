@@ -35,7 +35,7 @@ test("the usage chart and token counting are gone", () => {
   assert.doesNotMatch(readFileSync(join(ROOT, "site", "worker.js"), "utf8"), /recordUsage|buildUsage|\/api\/usage/);
 });
 
-test("the model and effort are a pill in the message box, where ChatGPT has Think, and each model has the efforts it has", () => {
+test("the model and effort are a pill in the message box, where ChatGPT has Think, and every model has every effort", () => {
   // one pill with the model, then the effort in grey; no effort button or stairs anywhere else, and nothing of it at the top
   assert.match(html, /<div class="c-trail">\s*<button type="button" class="c-pill" id="modelBtn"[^>]*><svg[\s\S]*?<\/svg><span id="modelName">[^<]*<\/span><span class="sub" id="effortName">/);
   assert.doesNotMatch(/<header class="top">([\s\S]*?)<\/header>/.exec(html)[1], /modelBtn/);
@@ -44,21 +44,16 @@ test("the model and effort are a pill in the message box, where ChatGPT has Thin
   assert.match(script, /put\("effortName", EFF_LABEL\[e\]\)/);
   // a model with no effort setting has nothing after its name
   assert.match(script, /\$\("effortName"\)\.hidden = !effortsOf\(m\)\.length/);
-  // each model lists only the efforts it has: Low to Max on all, Ultracode on all but Haiku 5.5, and only when the computer's
-  // Claude Code knows it; the defaults are Claude Code's
-  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF_HAIKU", "medium"]]);
+  // as Claude Code's own model catalog (2.1.296) has them: all four models have Low to Max with Extra high, so Ultracode
+  // (Extra high with workflows) too, when the computer's Claude Code knows it and has workflows on; the defaults are its own
+  assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF", "medium"]]);
   assert.match(script, /const EFF = \["low", "medium", "high", "xhigh", "max", "ultracode"\];/);
-  assert.match(script, /const EFF_HAIKU = \["low", "medium", "high", "xhigh", "max"\];/);
   const worker = readFileSync(join(ROOT, "site", "worker.js"), "utf8");
-  assert.match(worker, /"claude-haiku-5-5": \{ name: "Haiku 5\.5", efforts: HAIKU_EFFORTS \}/);
-  // one it doesn't have runs as the highest it has below it: Ultracode picked on another model is Extra high on Haiku
-  const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
-  const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
-  const ctx = { DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: { "claude-haiku-5-5": "ultracode" }, state: { agent: { ultracode: true } } } };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = ["low", "medium", "high", "xhigh", "max"]; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor"].map(lift).join("") + "this.effortFor = effortFor; this.effortsOf = effortsOf; this.modelOf = modelOf;", ctx);
-  assert.deepEqual(JSON.parse(JSON.stringify(ctx.effortsOf(ctx.modelOf("claude-haiku-5-5")))), ["low", "medium", "high", "xhigh", "max"]);
-  assert.equal(ctx.effortFor("claude-haiku-5-5"), "xhigh");
-  assert.ok(ctx.effortsOf(ctx.modelOf("claude-opus-5-5")).includes("ultracode"));
+  assert.match(worker, /"claude-haiku-5-5": \{ name: "Haiku 5\.5", efforts: ALL_EFFORTS \}/);
+  const agentSrc = readFileSync(join(ROOT, "agent", "agent.mjs"), "utf8");
+  assert.match(agentSrc, /versionAtLeast\(CLAUDE_VERSION, "2\.1\.284"\) && workflowsOn\(\) \? \["ultracode"\]/);
+  assert.match(agentSrc, /CLAUDE_CODE_DISABLE_WORKFLOWS/);
+  assert.match(agentSrc, /s\.disableWorkflows === true/);
   assert.match(script, /e !== "ultracode" \|\| !!\(S\.state && S\.state\.agent && S\.state\.agent\.ultracode\)/);
   assert.doesNotMatch(html, /answers without an effort setting/);
 });
@@ -68,7 +63,7 @@ test("the model switcher's menu has an Effort section with every level, and Ultr
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
   const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = EFF.filter(e => e !== "ultracode"); const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
   let menu = ctx.popEffort();
   assert.match(menu, /^<hr><div class="mh">Effort<\/div>/, "under the models, after a line");
   assert.deepEqual([...menu.matchAll(/data-effort="(\w+)"/g)].map(m => m[1]), ["low", "medium", "high", "xhigh", "max", "ultracode"]);
@@ -96,9 +91,9 @@ test("the message box is one row like ChatGPT's: + on the left, the model and pe
   // "Ask ChatGPT", here with the site's name, kept up to date when it's renamed
   assert.match(html, /<textarea id="input" rows="1" placeholder="Ask __SITE_NAME__"/);
   assert.match(lift("applySite"), /\$\("input"\)\.placeholder = `Ask \$\{CFG\.name\}`;/);
-  assert.match(html, /\.composer\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;grid-template-areas:"lead main trail";[^}]*min-height:56px;padding:10px;border-radius:30px/);
+  assert.match(html, /\.composer\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto;grid-template-areas:"lead main trail";[^}]*min-height:52px;padding:8px;border-radius:26px/);
   // ChatGPT's round blue button, there whether or not there's anything to send
-  assert.match(html, /\.send\{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var\(--accent\);color:#fff;/);
+  assert.match(html, /\.send\{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var\(--accent\);color:#fff;/);
   assert.match(html, /\.send\[disabled\]\{background:var\(--accent\);color:#fff;opacity:1;cursor:default\}/);
   assert.match(html, /\.composer\.tall\{grid-template-areas:"chips chips chips" "main main main" "lead \. trail"/);
   assert.match(html, /\.msg \.think\{/);
@@ -204,7 +199,13 @@ test("the top bar has ChatGPT's switch (Chat | Files), the update button and the
   // the sidebar: the site's name as a wordmark, search and close beside it, New chat lit on a new chat, Files, then Recents
   const side = /<aside class="side"[\s\S]*?<\/aside>/.exec(html)[0];
   const s = id => side.indexOf(id);
-  assert.ok(s('id="brand"') < s('id="searchBtn"') && s('id="searchBtn"') < s('id="hideSide"') && s('id="hideSide"') < s('id="newChat"') && s('id="newChat"') < s('id="filesNav"') && s('id="filesNav"') < s(">Recents<"));
+  assert.ok(s('id="brand"') < s('id="searchBtn"') && s('id="searchBtn"') < s('id="hideSide"') && s('id="hideSide"') < s('id="newChat"') && s('id="newChat"') < s('id="imagesNav"') && s('id="imagesNav"') < s(">Recents<"));
+  // Images, as in ChatGPT's sidebar, goes to ChatGPT's own
+  assert.match(side, /<a class="nav-item" id="imagesNav" href="https:\/\/chatgpt\.com\/images" target="_blank" rel="noopener noreferrer"><svg[\s\S]*?<\/svg><span>Images<\/span><\/a>/);
+  // no logo on the page: the wordmark, and the tab icon only in the collapsed sidebar; no Files in Settings
+  assert.match(html, /\.brand>img,\.brand>svg\{display:none;/);
+  assert.match(lift("applySite"), /const want = `<img src="\/favicon\?v=\$\{esc\(site\.v\)\}" alt="">`;/);
+  assert.doesNotMatch(script, /imgField\("logo"|\["files", "Files"|filesPaneHtml/);
   assert.match(html, /\.brand\{display:flex;[^}]*font-size:18px;line-height:24px;font-weight:600/);
   assert.match(lift("renderBar"), /\$\("newChat"\)\.classList\.toggle\("on", !S\.chatId\);/);
   assert.match(html, /\.side:not\(\.searching\) #searchRow\{display:none\}/);
@@ -469,7 +470,7 @@ function picker(state, extra = {}) {
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
   const ctx = { TICK: "", I: { info: "", lock: "" }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
-  vm.runInNewContext(`const EFF = ${eff}; const EFF_HAIKU = EFF.filter(e => e !== "ultracode"); const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
+  vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
   return ctx;
 }
 
@@ -519,7 +520,6 @@ test("everything `<command> edit` asks about can also be changed on the page", (
   // what edit asks, and where the page has it
   const pairs = [
     [/Change the name\?/, /id="fName"/],
-    [/Change the logo\?/, /imgField\("logo"/],
     [/Change the tab icon\?/, /imgField\("favicon"/],
     [/Change the tab title/, /id="fTab"/],
     [/Change the theme\?/, /data-theme-set=/],

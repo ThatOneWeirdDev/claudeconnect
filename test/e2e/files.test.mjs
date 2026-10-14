@@ -164,20 +164,14 @@ test("an artifact remembers where it is in the working folder", async t => {
   assert.deepEqual(art.entries.map(e => e.name), ["chart.svg"]);
 });
 
-test("the file browser in the page: opened from Settings, full screen, showing pictures, text and songs, and moving to the Trash", { skip: !CHROME && "needs a Chromium" }, async t => {
+test("the file browser in the page: opened from the top switch, full screen, showing pictures, text and songs, and moving to the Trash", { skip: !CHROME && "needs a Chromium" }, async t => {
   const { site, ws } = await boot(t);
   const page = await openPage(site.origin + "/");
   t.after(() => page.close());
   await page.until(`window.document.getElementById("input")`, "the page");
   await page.until(`(async () => { const r = await fetch("/api/state"); return (await r.json()).agent.online; })()`, "the computer online");
-  await page.evaluate(`document.getElementById("profileBtn").click()`);
-  await page.until(`document.querySelector('[data-pm="settings"]')`, "the account menu");
-  await page.evaluate(`document.querySelector('[data-pm="settings"]').click()`);
-  await page.until(`document.querySelector('[data-tab-set="files"]')`, "Settings");
-  await page.evaluate(`document.querySelector('[data-tab-set="files"]').click()`);
-  await page.until(`document.querySelector('[data-act="files"]:not([disabled])')`, "the Files section");
-  await page.evaluate(`document.querySelector('[data-act="files"]').click()`);
-  await page.until(`!document.getElementById("files").hidden && !document.getElementById("setDlg").open`, "the file browser, over the whole page");
+  await page.evaluate(`document.querySelector('.top [data-view="files"]').click()`);
+  await page.until(`!document.getElementById("files").hidden`, "the file browser, over the whole page");
   const box = await page.evaluate(`(() => { const r = document.getElementById("files").getBoundingClientRect(); return [r.width, r.height, innerWidth, innerHeight]; })()`);
   assert.deepEqual([box[0], box[1]], [box[2], box[3]], "full screen");
   await page.until(`document.querySelectorAll("#fbList .fb-row").length === 7`, "the list, without the hidden file");
@@ -219,11 +213,11 @@ test("the file browser in the page: opened from Settings, full screen, showing p
   assert.equal(existsSync(join(ws, "photos", "dot.png")), false);
   assert.match(await page.evaluate(`document.getElementById("toast").textContent`), /Moved "dot\.png" to the Trash\./);
 
-  // back up, then closed: Settings again, where it was opened from
+  // back up, then closed: the chat again
   await page.evaluate(`document.querySelector('.crumbs [data-fb-go=""]').click()`);
   await page.until(`document.querySelector('[data-fb-open="notes.md"]')`, "the working folder again");
   await page.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-  await page.until(`document.getElementById("files").hidden && document.getElementById("setDlg").open`, "Settings again");
+  await page.until(`document.getElementById("files").hidden && !document.getElementById("setDlg").open`, "the chat again");
   assert.equal(await page.evaluate(`document.getElementById("app").inert`), false);
 });
 
@@ -304,8 +298,8 @@ test("a text file is edited in the page, saved with Save, keeping its line endin
   t.after(() => page.close());
   await page.until(`document.getElementById("input")`, "the page");
   await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
-  // the sidebar's Files opens it
-  await page.evaluate(`document.getElementById("filesNav").click()`);
+  // the top switch's Files opens it
+  await page.evaluate(`document.querySelector('.top [data-view="files"]').click()`);
   await page.until(`document.querySelector('[data-fb-place="downloads"]')`, "the places");
   await page.evaluate(`document.querySelector('[data-fb-place="downloads"]').click()`);
   await page.until(`document.querySelector('[data-fb-open="dos.txt"]')`, "Downloads");

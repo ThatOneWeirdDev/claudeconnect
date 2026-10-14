@@ -1059,13 +1059,14 @@ async function editSettings() {
 
   // Appearance
   const brand = readBrand();
-  if (await yes(`Change the logo? Now: ${brand.logo ? "your own" : "the built-in one"}.`)) {
-    const img = await askImage("Logo", "the current one", "the built-in one", "--logo", brand.logo);
-    if (JSON.stringify(img) !== JSON.stringify(brand.logo)) job.logo = img;
-  }
-  if (await yes(`Change the tab icon? Now: ${brand.favicon ? "your own" : "the logo"}.`)) {
-    const img = await askImage("Tab icon", "the current one", "the logo", "--favicon", brand.favicon);
-    if (JSON.stringify(img) !== JSON.stringify(brand.favicon)) job.favicon = img;
+  // (there's no logo any more: one set before is the tab icon until another is picked)
+  const icon = brand.favicon || brand.logo;
+  if (await yes(`Change the tab icon? Now: ${icon ? "your own" : "the built-in one"}.`)) {
+    const img = await askImage("Tab icon", "the current one", "the built-in one", "--favicon", icon);
+    if (JSON.stringify(img) !== JSON.stringify(icon)) {
+      job.favicon = img;
+      if (brand.logo) job.logo = null;
+    }
   }
   if (await yes(`Change the tab title, the text next to the tab icon? Now: ${old.tabTitle ? old.tabTitle : "the name"}.`)) {
     const t = cleanTab(String(await ask("  New tab title (leave it empty to use the name): ", "")));
@@ -1386,10 +1387,10 @@ for (;;) {
   break;
 }
 const priorBrand = mode === "update" && !legacy ? readBrand() : { logo: null, favicon: null };
-if (priorBrand.logo || priorBrand.favicon) note("Type default to go back to the built-in logo or tab icon.");
-const logo = await askImage("Logo", "the current one", "the built-in one", "--logo", priorBrand.logo);
-let favicon = await askImage("Tab icon", "the current one", logo ? "the logo" : "the built-in one", "--favicon", priorBrand.favicon);
-if (favicon && logo && favicon.b64 === logo.b64) favicon = null;
+if (priorBrand.logo || priorBrand.favicon) note("Type default to go back to the built-in tab icon.");
+// there's no logo on the site any more: a logo set before stays as the tab icon unless another is picked
+const logo = null;
+const favicon = await askImage("Tab icon", "the current one", "the built-in one", "--favicon", priorBrand.favicon || priorBrand.logo);
 const { prefix: npmPrefix } = shimDirs();
 let binDir = npmPrefix ? (IS_WIN ? npmPrefix : join(npmPrefix, "bin")) : "";
 let onPath = true;
