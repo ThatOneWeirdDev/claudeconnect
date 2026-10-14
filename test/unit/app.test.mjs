@@ -58,26 +58,30 @@ test("the model and effort are a pill in the message box, where ChatGPT has Thin
   assert.doesNotMatch(html, /answers without an effort setting/);
 });
 
-test("the model switcher's menu has an Effort section with every level, and Ultracode only when the computer has it", () => {
+test("the model switcher's menu has an Effort slider, Faster to Smarter, with every level, and Ultracode only when the computer has it", () => {
   const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
-  const ctx = { TICK: "", DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
+  const ctx = { TICK: "", I: { help: "?" }, DEFAULT_MODEL: "claude-opus-5-5", S: { efforts: {}, state: { agent: { online: true, ultracode: true } } }, modelNow: () => "claude-opus-5-5" };
   vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["modelOf", "effortsOf", "effortFor", "pmRow", "popEffort"].map(lift).join("") + "this.popEffort = popEffort;", ctx);
   let menu = ctx.popEffort();
-  assert.match(menu, /^<hr><div class="mh">Effort<\/div>/, "under the models, after a line");
-  assert.deepEqual([...menu.matchAll(/data-effort="(\w+)"/g)].map(m => m[1]), ["low", "medium", "high", "xhigh", "max", "ultracode"]);
-  assert.match(menu, /data-effort="medium"[^>]*aria-checked="true"/, "the model's default is ticked");
-  assert.match(menu, /<b>Extra high<\/b>/);
-  assert.match(menu, /<b>Ultracode<\/b><small>Extra high effort, and big tasks are split across many agents working at once\. Uses much more of your plan\.<\/small>/);
+  assert.match(menu, /^<hr><div class="eff" style="--i:1;--n:5"><div class="eff-h"><span>Effort<\/span><b id="effName">Medium<\/b>/, "under the models, after a line, with the model's default picked");
+  assert.match(menu, /<div class="eff-ends"><span>Faster<\/span><span>Smarter<\/span><\/div>/);
+  assert.match(menu, /<input type="range" id="effRange" min="0" max="5" step="1" value="1" aria-label="Effort" aria-valuetext="Medium" data-efforts="low medium high xhigh max ultracode">/);
+  assert.equal([...menu.matchAll(/<i class="(rec)?"/g)].length, 6, "a mark for each effort");
+  assert.match(menu, /<i class="" style="left:calc\(11px \+ \(100% - 22px\) \* 0 \/ 5\)"><\/i><i class="rec"/, "the default marked");
+  assert.match(menu, /<div class="eff-rec"><span style="left:calc\(11px \+ \(100% - 22px\) \* 1 \/ 5\);transform:translateX\(-50%\)">Recommended<\/span><\/div>/);
+  assert.match(menu, /data-tip="How hard it thinks before it answers\. Higher is smarter, but slower, and uses more of your plan\." data-tip-end data-tip-wrap>\?<\/span>/);
+  assert.match(menu, /<p class="eff-note">Extra high effort, and big tasks are split across many agents working at once\. Uses much more of your plan\.<\/p>/);
   ctx.S.efforts["claude-opus-5-5"] = "ultracode";
-  assert.match(ctx.popEffort(), /data-effort="ultracode"[^>]*aria-checked="true"/);
+  assert.match(ctx.popEffort(), /^<hr><div class="eff ultra" style="--i:5;--n:5">[\s\S]*<b id="effName">Ultracode<\/b>[\s\S]*value="5"/);
   ctx.S.state.agent.ultracode = false;
   menu = ctx.popEffort();
-  assert.doesNotMatch(menu, /ultracode/i, "a computer whose Claude Code doesn't know it");
-  assert.match(menu, /data-effort="xhigh"[^>]*aria-checked="true"/, "and a stored Ultracode runs as Extra high, as Claude Code does");
-  // a pick there changes the effort of the model that's picked, and the switcher shows it
-  assert.match(script, /const eff = e\.target\.closest\("\[data-effort\]"\);\n  if \(eff\) return pick\(\(\) => \{ S\.efforts\[modelNow\(\)\] = eff\.dataset\.effort;/);
+  assert.match(menu, /data-efforts="low medium high xhigh max"/, "a computer whose Claude Code doesn't know Ultracode");
+  assert.match(menu, /<b id="effName">Extra high<\/b>[\s\S]*value="3"/, "and a stored Ultracode runs as Extra high, as Claude Code does");
+  // moving it changes the effort of the model that's picked, there and then, and the menu stays open
+  assert.match(script, /\$\("modelMenu"\)\.addEventListener\("input", e => \{\n  const r = e\.target\.closest\("#effRange"\);\n  if \(!r\) return;\n  const x = r\.dataset\.efforts\.split\(" "\)\[\+r\.value\];\n  const had = switchNote\(\);\n  S\.efforts\[modelNow\(\)\] = x;\n  store\.set\("efforts", S\.efforts\);/);
+  assert.doesNotMatch(script, /closest\("\[data-effort\]"\)/);
   assert.match(lift("popModel"), /popEffort\(\) \+ noteHtml\(\)/);
 });
 
@@ -469,7 +473,7 @@ function picker(state, extra = {}) {
   const models = /const ALL_MODELS = (\[[\s\S]*?\n\]);/.exec(script)[1];
   const eff = /const EFF = (\[[^\]]*\]);/.exec(script)[1];
   const labels = /const EFF_LABEL = (\{[^}]*\});/.exec(script)[1];
-  const ctx = { TICK: "", I: { info: "", lock: "" }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
+  const ctx = { TICK: "", I: { info: "", lock: "", help: "" }, DEFAULT_MODEL: "claude-opus-5-5", CFG: { name: "Site" }, S: { model: "claude-fable-5-1", efforts: {}, state, ...extra }, esc: v => String(v), noteHtml: () => "", switchNote: () => "" };
   vm.runInNewContext(`const EFF = ${eff}; const EFF_LABEL = ${labels}; const ALL_MODELS = ${models}; const MODELS_BY_ID = Object.fromEntries(ALL_MODELS.map(m => [m.id, m]));` + ["agentNow", "fableOk", "paidModels", "modelNow", "modelOf", "effortsOf", "effortFor", "pmRow", "popEffort", "popModel"].map(lift).join("") + "this.popModel = popModel; this.modelNow = modelNow;", ctx);
   return ctx;
 }
@@ -480,7 +484,7 @@ test("Fable 5.1 is only in the model picker when there are usage credits to spen
   assert.match(p.popModel(), /<b>Fable 5\.1<\/b>[\s\S]*?<span class="tag">Uses usage credits<\/span>/);
   assert.equal(p.modelNow(), "claude-fable-5-1");
   // the models, then the picked model's efforts, as one menu
-  assert.match(p.popModel(), /^<div class="mh">Model<\/div>[\s\S]*data-model="claude-haiku-5-5"[\s\S]*<div class="mh">Effort<\/div>[\s\S]*data-effort="max"/);
+  assert.match(p.popModel(), /^<div class="mh">Model<\/div>[\s\S]*data-model="claude-haiku-5-5"[\s\S]*id="effRange"[^>]*data-efforts="low medium high xhigh max"/);
   for (const why of ["out", "off", "none", "site", "unknown"]) {
     p = picker({ agent: { online: true }, fable: { available: false, why } });
     assert.doesNotMatch(p.popModel(), /Fable/, why);

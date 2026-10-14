@@ -170,17 +170,22 @@ test("the file browser in the page: opened from the top switch, full screen, sho
   t.after(() => page.close());
   await page.until(`window.document.getElementById("input")`, "the page");
   await page.until(`(async () => { const r = await fetch("/api/state"); return (await r.json()).agent.online; })()`, "the computer online");
+  const sw = `JSON.stringify(document.querySelector(".top .views").getBoundingClientRect())`;
+  const before = await page.evaluate(sw);
   await page.evaluate(`document.querySelector('.top [data-view="files"]').click()`);
-  await page.until(`!document.getElementById("files").hidden`, "the file browser, over the whole page");
-  const box = await page.evaluate(`(() => { const r = document.getElementById("files").getBoundingClientRect(); return [r.width, r.height, innerWidth, innerHeight]; })()`);
-  assert.deepEqual([box[0], box[1]], [box[2], box[3]], "full screen");
+  await page.until(`!document.getElementById("files").hidden`, "the file browser, in place of the chat");
+  assert.equal(await page.evaluate(sw), before, "the Chat | Files switch stays where it is");
+  const box = await page.evaluate(`(() => { const f = document.getElementById("files").getBoundingClientRect(), m = document.getElementById("main").getBoundingClientRect(), t = document.querySelector(".top").getBoundingClientRect(); return [f.left === m.left, f.right === m.right, f.top === t.bottom, f.bottom === innerHeight]; })()`);
+  assert.deepEqual(box, [true, true, true, true], "the whole of the chat's place, under the top bar");
+  assert.equal(await page.evaluate(`getComputedStyle(document.getElementById("thread")).display`), "none");
   await page.until(`document.querySelectorAll("#fbList .fb-row").length === 7`, "the list, without the hidden file");
-  assert.equal(await page.evaluate(`document.getElementById("app").inert`), true, "what's under it can't be reached");
+  assert.equal(await page.evaluate(`document.getElementById("app").inert`), false, "the sidebar can still be used");
+  assert.equal(await page.evaluate(`document.querySelector('[data-fb="close"]')`), null, "no close button: the switch goes back");
   assert.equal(await page.evaluate(`document.querySelector(".crumbs").textContent`), "Working folder");
   assert.equal(await page.evaluate(`document.querySelector(".crumbs button").title`), "~/ws");
   // the places down the side, and ChatGPT's switch at the top with Files on
   assert.deepEqual(await page.evaluate(`[...document.querySelectorAll(".fb-place")].map(b => b.textContent)`), ["Working folder", "Home", "This computer"]);
-  assert.equal(await page.evaluate(`document.querySelector('#fbHead [data-view="files"]').classList.contains("on")`), true);
+  assert.equal(await page.evaluate(`document.querySelector('.top [data-view="files"]').getAttribute("aria-selected") === "true" && document.querySelector('.top [data-view="files"]').classList.contains("on")`), true);
   assert.match(await page.evaluate(`document.getElementById("fbFoot").textContent`), /^7 items, and 1 hidden$/);
 
   // hidden files, when asked
@@ -238,7 +243,7 @@ test("an artifact's Show in file browser opens the browser with it picked", { sk
   assert.equal(await page.evaluate(`document.querySelector(".fb-row.on b").textContent`), "chart.svg");
   await page.until(`(document.querySelector("#fbVBody img") || {}).naturalWidth === 40`, "the picture, loaded");
   // closed, the chat is back as it was, with the preview still open
-  await page.evaluate(`document.querySelector('[data-fb="close"]').click()`);
+  await page.evaluate(`document.querySelector('.top [data-view="chat"]').click()`);
   await page.until(`document.getElementById("files").hidden && !document.getElementById("panel").hidden`, "the chat and its preview");
 });
 
