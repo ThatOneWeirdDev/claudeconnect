@@ -88,7 +88,7 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   await s.click('[data-answer="n"]');
 
   // Cloudflare Access: one button straight to the Worker's Access tab, three short things to do there, and why it asks for a
-  // card. No claim link yet, and no other dashboard link
+  // card. Only that one link
   text = await s.card("Turn on Cloudflare Access", 60000);
   assert.match(text, /Zero Trust/);
   assert.match(text, /Free/);
@@ -97,22 +97,18 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.match(text, /won't be charged/);
   assert.match(text, /your own email address/);
   assert.deepEqual(JSON.parse(await s.page.evaluate(`JSON.stringify([...document.querySelectorAll("#card a")].map(a => a.href))`)), ["https://dash.cloudflare.com/acct-1/workers/services/view/my-site/production/access"]);
-  assert.equal(await s.page.evaluate(`document.querySelector("[data-claim]")`), null, "the claim link only comes once Access is on");
   assert.equal(await s.page.evaluate(`document.documentElement.scrollHeight <= innerHeight`), true, "it fits without scrolling");
   // Access can't be seen from the test, so after a while (CLAUDECONNECT_ACCESS_LATE_MS) there's a way on
   await s.page.until(`document.querySelector('[data-answer="skip"]')`, "the way on");
   await s.click('[data-answer="skip"]');
 
-  // then the claim link, as its own step
-  text = await s.card("Claim your site");
-  assert.match(text, /Access is on/);
-  const claim = await s.page.evaluate(`document.querySelector("[data-claim]").dataset.claim`);
-  assert.match(claim, /^https:\/\/my-site\.testacct\.workers\.dev\/\?claim=/);
-  await s.click("[data-claim]");
-
-  // nothing connects in the test, so it ends saying it will by itself, with the address to open
+  // no claim step: setup opens the site itself (not in the test), and nothing connects here, so it ends saying it will by itself.
+  // Open goes in with the one-time code that makes the first visit the owner's; the address shown is the plain one
   text = await s.card("Nearly done");
+  assert.doesNotMatch(text, /claim/i);
   assert.match(text, /https:\/\/my-site\.testacct\.workers\.dev/);
+  assert.match(await s.page.evaluate(`document.querySelector("#card a.btn").href`), /^https:\/\/my-site\.testacct\.workers\.dev\/\?claim=/);
+  assert.match(await s.page.evaluate(`document.querySelector("#card a.btn").textContent`), /Open My Site/);
   assert.equal(await s.exited, 0, s.out());
 
   const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));

@@ -359,7 +359,7 @@ function lockPage(state, lockName, lockMark, host, command) {
   const worker = escHtml(String(host || "").split(".")[0] || "your-site");
   const cmd = `<code>${escHtml(command)}</code>`;
   const dash = `https://dash.cloudflare.com/?to=/:account/workers/services/view/${encodeURIComponent(String(host || "").split(".")[0] || "")}/production/settings`;
-  const claimStep = `Open your claim link, the address that ends in <code>?claim=…</code>. Lost it? Run ${cmd} <code>claim</code> on your computer for a fresh one.`;
+  const claimStep = `Open the site with the link setup opened for you the first time (it ends in <code>?claim=…</code>). Lost it? Run ${cmd} <code>claim</code> on your computer for a new one.`;
   const copy = {
     "no-access": {
       title: "This site is locked",
@@ -372,7 +372,7 @@ function lockPage(state, lockName, lockMark, host, command) {
       ]
     },
     "bad-token": { title: "Sign in again", text: "Your Cloudflare Access sign-in couldn't be verified. Reload the page to sign in again.", steps: null },
-    "unclaimed": { title: "This site has no owner yet", text: "Access is on, but nobody has claimed the site, so it stays closed to everyone.", steps: [claimStep] },
+    "unclaimed": { title: "Almost ready", text: "Access is on, but the site doesn't know it's yours yet, so it stays closed to everyone.", steps: [claimStep] },
     "denied": {
       title: "You don't have access",
       text: "This site belongs to a different account.",

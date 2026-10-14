@@ -155,7 +155,7 @@ function shown(q, v) {
   if (q.kind === "yesno") return /^y/i.test(v) ? (q.yes || "Yes") : (q.no || "No");
   if (q.kind === "choice") { const o = (q.options || []).find(o => String(o.value) === String(v)); return o ? o.label : v; }
   if (q.kind === "image") return v ? (/^(default|none)$/i.test(v) ? "The built-in one" : v.split(/[\\/]/).pop().replace(/^[0-9a-f]{8}-/, "")) : (q.keepLabel || "Kept as it is");
-  if (q.kind === "continue" || q.kind === "access" || q.kind === "claim") return "";
+  if (q.kind === "continue" || q.kind === "access") return "";
   return v || (q.def ? String(q.def) : "");
 }
 
@@ -188,7 +188,6 @@ function askHtml(q) {
   }
   if (q.kind === "continue") return head + notesHtml() + `<div class="row"><button type="button" class="primary" data-answer="">${esc(q.button || "Continue")}</button>${q.link ? `<a class="btn" href="${esc(q.link)}" target="_blank" rel="noopener noreferrer">${esc(q.linkLabel || "Open")} ${ICON.ext}</a>` : ""}${q.skip ? `<button type="button" class="btn" data-answer="s">${esc(q.skip)}</button>` : ""}</div>`;
   if (q.kind === "access") return accessHtml(q);
-  if (q.kind === "claim") return claimHtml(q);
   // text
   return head + warnHtml() + `<form data-text><label class="field" for="text">${esc(q.label || q.title)}</label><input type="text" id="text" autocomplete="off" spellcheck="false" value="${esc(q.def || "")}" placeholder="${esc(q.placeholder || "")}"><div class="row" style="margin-top:14px"><button type="submit" class="primary">${esc(q.button || "Continue")}</button></div></form>`;
 }
@@ -209,27 +208,19 @@ function accessHtml(q) {
   <div class="wait"><span class="spin"></span><span>${late ? "Still waiting for Access to be on." : "Waiting for Access to be on. This moves on by itself."}</span>${late ? `<button type="button" data-answer="skip" style="margin-left:auto">It's on. Continue</button>` : ""}</div>`;
 }
 
-// The claim link, offered only once Access is on: it makes the site yours.
-function claimHtml(q) {
-  return `<div class="big-ok">${ICON.check}</div><h2>${esc(q.title || "Claim your site")}</h2>
-  <p class="help">Access is on. Last step: open your claim link and sign in with the same email address. That makes the site yours.</p>
-  <div class="row"><button type="button" class="primary" data-claim="${esc(q.claimLink)}">Open my claim link ${ICON.ext}</button></div>
-  <p class="help" style="margin:14px 0 0;font-size:13px">The link works once. After that, your site opens for you and nobody else.</p>`;
-}
-
 function render() {
   $("steps").innerHTML = stepsHtml();
   const card = $("card");
   let html = "";
   const e = S.end;
   if (e && e.type === "done") {
-    html = `<div class="big-ok">${ICON.check}</div><h2>${esc(e.title || "All set")}</h2><p class="help">${esc(e.text || "")}</p>${e.site ? `<div class="linkbox">${esc(e.site)}</div><div class="row"><a class="btn primary" href="${esc(e.site)}" target="_blank" rel="noopener noreferrer">Open ${esc(CFG.title)} ${ICON.ext}</a></div>` : ""}${e.extra ? `<p class="help" style="margin:16px 0 0;font-size:14px">${esc(e.extra)}</p>` : ""}<p class="help" style="margin:16px 0 0;font-size:13px">You can close this tab.</p>`;
+    html = `<div class="big-ok">${ICON.check}</div><h2>${esc(e.title || "All set")}</h2><p class="help">${esc(e.text || "")}</p>${e.site ? `<div class="linkbox">${esc(e.site)}</div><div class="row"><a class="btn primary" href="${esc(e.open || e.site)}" target="_blank" rel="noopener noreferrer">Open ${esc(e.name || CFG.title)} ${ICON.ext}</a></div>` : ""}${e.extra ? `<p class="help" style="margin:16px 0 0;font-size:14px">${esc(e.extra)}</p>` : ""}<p class="help" style="margin:16px 0 0;font-size:13px">You can close this tab.</p>`;
   } else if (e && e.type === "fatal") {
     html = `<h2>Setup stopped</h2><div class="alert err">${esc(e.text)}</div><p class="help">Nothing else was changed. Run the setup again when you're ready.</p>`;
   } else if (e && e.type === "cancelled") {
     html = `<h2>Setup cancelled</h2><p class="help">Run it again whenever you like.</p>`;
   } else if (S.ask) {
-    html = (["continue", "access", "claim"].includes(S.ask.kind) ? "" : notesHtml()) + askHtml(S.ask);
+    html = (["continue", "access"].includes(S.ask.kind) ? "" : notesHtml()) + askHtml(S.ask);
   } else if (S.special && S.special.type === "online") {
     html = `<h2>${esc(S.special.title || "Almost there")}</h2>${notesHtml()}<div class="wait"><span class="spin"></span><span>${esc(S.special.text || "")}</span></div>`;
   } else {
@@ -279,11 +270,6 @@ $("card").addEventListener("click", async ev => {
   }
   if (ev.target.closest("[data-send-pick]") && S.pick != null) return answer(S.pick);
   if (ev.target.closest("[data-file]")) return $("file").click();
-  const c = ev.target.closest("[data-claim]");
-  if (c) {
-    window.open(c.dataset.claim, "_blank", "noopener");
-    return answer("");
-  }
 });
 $("card").addEventListener("change", async ev => {
   if (ev.target.id !== "file" || !ev.target.files[0]) return;

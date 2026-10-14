@@ -56,7 +56,8 @@ test("a signed-in but unclaimed site tells its owner how to claim it, and lets n
   t.after(() => s.stop());
   const p = await page(s);
   assert.equal(p.status, 401);
-  assert.match(p.html, /This site has no owner yet/);
+  assert.match(p.html, /Almost ready/);
+  assert.match(p.html, /doesn't know it's yours yet/);
   assert.match(p.html, /I'm the owner/);
   assert.match(p.html, /\?claim=…/);
   assert.equal((await s.api("/api/state")).status, 401);

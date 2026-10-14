@@ -1569,8 +1569,7 @@ async function accessIsOn() {
   }
 }
 if (mode === "fresh" && UI) {
-  // Two steps in the window, each fitting on the screen: turning Access on (the page notices by itself), then the claim link,
-  // which is only offered once Access is on.
+  // Turning Access on, in one step that fits on the screen; the page notices by itself when it's done.
   step("Turning on Cloudflare Access");
   let watching = true;
   const startedAt = Date.now();
@@ -1591,18 +1590,18 @@ if (mode === "fresh" && UI) {
   })();
   await ask("", "", { kind: "access", title: "Turn on Cloudflare Access", accessPage });
   watching = false;
-  step("Claiming your site");
-  await ask("", "", { kind: "claim", title: "Claim your site", claimLink });
+  // No claim step to go through: once Access is on, the site opens with its one-time code, and that first visit makes it
+  // yours. The site still needs it: it's how it knows which Access sign-in is yours, so a sign-in from anyone else's Cloudflare
+  // account is never trusted (before Access was on, or if it's ever turned off).
+  if (!process.env.CLAUDECONNECT_GUI_NO_OPEN) openUrl(claimLink);
 } else if (mode === "fresh") {
   step("Turning on Cloudflare Access");
-  console.log(`  1. Turn on Cloudflare Access on the page that's opening:`);
-  console.log(`     ${teal(accessPage)}`);
-  console.log(`  2. Then open your claim link (one time only):`);
-  console.log(`     ${teal(claimLink)}`);
-  note("Until you open it, the site shows a locked page to everyone, you included.");
+  console.log(`  Turn on Cloudflare Access on the page that's opening:`);
+  console.log(`  ${teal(accessPage)}`);
   openUrl(accessPage);
-  const enter = await ask("\n  Press Enter once Access is on, and the claim link will open. ", "");
+  const enter = await ask("\n  Press Enter once Access is on, and your site will open. ", "");
   if (tty && enter.toLowerCase() !== "s") openUrl(claimLink);
+  note(`The first time, open it with this link, so it knows it's yours: ${claimLink}`);
 } else {
   note(`If the site ever says "Finish setup", open this one-time claim link: ${claimLink}`);
 }
@@ -1623,7 +1622,7 @@ function connected() {
 }
 
 if (UI) {
-  UI.show("online", { title: "Almost there", text: `Waiting for ${displayName} to come online. Once you've claimed the site, this takes a few seconds.` });
+  UI.show("online", { title: `Opening ${displayName}`, text: `${displayName} is opening in your browser. Sign in there with your email, and it comes online a few seconds later.` });
   let online = false;
   const until = Date.now() + (Number(process.env.CLAUDECONNECT_CONNECT_MS) || 180000);
   while (!online && Date.now() < until) {
@@ -1633,8 +1632,11 @@ if (UI) {
   await quit(0, {
     type: "done",
     title: online ? "All set" : "Nearly done",
-    text: online ? `${displayName} is online. Open it on any device: your phone, a tablet, another computer.` : `${displayName} connects by itself once you've claimed the site. Then open it on any device.`,
+    text: online ? `${displayName} is online. Open it on any device: your phone, a tablet, another computer.` : `${displayName} comes online by itself once you've opened it and signed in with your email.`,
     site,
+    // the first visit goes in with the one-time code (see above); after that it's the plain address
+    open: mode === "fresh" ? claimLink : site,
+    name: displayName,
     extra: `On this computer, ${command} help lists the commands. The site says when a new version is out.`
   });
 } else if (tty) {
@@ -1645,8 +1647,8 @@ if (UI) {
     process.stdout.write(".");
     online = connected();
   }
-  console.log(online ? "\n\n" + bold("All set. ") + `Open ${teal(site)} on any device.` : `\n\n  It'll connect on its own once you've opened the claim link. Then open ${teal(site)} on any device.`);
+  console.log(online ? "\n\n" + bold("All set. ") + `Open ${teal(site)} on any device.` : `\n\n  It comes online by itself once you've opened it and signed in. Then open ${teal(site)} on any device.`);
 } else {
-  console.log(`\n  ${mode === "fresh" ? "Once Access is on and you've opened the claim link, open" : "Open"} ${site} on any device.`);
+  console.log(`\n  ${mode === "fresh" ? `Once Access is on, open ${claimLink} the first time; after that, open` : "Open"} ${site} on any device.`);
 }
 console.log(dim(`\n  ${command} help lists the commands. ${command} update brings it up to date, and ${site} will say when a new version is out.\n`));
