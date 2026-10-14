@@ -114,6 +114,46 @@ function openUrl(u) {
   } catch {}
 }
 
+// A Chromium-family browser as a plain window (`--app`): no tabs, no address bar, so the setup feels like a small app rather
+// than a web page. It's thrown away when it's closed; nothing is installed for it. Returns false when there's no such browser,
+// and then the setup opens in the normal browser instead.
+function openApp(u) {
+  const run = (cmd, args) => {
+    try {
+      const c = spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true });
+      let failed = false;
+      c.on("error", () => (failed = true));
+      c.unref();
+      return !failed;
+    } catch {
+      return false;
+    }
+  };
+  const args = [`--app=${u}`, "--window-size=820,720", "--new-window"];
+  if (process.platform === "darwin") {
+    const apps = ["Google Chrome", "Microsoft Edge", "Brave Browser", "Chromium", "Vivaldi"];
+    for (const app of apps) {
+      if (!existsSync(`/Applications/${app}.app`) && !existsSync(join(HOME, "Applications", `${app}.app`))) continue;
+      if (run("open", ["-na", app, "--args", ...args])) return true;
+    }
+    return false;
+  }
+  if (IS_WIN) {
+    const PF = [process.env["ProgramFiles"], process.env["ProgramFiles(x86)"], process.env["LocalAppData"]].filter(Boolean);
+    const rels = [["Google", "Chrome", "Application", "chrome.exe"], ["Microsoft", "Edge", "Application", "msedge.exe"], ["BraveSoftware", "Brave-Browser", "Application", "brave.exe"]];
+    for (const base of PF) for (const rel of rels) {
+      const exe = join(base, ...rel);
+      if (existsSync(exe) && run(exe, args)) return true;
+    }
+    return false;
+  }
+  for (const cmd of ["google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"]) {
+    const w = spawnSync("sh", ["-c", `command -v ${cmd}`], { encoding: "utf8" });
+    if (w.status === 0 && String(w.stdout).trim() && run(cmd, args)) return true;
+  }
+  return false;
+}
+
 async function ask(question, def, spec) {
   if (UI) return UI.ask(guiQuestion(question, def, spec));
   if (!tty) return def;
@@ -189,8 +229,8 @@ async function startWindow(title, version) {
     const text = e instanceof GuiStop ? e.message : `Something unexpected went wrong: ${String((e && e.message) || e).slice(0, 300)}`;
     quit(1, { type: "fatal", text });
   });
-  rawLog(`\n  ${bold("The setup is open in your browser.")} If it didn't open, go to:\n  ${teal(UI.url)}\n` + dim("  Keep this window open until it's done. Ctrl+C here cancels it."));
-  if (!process.env.CLAUDECONNECT_GUI_NO_OPEN) openUrl(UI.url);
+  rawLog(`\n  ${bold("The setup is open in its own window.")} If it didn't open, go to:\n  ${teal(UI.url)}\n` + dim("  Keep this terminal open until it's done. Ctrl+C here cancels it."));
+  if (!process.env.CLAUDECONNECT_GUI_NO_OPEN && !openApp(UI.url)) openUrl(UI.url);
 }
 
 async function cf(method, path, body) {
@@ -247,8 +287,11 @@ async function setUpClaudeCode(name = "") {
   }
   note(`The command-line tool ${claude.version} is installed.`);
   if (!signedIn(claude.cmd)) {
-    note("Sign in to your claude.ai account in the browser window that opens.");
-    await runLive(`${claude.cmd} auth login`);
+    note("Sign in to your claude.ai account in the browser window that opens. Finish there, then come back here.");
+    // On the terminal, like the Cloudflare sign-in: signing in is interactive and opens a browser, and piping its output
+    // through the setup window crashes it (Claude Code is a Bun build, which aborts with EINVAL kqueue on macOS when its
+    // output isn't a real terminal).
+    sh(`${claude.cmd} auth login`);
     if (!signedIn(claude.cmd)) fail("It isn't signed in yet. Run this again when you're ready to sign in.");
   }
   note("Signed in with your plan.");

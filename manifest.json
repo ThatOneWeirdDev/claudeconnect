@@ -1,13 +1,14 @@
 {
   "name": "claudeconnect",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "released": "2026-10-14",
   "notes": [
-    "The empty page's greeting and message box sit higher, where ChatGPT's do: the box's middle is a little above the middle of the window (about 46% of the way down) instead of below it."
+    "Signing in during setup no longer crashes. The claude.ai sign-in now runs in your terminal, the same as the Cloudflare one, so opening a browser to sign in works (it was failing with an \"EINVAL kqueue\" error on Macs).",
+    "The setup window opens as its own plain window, without browser tabs or an address bar, when you have a Chromium-based browser (Chrome, Edge, Brave). It's thrown away when it closes and installs nothing. Without one of those browsers it opens in your normal browser as before."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "4f7ed951ab42fec9ea84f826a25f1c32b3c412ac009d01ed451e38d28619e574",
+    "installer.mjs": "9042221219ee23cbac6272f8bed3f829e98be1f670c1c515730bd24cf576de31",
     "setup.mjs": "d90558814e509e9718594c030bb1df24b393df936820ff06288797d2da34781e",
     "setup.html": "e29224d5a89236379ba1cfe93abc997d4ffa0e611195690d7617589345972c6c",
     "agent/agent.mjs": "a810c070ddb40150446a8d0fc15ec50f5c61102d8c7bf65a5a82c2517b43639a",
