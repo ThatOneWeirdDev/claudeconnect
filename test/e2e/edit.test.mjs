@@ -59,7 +59,7 @@ const reservePort = () =>
   });
 
 // Everything up to the address question, left as it is.
-const KEEP = () => [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/tab title/, ""], [/theme/, ""], [/log in/, ""], [/working folder,/, ""], [/usage credits from the site/, ""]];
+const KEEP = () => [[/Change the name\?/, ""], [/tab icon\?/, ""], [/tab title/, ""], [/theme/, ""], [/log in/, ""], [/working folder,/, ""], [/usage credits from the site/, ""]];
 
 // A site, a computer using it, and a stand-in for Cloudflare's API, for the address and delete.
 async function withCloudflare(t, env = {}) {
@@ -98,8 +98,7 @@ test("edit asks about every setting the site's Settings has, shows what will cha
   const r = await converse(cmd, pc.env, [
     [/Change the name\? Now: Test Site\. \[y\/N\]/, "y"],
     [/New name:/, "Better Site"],
-    [/Change the logo\? Now: the built-in one\. \[y\/N\]/, ""],
-    [/Change the tab icon\? Now: the logo\. \[y\/N\]/, "n"],
+    [/Change the tab icon\? Now: the built-in one\. \[y\/N\]/, "n"],
     [/Change the tab title, the text next to the tab icon\? Now: the name\. \[y\/N\]/, "y"],
     [/New tab title \(leave it empty to use the name\):/, "Better tab"],
     [/Change the theme\? Now: Dark\. \[y\/N\]/, "y"],
@@ -114,7 +113,7 @@ test("edit asks about every setting the site's Settings has, shows what will cha
     [/Delete Test Site\? This removes the site and every chat in it/, ""],
     [/name: Better Site[\s\S]*theme: Light[\s\S]*working folder: ~\/projects[\s\S]*usage credits from the site: not used[\s\S]*Save these changes\? \[Y\/n\]/, ""]
   ]);
-  assert.equal(r.asked, 17, r.out);
+  assert.equal(r.asked, 16, r.out);
   assert.doesNotMatch(r.out, /usage credit balance|which of Claude Code's chats/, "neither is a setting anymore");
   assert.equal(r.status, 0, r.out);
   assert.doesNotMatch(r.out, /Fable 5\.1 in the model picker/, "Fable 5.1 shows whenever there are usage credits, so there's nothing to ask");
@@ -139,9 +138,9 @@ test("edit asks about every setting the site's Settings has, shows what will cha
   assert.deepEqual([computer.workspace, computer.plan], [join(pc.home, "projects"), undefined], "the program here runs with them");
 
   // saying no to everything changes nothing
-  const none = await converse(cmd, pc.env, [[/Change the name\?/, ""], [/logo/, ""], [/tab icon/, ""], [/tab title/, ""], [/theme/, ""], [/log in/, ""], [/working folder,/, ""], [/usage credits from the site/, ""], [/address/, ""], [/Delete/, ""]]);
+  const none = await converse(cmd, pc.env, [[/Change the name\?/, ""], [/tab icon\?/, ""], [/tab title/, ""], [/theme/, ""], [/log in/, ""], [/working folder,/, ""], [/usage credits from the site/, ""], [/address/, ""], [/Delete/, ""]]);
   assert.equal(none.status, 0, none.out);
-  assert.equal(none.asked, 10, none.out);
+  assert.equal(none.asked, 9, none.out);
   assert.match(none.out, /Nothing changed\./);
   assert.equal(pc.deploys().length, 1);
 });

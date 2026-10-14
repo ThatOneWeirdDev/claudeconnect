@@ -73,9 +73,7 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.match(text, /That name won't work/);
   await s.type("My Site");
 
-  // the logo and the tab icon are optional
-  await s.card("Pick a logo");
-  await s.click('[data-answer=""]');
+  // the tab icon is optional
   await s.card("Pick a tab icon");
   await s.click('[data-answer=""]');
 
@@ -117,9 +115,7 @@ test("when the setup stops, the window says why", { skip: !CHROME && "needs a Ch
   const s = await setUp(t, {}, ["--name", "Broken Site", "--no-autostart", "--paid"]);
   // the deploy fails: Cloudflare turned it down
   writeFileSync(join(s.home, "fail-deploy"), "");
-  await s.card("Pick a logo", 60000);
-  await s.click('[data-answer=""]');
-  await s.card("Pick a tab icon");
+  await s.card("Pick a tab icon", 60000);
   await s.click('[data-answer=""]');
   const text = await s.card("Setup stopped", 90000);
   assert.match(text, /Cloudflare didn't accept the site/);

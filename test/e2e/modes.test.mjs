@@ -66,7 +66,7 @@ test("every permission mode is passed on, anything else falls back, and there is
 });
 const pick = r => ({ mode: r.mode, perm: r.perm });
 
-test("each model takes the efforts it has, and Ultracode goes to a computer that knows it, or becomes Extra high", async t => {
+test("every model takes every effort, and Ultracode goes to a computer that knows it, or becomes Extra high", async t => {
   const { s, agent } = await ready(t, { caps: ["update", "admin", "limits", "modes", "history", "ultracode"] });
   assert.equal((await s.api("/api/state")).body.agent.ultracode, true);
   const run = async body => {
@@ -77,11 +77,8 @@ test("each model takes the efforts it has, and Ultracode goes to a computer that
     return [r.model, r.effort];
   };
   for (const model of ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]) {
-    for (const effort of ["low", "medium", "high", "xhigh", "max"]) assert.deepEqual(await run({ model, effort }), [model, effort]);
+    for (const effort of ["low", "medium", "high", "xhigh", "max", "ultracode"]) assert.deepEqual(await run({ model, effort }), [model, effort]);
   }
-  for (const model of ["claude-opus-5-5", "claude-sonnet-5-5"]) assert.deepEqual(await run({ model, effort: "ultracode" }), [model, "ultracode"]);
-  // Haiku 5.5 has no Ultracode: it runs as the effort under it, as Claude Code does
-  assert.deepEqual(await run({ model: "claude-haiku-5-5", effort: "ultracode" }), ["claude-haiku-5-5", "xhigh"]);
   assert.deepEqual(await run({ model: "claude-haiku-5-5", effort: "turbo" }), ["claude-haiku-5-5", null], "an effort that doesn't exist isn't passed on");
 
   const old = await startSite({ appVersion: "1.3.1" });

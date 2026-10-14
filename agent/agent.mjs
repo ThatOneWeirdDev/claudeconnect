@@ -1544,10 +1544,22 @@ function handleFiles(m) {
   }
 }
 
+// Ultracode (Extra high with multi-agent workflows) needs workflows, which can be turned off in Claude Code's settings or
+// by an environment variable; then it isn't offered on the site.
+function workflowsOn() {
+  if (/^(1|true|yes)$/i.test(String(process.env.CLAUDE_CODE_DISABLE_WORKFLOWS || ""))) return false;
+  try {
+    const s = JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || join(os.homedir(), ".claude"), "settings.json"), "utf8"));
+    return !(s && s.disableWorkflows === true);
+  } catch {
+    return true;
+  }
+}
+
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `files` the file browser.
 function helloMessage() {
   // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
-  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") ? ["ultracode"] : [])];
+  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()], command: COMMAND, site: siteName() };
 }
 

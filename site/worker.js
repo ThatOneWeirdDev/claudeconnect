@@ -12,8 +12,6 @@ const ISS_RE = /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/;
 // "ultracode" is xhigh effort plus Claude Code's multi-agent workflows for the reply (`--effort ultracode`). A Claude Code
 // too old to know it ignores it and uses its default effort.
 const ALL_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultracode"];
-// Haiku 5.5 has Low to Max, and no Ultracode.
-const HAIKU_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 // Every message runs as Claude Code ("code"). Its permission mode says how freely it acts: "auto" is whatever the computer is set to (normally auto), "plan" only plans, and
 // "default" asks on the site before anything that needs permission (only when the computer can ask, cap "ask").
 const PERMS = ["auto", "acceptEdits", "plan", "default"];
@@ -21,7 +19,7 @@ const MODELS = {
   "claude-fable-5-1": { name: "Fable 5.1", efforts: ALL_EFFORTS },
   "claude-opus-5-5": { name: "Opus 5.5", efforts: ALL_EFFORTS },
   "claude-sonnet-5-5": { name: "Sonnet 5.5", efforts: ALL_EFFORTS },
-  "claude-haiku-5-5": { name: "Haiku 5.5", efforts: HAIKU_EFFORTS }
+  "claude-haiku-5-5": { name: "Haiku 5.5", efforts: ALL_EFFORTS }
 };
 const DEFAULT_MODEL = "claude-opus-5-5";
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,7 +79,6 @@ const ACK_WITHIN = 30000;
 const QUIET_LIMIT = 10 * 60000;
 const MAX_ARTIFACT = 1900000;
 const MIME = { html: "text/html", htm: "text/html", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", ico: "image/x-icon", pdf: "application/pdf", md: "text/markdown", markdown: "text/markdown", txt: "text/plain", csv: "text/csv", json: "application/json", js: "text/javascript", mjs: "text/javascript", ts: "text/plain", tsx: "text/plain", jsx: "text/plain", css: "text/css", py: "text/plain", java: "text/plain", c: "text/plain", cpp: "text/plain", h: "text/plain", cs: "text/plain", go: "text/plain", rs: "text/plain", rb: "text/plain", php: "text/plain", sh: "text/plain", ps1: "text/plain", bat: "text/plain", sql: "text/plain", yml: "text/plain", yaml: "text/plain", toml: "text/plain", xml: "text/xml", ini: "text/plain", log: "text/plain", tex: "text/plain", kt: "text/plain", swift: "text/plain", lua: "text/plain", r: "text/plain", vue: "text/plain", svelte: "text/plain" };
-const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="m-bg" width="64" height="64" rx="16"/><circle class="m-fg" cx="29" cy="29" r="12.5" fill="none" stroke-width="6.5"/><path class="m-fg" d="M41.5 29v22" stroke-width="6.5" stroke-linecap="round"/><path class="m-fg" d="M36 45h11" stroke-width="5" stroke-linecap="round"/></svg>`;
 
 const certCache = new Map();
 const keyCache = new Map();
@@ -397,7 +394,8 @@ const PAGE_HEADERS = {
 
 // `site` is the site's name and images as they are now (see siteSettings in the Durable Object).
 function appPage(env, site) {
-  const mark = site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK;
+  // no logo on the page: the collapsed sidebar shows the tab icon
+  const mark = `<img src="/favicon?v=${site.v}" alt="">`;
   const cfg = JSON.stringify({ name: site.name, tab: site.tab || "", command: site.command || commandName(env), version: appVersion(env) }).replace(/</g, "\\u003c");
   const html = APP_HTML.split("__TAB_TITLE__").join(escHtml(site.tab || site.name)).split("__SITE_NAME__").join(escHtml(site.name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg).split('href="/favicon"').join(`href="/favicon?v=${site.v}"`);
   return new Response(html, { headers: PAGE_HEADERS });
@@ -493,7 +491,7 @@ async function handle(req, env, ctx) {
     if (!a.ok) {
       if (url.pathname.startsWith("/api/") || isAgent) return json({ error: "Locked", state: a.state }, 401);
       const site = await siteOf(env, hub);
-      return lockPage(a.state, site.name, site.logo ? `<img src="/logo?v=${site.v}" alt="">` : DEFAULT_MARK, url.hostname, site.command || commandName(env));
+      return lockPage(a.state, site.name, `<img src="/favicon?v=${site.v}" alt="">`, url.hostname, site.command || commandName(env));
     }
     if (a.exp > notedExp) {
       notedExp = a.exp;

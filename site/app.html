@@ -90,25 +90,23 @@ button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;background:none;border:0;padding:0}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:8px}
 svg{display:block;flex:none}
-.m-bg{fill:var(--text)}.m-fg{stroke:var(--surface)}
 
 /* ---- layout and sidebar */
-.app{--side-w:260px;--panel-w:0px;display:grid;grid-template-columns:var(--side-w) minmax(0,1fr) var(--panel-w);height:100vh;height:100dvh}
+.app{--side-w:clamp(260px,23.5vw,352px);--panel-w:0px;display:grid;grid-template-columns:var(--side-w) minmax(0,1fr) var(--panel-w);height:100vh;height:100dvh}
 .app.panel-open{--panel-w:min(50vw,860px)}
 .side{grid-column:1;background:var(--surface-2);display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid var(--border-0)}
-.side-top{flex:none;display:flex;align-items:center;gap:2px;height:56px;padding:0 8px 0 10px}
+.side-top{flex:none;display:flex;align-items:center;gap:2px;height:56px;padding:0 8px 0 12px}
 /* the site's name as a wordmark, like "ChatGPT" at the top of its sidebar; a logo of your own goes before it */
-.brand{display:flex;align-items:center;gap:8px;min-width:0;height:36px;margin-right:auto;padding:0 8px;border-radius:8px;color:var(--text);text-decoration:none;font-size:18px;line-height:24px;font-weight:600;letter-spacing:-.01em}
+.brand{display:flex;align-items:center;gap:8px;min-width:0;height:36px;margin-right:auto;padding:0 9px;border-radius:8px;color:var(--text);text-decoration:none;font-size:18px;line-height:24px;font-weight:600;letter-spacing:-.01em}
 .brand:hover{background:var(--hover)}
-.brand>img{width:24px;height:24px;border-radius:6px;object-fit:contain;flex:none}
-.brand>svg{display:none;width:24px;height:24px}
+.brand>img,.brand>svg{display:none;width:24px;height:24px;border-radius:6px;object-fit:contain;flex:none}
 .brand>span:not(.brand-open){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand-open{display:none}
 .icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:8px;color:var(--text);flex:none}
 .icon-btn:hover,.icon-btn[aria-expanded="true"]{background:var(--hover)}
 .icon-btn svg{width:20px;height:20px}
-.side-nav{display:flex;flex-direction:column;gap:1px;padding-top:2px}
-.nav-item{display:flex;align-items:center;gap:10px;min-height:38px;margin:0 8px;padding:0 10px;border-radius:10px;font-size:14px;line-height:20px;color:var(--nav);text-align:left;cursor:pointer}
+.side-nav{display:flex;flex-direction:column;gap:1px;padding-top:4px}
+.nav-item{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 8px;padding:0 12px;text-decoration:none;border-radius:10px;font-size:14px;line-height:20px;color:var(--nav);text-align:left;cursor:pointer}
 .nav-item:hover,.nav-item:focus-within,.nav-item.on{background:var(--hover);color:var(--text)}
 /* search is the magnifier at the top, as in ChatGPT: its field only shows while it's being used */
 .side:not(.searching) #searchRow{display:none}
@@ -121,11 +119,11 @@ svg{display:block;flex:none}
 .nav-item kbd{font:inherit;font-size:14px;line-height:20px;color:var(--text-3);white-space:nowrap;opacity:0;transition:opacity .15s}
 .nav-item:hover kbd{opacity:1}
 .nav-item input:not(:placeholder-shown)~kbd,.nav-item input:focus~kbd{display:none}
-.history-label{padding:22px 18px 8px;font-size:14px;line-height:20px;font-weight:500;color:var(--text-2)}
+.history-label{padding:24px 20px 8px;font-size:14px;line-height:20px;font-weight:500;color:var(--text-2)}
 .history{flex:1;overflow-y:auto;padding:0 0 8px;min-height:0}
 .item{position:relative;display:flex;align-items:center;margin:0 6px;border-radius:10px}
 .item{margin:0 8px}
-.item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;color:var(--nav);text-decoration:none;border-radius:10px;font-size:14px;line-height:20px}
+.item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;color:var(--nav);text-decoration:none;border-radius:10px;font-size:14px;line-height:20px}
 .item:hover a,.item.on a{color:var(--text)}
 .item a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item a.sub{min-height:48px;padding-top:6px;padding-bottom:6px}
@@ -159,7 +157,7 @@ svg{display:block;flex:none}
   .app.side-collapsed .side{border-right:1px solid var(--border-0)}
   .app.side-collapsed .side-top{justify-content:center}
   .app.side-collapsed .brand{width:36px;padding:0;justify-content:center;margin:0}
-  .app.side-collapsed .brand>svg{display:block}
+  .app.side-collapsed .brand>img,.app.side-collapsed .brand>svg{display:block}
   .app.side-collapsed .side #searchRow{display:flex}
   .app.side-collapsed .brand>span:not(.brand-open),.app.side-collapsed #searchBtn,.app.side-collapsed .side-up{display:none}
   .app.side-collapsed .side-foot{justify-content:center}
@@ -181,8 +179,8 @@ svg{display:block;flex:none}
 .top-l,.top-r{display:flex;align-items:center;gap:4px;min-width:0}
 .top-r{justify-content:flex-end}
 /* ChatGPT's "Chat | Work" switch: here the chat, and the file browser */
-.views{display:inline-flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:var(--seg)}
-.views button{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 20px;border-radius:999px;font-size:15px;line-height:20px;color:var(--text);white-space:nowrap}
+.views{display:inline-flex;align-items:center;border-radius:999px;background:var(--seg)}
+.views button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:37px;min-width:112px;padding:0 24px;border-radius:999px;font-size:15px;line-height:20px;color:var(--text);white-space:nowrap}
 .views button.on{background:var(--seg-on);box-shadow:var(--shadow-s)}
 .views button.alt{color:var(--blue)}
 .views button.alt svg{width:16px;height:16px}
@@ -394,26 +392,26 @@ svg{display:block;flex:none}
 .btn.danger-ghost:hover{background:var(--danger-soft)}
 .btn[disabled]{opacity:.5;cursor:default;pointer-events:none}
 .dock{flex:none;position:relative;padding:0 16px env(safe-area-inset-bottom)}
-.dock-wrap{position:relative;width:100%;max-width:768px;margin:0 auto}
+.dock-wrap{position:relative;width:100%;max-width:784px;margin:0 auto}
 /* the conversation fades out above the message box, rather than being cut off at its edge */
 .main:not(.is-empty) .dock-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:24px;background:linear-gradient(to bottom,transparent,var(--surface));pointer-events:none}
-.hero{display:none;width:100%;max-width:768px;margin:0 auto 28px;padding:0 8px;text-align:center}
-.hero h1{margin:0;font-size:28px;line-height:34px;font-weight:400;letter-spacing:-.01em}
+.hero{display:none;width:100%;max-width:784px;margin:0 auto 32px;padding:0 8px;text-align:center}
+.hero h1{margin:0;font-size:24px;line-height:32px;font-weight:400;letter-spacing:-.01em}
 .hero p{margin:12px 0 0;color:var(--text-2);font-size:14px;line-height:20px}
 .hero p:empty{display:none}
 .hero code{font-family:var(--mono);font-size:.875em;font-weight:500;background:var(--inline);box-shadow:inset 0 0 0 1px var(--inline-ring);padding:1px .3rem;border-radius:4px}
 .hero a{color:var(--link)}
 .main.is-empty .thread{display:none}
-.main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:calc(10vh + 32px);overflow-y:auto}
+.main.is-empty .dock{flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:calc(6vh + 56px);overflow-y:auto}
 .main.is-empty .hero{display:block}
 /* under the empty box, like ChatGPT's "Write or edit" and "Search the web" */
-.sugg{display:none;flex-direction:column;gap:2px;margin:18px 0 0;padding:0 12px}
+.sugg{display:none;flex-direction:column;gap:4px;margin:28px 0 0;padding:0}
 .main.is-empty .sugg{display:flex}
-.sugg button{display:flex;align-items:center;gap:14px;min-height:48px;padding:0 12px;border-radius:12px;font-size:16px;line-height:24px;color:var(--text-2);text-align:left}
+.sugg button{display:flex;align-items:center;gap:16px;min-height:48px;padding:0 16px;border-radius:12px;font-size:16px;line-height:24px;color:var(--text-2);text-align:left}
 .sugg button:hover{background:var(--hover);color:var(--text)}
 .sugg svg{width:20px;height:20px;color:var(--text-3)}
 .main.is-empty .legal{display:none}
-.composer{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"lead main trail";align-items:center;column-gap:4px;min-height:56px;padding:10px;border-radius:30px;background:var(--composer);box-shadow:var(--composer-edge);cursor:text;transition:box-shadow .15s}
+.composer{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"lead main trail";align-items:center;column-gap:4px;min-height:52px;padding:8px;border-radius:26px;background:var(--composer);box-shadow:var(--composer-edge);cursor:text;transition:box-shadow .15s}
 .composer.tall{grid-template-areas:"chips chips chips" "main main main" "lead . trail";row-gap:8px}
 .composer.drag{box-shadow:0 0 0 2px var(--accent)}
 .composer.disabled{opacity:.55;pointer-events:none}
@@ -442,7 +440,7 @@ svg{display:block;flex:none}
 .ring .bar{stroke:currentColor;stroke-linecap:round;transition:stroke-dashoffset .35s}
 .ring.mid{color:var(--warn)}
 .ring.high{color:var(--danger)}
-.send{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none;transition:background .15s,color .15s,opacity .15s}
+.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none;transition:background .15s,color .15s,opacity .15s}
 .send:hover{opacity:.88}
 .send[disabled]{background:var(--accent);color:#fff;opacity:1;cursor:default}
 .c-note{margin:0 auto 8px;padding:0 12px;color:var(--text-3);font-size:12px;line-height:16px;text-align:center}
@@ -786,7 +784,7 @@ svg{display:block;flex:none}
     <div class="side-nav">
       <button class="nav-item" id="newChat" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.67 3.91C16.89 2.69 18.86 2.69 20.08 3.91C21.30 5.13 21.30 7.10 20.08 8.32L14.14 14.26C13.38 15.02 12.39 15.52 11.32 15.67L9.14 15.98C8.82 16.03 8.51 15.92 8.29 15.70C8.07 15.48 7.96 15.17 8.01 14.85L8.32 12.67C8.47 11.60 8.97 10.61 9.73 9.85L15.67 3.91ZM18.67 5.32C18.23 4.88 17.52 4.88 17.08 5.32L11.14 11.26C10.69 11.72 10.39 12.31 10.30 12.96L10.17 13.82L11.03 13.69C11.68 13.60 12.27 13.30 12.73 12.85L18.67 6.91C19.11 6.47 19.11 5.76 18.67 5.32ZM11 3.99C11.00 4.55 10.55 4.99 10.00 5.00C9.00 5.00 8.29 5.00 7.74 5.06C7.20 5.11 6.88 5.20 6.63 5.32C6.07 5.61 5.61 6.07 5.32 6.63C5.19 6.90 5.10 7.24 5.05 7.85C5.00 8.47 5 9.26 5 10.4V13.6C5 14.73 5.00 15.52 5.05 16.14C5.10 16.75 5.19 17.09 5.32 17.36C5.61 17.92 6.07 18.38 6.63 18.67C6.90 18.80 7.24 18.89 7.85 18.94C8.47 18.99 9.26 19 10.4 19H13.6C14.73 19 15.52 18.99 16.14 18.94C16.75 18.89 17.09 18.80 17.36 18.67C17.92 18.38 18.38 17.92 18.67 17.36C18.79 17.11 18.88 16.79 18.93 16.25C18.99 15.70 18.99 14.99 18.99 13.99C19.00 13.44 19.44 12.99 20.00 13C20.55 13.00 21.00 13.44 20.99 14.00C20.99 14.97 20.99 15.78 20.93 16.44C20.86 17.11 20.73 17.71 20.45 18.26C19.97 19.21 19.21 19.97 18.27 20.45C17.67 20.75 17.03 20.88 16.30 20.94C15.60 21 14.72 21 13.64 21H10.35C9.27 21 8.39 21 7.69 20.94C6.96 20.88 6.32 20.75 5.73 20.45C4.78 19.97 4.02 19.21 3.54 18.26C3.24 17.67 3.11 17.03 3.05 16.30C2.99 15.60 2.99 14.72 3 13.64V10.35C2.99 9.27 2.99 8.39 3.05 7.69C3.11 6.96 3.24 6.32 3.54 5.73C4.02 4.78 4.78 4.02 5.73 3.54C6.28 3.26 6.88 3.13 7.55 3.06C8.21 3.00 9.02 3.00 9.99 3.00C10.55 2.99 10.99 3.44 11 3.99Z" fill="currentColor"/></svg><span>New chat</span><kbd data-keys="shift+o" aria-hidden="true">Ctrl Shift O</kbd></button>
       <label class="nav-item" id="searchRow"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"><kbd data-keys="k" aria-hidden="true">Ctrl K</kbd></label>
-      <button class="nav-item" id="filesNav" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.4a2 2 0 0 1 1.42.59L12.24 7H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-9Z"/></svg><span>Files</span></button>
+      <a class="nav-item" id="imagesNav" href="https://chatgpt.com/images" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7.5" y="3.5" width="13" height="13" rx="3"/><path d="M16.5 20.5H7a3.5 3.5 0 0 1-3.5-3.5V7.5"/><path d="m8.5 14 3.2-3.2a1.5 1.5 0 0 1 2.1 0L19.5 16"/><circle cx="16" cy="7.5" r="1.3"/></svg><span>Images</span></a>
     </div>
     <div class="history-label">Recents</div>
     <nav class="history" id="history"></nav>
@@ -894,17 +892,13 @@ svg{display:block;flex:none}
 (() => {
 const EFF = ["low", "medium", "high", "xhigh", "max", "ultracode"];
 const EFF_LABEL = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max", ultracode: "Ultracode" };
-// Each model lists only the efforts it has: Haiku 5.5 has Low to Max, and no Ultracode.
-const EFF_HAIKU = ["low", "medium", "high", "xhigh", "max"];
 const CFG = Object.assign({ name: "ClaudeConnect", command: "ClaudeConnect", version: "0.0.0" }, __CFG__);
 const DEFAULT_MODEL = "claude-opus-5-5";
-// the built-in logo, the same as the site's own (DEFAULT_MARK in worker.js)
-const DEFAULT_MARK = `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="m-bg" width="64" height="64" rx="16"/><circle class="m-fg" cx="29" cy="29" r="12.5" fill="none" stroke-width="6.5"/><path class="m-fg" d="M41.5 29v22" stroke-width="6.5" stroke-linecap="round"/><path class="m-fg" d="M36 45h11" stroke-width="5" stroke-linecap="round"/></svg>`;
 const ALL_MODELS = [
   { id: "claude-fable-5-1", name: "Fable 5.1", desc: "Most capable, for long and hard tasks", efforts: EFF, def: "high", tag: "Uses usage credits", credits: true },
   { id: "claude-opus-5-5", name: "Opus 5.5", desc: "Deep reasoning for complex work", efforts: EFF, def: "medium" },
   { id: "claude-sonnet-5-5", name: "Sonnet 5.5", desc: "Fast and capable for everyday work", efforts: EFF, def: "medium" },
-  { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks", efforts: EFF_HAIKU, def: "medium" }
+  { id: "claude-haiku-5-5", name: "Haiku 5.5", desc: "Quickest replies for simple asks", efforts: EFF, def: "medium" }
 ];
 const MAX_BYTES = 15 * 1024 * 1024;
 const $ = id => document.getElementById(id);
@@ -2349,7 +2343,6 @@ async function closeFiles() {
   $("files").hidden = true;
   $("app").inert = false;
   $("fbVBody").innerHTML = ""; // stops whatever was playing
-  if (F.from === "settings") return openSettings("files");
   if (F.back && F.back.isConnected && F.back.focus) F.back.focus();
 }
 addEventListener("beforeunload", e => { if (F.edit && F.edit.dirty) e.preventDefault(); });
@@ -2656,13 +2649,6 @@ $("files").addEventListener("click", e => {
   else if (act === "hidden") { F.hidden = !F.hidden; store.set("hiddenFiles", F.hidden); renderFiles(); }
 });
 
-// Settings → Files: what it is, and the button that opens it.
-function filesPaneHtml() {
-  const a = agentNow();
-  const c = a && a.computer;
-  const why = !a || !a.online ? `${CFG.name} is offline, so the files on your computer can't be shown right now.` : !a.files ? `Update ${CFG.name} on your computer to see its files here.` : "";
-  return `<div class="sec"><h3>File browser</h3><p>Everything ${esc(CFG.name)} can reach on your computer, full screen: the working folder${c && c.workspace ? `, <code>${esc(c.workspace)}</code>` : ""}, your home folder with its Desktop, Documents and Downloads, other folders it's allowed into, and the whole computer. Look at photos, play audio and video, read and edit text and code, and download any file.</p><p>You can also move files and folders to the Trash on your computer from here. Nothing is deleted outright: you can put it back from the Trash (the Recycle Bin on Windows).</p>${why ? `<div class="note soft">${why}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="files"${why ? " disabled" : ""}>${I.folder}Open file browser</button></div></div>`;
-}
 $("pCopy").onclick = async () => {
   if (!P.a) return;
   try { copyText(await artText(P.a), $("pCopy")); } catch (e) { toast(e.message); }
@@ -2684,7 +2670,6 @@ $("searchBtn").onclick = () => { if ($("side").classList.contains("searching") &
 $("search").addEventListener("blur", () => { if (!$("search").value) $("side").classList.remove("searching"); });
 // the file browser, from the sidebar and from the switch at the top: where it was left
 function showFiles() { $("app").classList.remove("side-open"); openFiles(F.path, undefined, "", F.root); }
-$("filesNav").onclick = showFiles;
 document.querySelector('.top [data-view="files"]').onclick = showFiles;
 // The rows under the empty message box: a start for the message, or the file browser.
 const SUGG = { write: "Help me write ", search: "Search the web for " };
@@ -3038,7 +3023,7 @@ function clock(sec) {
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SET = { tab: "general", name: undefined, saving: "", saved: "", address: "", confirm: "", err: "", busy: false, justUpdated: false };
-const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["files", "Files", I.folder], ["address", "Address", I.globe], ["updates", "Updates", I.upgrade], ["delete", "Delete site", I.trash]];
+const TABS = [["general", "General", I.gear], ["appearance", "Appearance", I.image], ["address", "Address", I.globe], ["updates", "Updates", I.upgrade], ["delete", "Delete site", I.trash]];
 
 // Every setting here takes effect when it's changed: no Save button. Only a name being typed is held, until Enter or leaving
 // the field.
@@ -3088,9 +3073,9 @@ function blockedNote() {
 function imgField(key, label, hint) {
   const site = siteNow();
   const own = !!site[key];
-  const prev = key === "logo" ? (own ? `<img src="/logo?v=${esc(site.v)}" alt="">` : DEFAULT_MARK) : `<img src="/favicon?v=${esc(site.v)}" alt="">`;
-  const state = SET.saving === key ? "Saving…" : own ? "Your own" : key === "favicon" ? "Same as the logo" : "Built-in";
-  return `<div class="img-field"><div class="img-prev">${prev}</div><div class="img-meta"><b>${label}</b><small>${state} · ${hint}</small></div><button type="button" class="btn ghost" data-img="${key}"${SET.saving ? " disabled" : ""}>Choose…</button>${own ? `<button type="button" class="btn ghost" data-img-reset="${key}"${SET.saving ? " disabled" : ""}>${key === "favicon" ? "Use the logo" : "Built-in"}</button>` : ""}</div>`;
+  const prev = `<img src="/favicon?v=${esc(site.v)}" alt="">`;
+  const state = SET.saving === key ? "Saving…" : own ? "Your own" : "Built-in";
+  return `<div class="img-field"><div class="img-prev">${prev}</div><div class="img-meta"><b>${label}</b><small>${state} · ${hint}</small></div><button type="button" class="btn ghost" data-img="${key}"${SET.saving ? " disabled" : ""}>Choose…</button>${own ? `<button type="button" class="btn ghost" data-img-reset="${key}"${SET.saving ? " disabled" : ""}>Built-in</button>` : ""}</div>`;
 }
 
 // The text in the browser tab, next to the tab icon: the site's name unless it's given its own.
@@ -3113,7 +3098,7 @@ function paneHtml() {
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
-    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB each. A new one is used as soon as you pick it.</p>${imgField("logo", "Logo", "top of the sidebar")}${imgField("favicon", "Tab icon", "the browser tab")}${tabField()}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
+    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB. A new one is used as soon as you pick it.</p>${imgField("favicon", "Tab icon", "the browser tab and the collapsed sidebar")}${tabField()}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
   }
   if (SET.tab === "address") {
     const h = hostParts();
@@ -3121,7 +3106,6 @@ function paneHtml() {
     return `${blockedNote()}<div class="sec"><h3>Current address</h3><div class="kv"><span>${esc(location.origin)}</span><button type="button" class="btn ghost" data-copy-link="${esc(location.origin)}">${I.copy}<span>Copy</span></button></div></div><div class="sec"><h3>Change the address</h3><p>This is the name in the web address. You'll get a new link; the old one stops working.</p><div class="field"><div class="input-row"><input id="fAddr" value="${esc(SET.address)}" placeholder="${esc(h.name)}" maxlength="63" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="New address"><span>${esc(h.suffix)}</span></div>${bad ? '<div class="err-text">Use lowercase letters, numbers and dashes, starting and ending with a letter or number.</div>' : ""}${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><ul class="warn-list"><li>The new site is set up first. This one keeps working while you turn on Cloudflare Access for the new address.</li><li>Once the new site is working, this one is deleted.</li><li>Chats stay with the old site, so they're deleted with it. Your files are kept.</li></ul><button class="btn primary" type="button" data-act="move"${!SET.address || bad || (UP.data && UP.data.blockedAdmin) ? " disabled" : ""}>Set up the new address</button></div>`;
   }
   if (SET.tab === "updates") return updatesHtml();
-  if (SET.tab === "files") return filesPaneHtml();
   const ok = SET.confirm === CFG.name;
   return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the working folder are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
 }
@@ -3212,7 +3196,8 @@ function applySite(site) {
   document.title = S.chat && S.chat.title ? `${S.chat.title} · ${tabName()}` : tabName();
   $("brand").setAttribute("aria-label", CFG.name);
   const mark = $("brand").firstElementChild;
-  const want = site.logo ? `<img src="/logo?v=${esc(site.v)}" alt="">` : DEFAULT_MARK;
+  // no logo on the page: the rail shows the tab icon
+  const want = `<img src="/favicon?v=${esc(site.v)}" alt="">`;
   if (mark && mark.outerHTML !== want) mark.outerHTML = want;
   const icon = document.querySelector('link[rel="icon"]');
   if (icon) icon.href = `/favicon?v=${site.v}`;
@@ -3299,7 +3284,6 @@ $("setBody").addEventListener("keydown", e => {
 });
 
 async function doAct(act) {
-  if (act === "files") { closeSettings(); return openFiles("", undefined, "settings"); }
   if (act === "move") {
     if (!(await askConfirm({ title: `Set up ${SET.address}${hostParts().suffix}?`, text: `The new site is created first and this one keeps working until you've turned on Cloudflare Access for it. Then this site is deleted, along with its chats.`, ok: "Set it up" }))) return;
     return adminCall("/api/admin/move", { address: SET.address });
