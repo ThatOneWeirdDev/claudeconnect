@@ -42,10 +42,24 @@ else
   exit 1
 fi
 
-# When this script is piped from curl, stdin is the script, not the keyboard. Setup asks questions, so hand it the real terminal.
+# When this script is piped from curl, stdin is the script, not the keyboard. Setup asks questions, so hand it the real terminal,
+# by its own name (/dev/ttys003, say) rather than as /dev/tty: on a Mac nothing can wait for input on /dev/tty itself (kqueue
+# turns it down with EINVAL), and Claude Code, which setup runs to sign in, crashes on it. /dev/tty is what's left without one.
+terminal() {
+  t=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ') || t=""
+  case "$t" in
+    "" | "?"*) t=$(tty <&2 2>/dev/null) || t="" ;;
+    /dev/*) ;;
+    *) t="/dev/$t" ;;
+  esac
+  case "$t" in /dev/*) [ -c "$t" ] && ( : <"$t" ) 2>/dev/null && { echo "$t"; return; } ;; esac
+  if ( : </dev/tty ) 2>/dev/null; then echo /dev/tty; fi
+}
 status=0
-if [ ! -t 0 ] && ( : </dev/tty ) 2>/dev/null; then
-  node "$tmp/ClaudeConnect.mjs" "$@" </dev/tty || status=$?
+term=""
+[ -t 0 ] || term=$(terminal)
+if [ -n "$term" ]; then
+  node "$tmp/ClaudeConnect.mjs" "$@" <"$term" || status=$?
 else
   node "$tmp/ClaudeConnect.mjs" "$@" || status=$?
 fi
