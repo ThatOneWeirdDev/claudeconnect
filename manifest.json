@@ -1,14 +1,14 @@
 {
   "name": "claudeconnect",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "released": "2026-10-14",
   "notes": [
-    "Signing in during setup no longer crashes. The claude.ai sign-in now runs in your terminal, the same as the Cloudflare one, so opening a browser to sign in works (it was failing with an \"EINVAL kqueue\" error on Macs).",
-    "The setup window opens as its own plain window, without browser tabs or an address bar, when you have a Chromium-based browser (Chrome, Edge, Brave). It's thrown away when it closes and installs nothing. Without one of those browsers it opens in your normal browser as before."
+    "Signing in to claude.ai during setup works on a Mac now. The install command handed setup your terminal as /dev/tty, which Claude Code can't read the keyboard from on a Mac, so its sign-in crashed with \"EINVAL: invalid argument, kqueue\" (2.5.2 didn't fix the cause). The install command now hands over your terminal by its own name.",
+    "A site that's already running was never affected: it talks to Claude Code another way, not through the terminal."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "9042221219ee23cbac6272f8bed3f829e98be1f670c1c515730bd24cf576de31",
+    "installer.mjs": "6baa62d8592e3eced2536fb171ef8c4c809e95bbfe72252537ca0845dd0a21f5",
     "setup.mjs": "d90558814e509e9718594c030bb1df24b393df936820ff06288797d2da34781e",
     "setup.html": "e29224d5a89236379ba1cfe93abc997d4ffa0e611195690d7617589345972c6c",
     "agent/agent.mjs": "a810c070ddb40150446a8d0fc15ec50f5c61102d8c7bf65a5a82c2517b43639a",

@@ -288,9 +288,9 @@ async function setUpClaudeCode(name = "") {
   note(`The command-line tool ${claude.version} is installed.`);
   if (!signedIn(claude.cmd)) {
     note("Sign in to your claude.ai account in the browser window that opens. Finish there, then come back here.");
-    // On the terminal, like the Cloudflare sign-in: signing in is interactive and opens a browser, and piping its output
-    // through the setup window crashes it (Claude Code is a Bun build, which aborts with EINVAL kqueue on macOS when its
-    // output isn't a real terminal).
+    // On the terminal, like the Cloudflare sign-in: signing in is interactive and opens a browser. It reads the keyboard, so
+    // install.sh hands setup the terminal by its own name: Claude Code (a Bun build) crashes with EINVAL kqueue on a Mac when
+    // its input is /dev/tty itself.
     sh(`${claude.cmd} auth login`);
     if (!signedIn(claude.cmd)) fail("It isn't signed in yet. Run this again when you're ready to sign in.");
   }
