@@ -511,6 +511,39 @@ async function storedSignIn() {
   }
 }
 
+// One of the site's own stored values (its KV namespace), written through Cloudflare's API with this computer's Cloudflare
+// sign-in: the one way to hand the site something before Access lets this computer in.
+async function putStored(key, value) {
+  if (!cfg.accountId || !cfg.kvId) return false;
+  const t = await cloudflareToken();
+  if (!t) return false;
+  try {
+    const r = await fetch(`${API}/accounts/${cfg.accountId}/storage/kv/namespaces/${cfg.kvId}/values/${key}`, { method: "PUT", headers: { authorization: "Bearer " + t, "content-type": "application/json" }, body: JSON.stringify(value), signal: AbortSignal.timeout(20000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Until its owner's first visit, Cloudflare Access doesn't let this computer into the site (that visit's sign-in is what it
+// uses). So the chats saved here and the plan usage are left in the site's own storage, and the site takes them when it's
+// first opened: nothing to wait for, and no need to open Plan usage. Setup waits for the line this logs. A few tries per run.
+let preloadTries = 0;
+let preloaded = false;
+async function preload() {
+  if (preloaded || preloadTries >= 3) return;
+  preloadTries++;
+  if (!LIMITS) await probeLimits().catch(() => {});
+  let sessions = [];
+  try {
+    sessions = listSessions({ workspace: WORKSPACE, scope: HISTORY });
+  } catch {}
+  if (await putStored("preload", { at: Date.now(), sessions, limits: LIMITS })) {
+    preloaded = true;
+    log(`Your chats and plan usage are ready for the site (${sessions.length} chat${sessions.length === 1 ? "" : "s"}).`);
+  }
+}
+
 function saveSignIn(token, exp) {
   if (typeof token !== "string" || typeof exp !== "number") return;
   if (cfg.token === token) return;
@@ -1567,7 +1600,21 @@ let pingTimer = null;
 let lastPong = 0;
 let quiet = false;
 let waiting = false;
+let waitingSince = 0;
 let announced = false;
+
+// Waiting for the owner to open the site (see preload). Their visit leaves its sign-in where this can read it, so for the
+// first ten minutes (setup is waiting on it) that's looked for every few seconds, and only a new one starts a full connect.
+function awaitSignIn() {
+  const fast = Date.now() - waitingSince < 600000;
+  setTimeout(async () => {
+    if (fast) {
+      const k = await storedSignIn().catch(() => null);
+      if (!k || k.token === cfg.token) return awaitSignIn();
+    }
+    connect().catch(() => retry());
+  }, fast ? Number(process.env.CLAUDECONNECT_SIGNIN_POLL_MS) || 3000 : 15000);
+}
 
 async function connect() {
   await checkClaude();
@@ -1585,9 +1632,13 @@ async function connect() {
     }
   }
   if (pf === "auth") {
-    if (!waiting) log("Waiting for you to sign in. Open the site in your browser (or the claim link from setup) and this connects on its own.");
+    if (!waiting) {
+      log("Waiting for you to sign in. Open the site in your browser and this connects on its own.");
+      waitingSince = Date.now();
+    }
     waiting = true;
-    setTimeout(() => connect().catch(() => retry()), 15000);
+    preload().catch(() => {});
+    awaitSignIn();
     return;
   }
   if (pf === "net") {

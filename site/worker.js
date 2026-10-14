@@ -933,6 +933,8 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async onHello(ws, m) {
+    // what the computer says from now on is newer than anything it left before it could connect (see takePreload)
+    await this.ctx.storage.put("preloaded", Date.now());
     const caps = (Array.isArray(m.caps) ? m.caps : []).filter(c => typeof c === "string").slice(0, 24).map(c => c.slice(0, 20));
     const computer = cleanComputer(m.computer);
     // when this connection opened: a reply sent on it after that is the computer's, even if it isn't in the list below yet
@@ -1001,7 +1003,10 @@ export class ChatgqlHub extends DurableObject {
   async api(req, url) {
     const p = url.pathname;
     const method = req.method;
-    if (p === "/api/state" && method === "GET") return json(await this.state(req));
+    if (p === "/api/state" && method === "GET") {
+      await this.takePreload();
+      return json(await this.state(req));
+    }
     if (p === "/api/limits" && method === "GET") return json(await this.limitsView());
     if (p === "/api/credits" && method === "GET") return json((await this.ctx.storage.get("credits")) || null);
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
@@ -1026,7 +1031,10 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/files/raw" && (method === "GET" || method === "HEAD")) return this.serveFile(req, url);
     if (p === "/api/files/trash" && method === "POST") return this.trashFile(req);
     if (p === "/api/files/write" && method === "POST") return this.writeFile(req);
-    if (p === "/api/chats" && method === "GET") return json({ chats: this.chatList() });
+    if (p === "/api/chats" && method === "GET") {
+      await this.takePreload();
+      return json({ chats: this.chatList() });
+    }
     const cm = p.match(/^\/api\/chats\/([A-Za-z0-9-]{8,64})$/);
     if (cm && method === "GET") return this.getChat(cm[1]);
     if (cm && method === "PATCH") {
@@ -1091,6 +1099,22 @@ export class ChatgqlHub extends DurableObject {
       credits: (await this.ctx.storage.get("credits")) || null,
       update: await this.updateInfo()
     };
+  }
+
+  // Before its owner's first visit the computer can't reach the site (Access lets it in with that visit's sign-in), so it leaves
+  // the chats saved on it and the plan usage in the site's KV ("preload"). Taken while it isn't connected, at most once a
+  // second, and only when newer than what's here: once it has connected, its own word is newer.
+  async takePreload() {
+    if (!this.env.TOKENS || this.agent() || Date.now() - (this.preloadLooked || 0) < 1000) return;
+    this.preloadLooked = Date.now();
+    let p = null;
+    try {
+      p = JSON.parse((await this.env.TOKENS.get("preload")) || "null");
+    } catch {}
+    if (!p || typeof p !== "object" || !Number.isFinite(p.at) || p.at <= ((await this.ctx.storage.get("preloaded")) || 0)) return;
+    await this.ctx.storage.put("preloaded", p.at);
+    this.saveSessions(p.sessions);
+    if (p.limits) await this.setLimits(p.limits);
   }
 
   // ---- plan usage: the percentages Claude Code reads from Anthropic's response headers for the signed-in plan

@@ -82,3 +82,28 @@ test("plan usage is private to the owner", async t => {
   const anon = await s.mf.dispatchFetch(s.origin + "/api/limits", { headers: { "x-test-anonymous": "1" } });
   assert.equal(anon.status, 401);
 });
+
+test("what the computer left before it could connect, its chats and plan usage, is on the site from the first visit, and only until it connects", async t => {
+  const s = await startSite();
+  t.after(() => s.stop());
+  await s.claim();
+  const kv = await s.mf.getKVNamespace("TOKENS", "site");
+  const id = "0b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d";
+  const preload = at => JSON.stringify({ at, sessions: [{ id, title: "Fix the login page", folder: "shop", updated: Date.now() - 60000 }], limits: { status: "allowed", windows: { five_hour: { pct: 42, resetsAt: nowS() + 3600 }, seven_day: { pct: 17, resetsAt: nowS() + 86400 } } } });
+  await kv.put("preload", preload(Date.now()));
+  const st = (await s.api("/api/state")).body;
+  assert.equal(st.agent.online, false);
+  assert.deepEqual([st.limits.windows.five_hour.pct, st.limits.windows.seven_day.pct], [42, 17]);
+  assert.ok((await s.api("/api/chats")).body.chats.some(c => c.id === id && c.title === "Fix the login page"));
+  // once the computer has connected, what it says is newer: what it left before isn't taken again
+  const agent = await connectAgent(s);
+  agent.send({ type: "sessions", sessions: [] });
+  agent.send({ type: "limits", limits: { status: "allowed", windows: { five_hour: { pct: 50, resetsAt: nowS() + 3600 } } } });
+  await sleep(150);
+  agent.close();
+  await sleep(150);
+  await kv.put("preload", preload(Date.now() - 600000));
+  await sleep(1100);
+  assert.equal((await s.api("/api/state")).body.limits.windows.five_hour.pct, 50);
+  assert.ok(!(await s.api("/api/chats")).body.chats.some(c => c.id === id));
+});

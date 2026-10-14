@@ -54,6 +54,10 @@ export async function startFakeCloudflare(home, opts = {}) {
         const v = values.get(`${m[1]}/${m[2]}`);
         return v === undefined ? res.writeHead(404).end("") : res.writeHead(200, { "content-type": "text/plain" }).end(v);
       }
+      if ((m = /^\/storage\/kv\/namespaces\/([^/]+)\/values\/([^/]+)$/.exec(rest)) && req.method === "PUT") {
+        values.set(`${m[1]}/${m[2]}`, body);
+        return ok(res, {});
+      }
       res.writeHead(404).end(JSON.stringify({ success: false, errors: [{ message: "unexpected " + req.method + " " + p }] }));
     });
   });
@@ -68,6 +72,7 @@ export async function startFakeCloudflare(home, opts = {}) {
     refuseDeletes: v => (refuse = v),
     siteExists: v => (v ? scripts.add("my-site") : scripts.delete("my-site")),
     setKvValue: (kvId, key, value) => values.set(`${kvId}/${key}`, typeof value === "string" ? value : JSON.stringify(value)),
+    kvValue: (kvId, key) => values.get(`${kvId}/${key}`),
     close: () => new Promise(r => server.close(r))
   };
 }

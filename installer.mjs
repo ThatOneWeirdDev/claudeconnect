@@ -1560,13 +1560,32 @@ note(/^y/i.test(auto) ? `${displayName} is running and will start again when you
 const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/access`;
 const claimLink = `${site}/?claim=${claim}`;
 // Once Cloudflare Access is in front of the site, a request with no sign-in is sent to Cloudflare's sign-in page instead.
-async function accessIsOn() {
+// `page`: that sign-in page has to answer too (right after Access is switched on, it says 404 for a few seconds).
+async function accessIsOn(page = false) {
   try {
     const r = await fetch(`${site}/agent/check`, { redirect: "manual", signal: AbortSignal.timeout(8000) });
-    return r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(r.headers.get("location") || "");
+    const to = r.headers.get("location") || "";
+    if (!(r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(to))) return false;
+    if (!page) return true;
+    const signIn = await fetch(new URL(to, site), { redirect: "manual", signal: AbortSignal.timeout(8000) });
+    return signIn.status < 400;
   } catch {
     return false;
   }
+}
+// Ready to open: the computer has left your chats and plan usage for the site (preload in agent.mjs), and Cloudflare's
+// sign-in page for the site answers, twice running. Gives up after two minutes and opens it anyway.
+async function siteReady() {
+  const until = Date.now() + (Number(process.env.CLAUDECONNECT_READY_MS) || 120000);
+  let loaded = false;
+  let answered = 0;
+  while (Date.now() < until) {
+    loaded = loaded || logSays(/ready for the site/);
+    answered = (await accessIsOn(true)) ? answered + 1 : 0;
+    if (loaded && answered >= 2) return true;
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  return false;
 }
 if (mode === "fresh" && UI) {
   // Turning Access on, in one step that fits on the screen; the page notices by itself when it's done.
@@ -1590,6 +1609,10 @@ if (mode === "fresh" && UI) {
   })();
   await ask("", "", { kind: "access", title: "Turn on Cloudflare Access", accessPage });
   watching = false;
+  // Not opened until it will work, with your chats and usage already there.
+  step(`Getting ${displayName} ready`);
+  UI.show("online", { title: `Getting ${displayName} ready`, text: "Loading your chats and plan usage, and waiting for Cloudflare to finish switching Access on. This usually takes under a minute." });
+  await siteReady();
   // No claim step to go through: once Access is on, the site opens with its one-time code, and that first visit makes it
   // yours. The site still needs it: it's how it knows which Access sign-in is yours, so a sign-in from anyone else's Cloudflare
   // account is never trusted (before Access was on, or if it's ever turned off).
@@ -1600,13 +1623,18 @@ if (mode === "fresh" && UI) {
   console.log(`  ${teal(accessPage)}`);
   openUrl(accessPage);
   const enter = await ask("\n  Press Enter once Access is on, and your site will open. ", "");
-  if (tty && enter.toLowerCase() !== "s") openUrl(claimLink);
+  if (tty && enter.toLowerCase() !== "s") {
+    console.log("  Getting it ready: loading your chats and plan usage…");
+    await siteReady();
+    openUrl(claimLink);
+  }
   note(`The first time, open it with this link, so it knows it's yours: ${claimLink}`);
 } else {
   note(`If the site ever says "Finish setup", open this one-time claim link: ${claimLink}`);
 }
 
-function connected() {
+// whether the program on this computer has logged this since it was started here
+function logSays(re) {
   try {
     const size = statSync(logPath).size;
     const start = size < logFrom ? 0 : logFrom;
@@ -1615,10 +1643,13 @@ function connected() {
     const buf = Buffer.alloc(size - start);
     readSync(fd, buf, 0, buf.length, start);
     closeSync(fd);
-    return /Connected\./.test(buf.toString("utf8"));
+    return re.test(buf.toString("utf8"));
   } catch {
     return false;
   }
+}
+function connected() {
+  return logSays(/Connected\./);
 }
 
 if (UI) {

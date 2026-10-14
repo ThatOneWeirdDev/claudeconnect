@@ -24,7 +24,7 @@ async function setUp(t, extraEnv = {}, args = []) {
   const env = {
     ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"),
     CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50",
-    CLAUDECONNECT_CONNECT_MS: "1500", CLAUDECONNECT_LIVE_MS: "300", CLAUDECONNECT_GUI_NO_OPEN: "1", CLAUDECONNECT_ACCESS_LATE_MS: "1500",
+    CLAUDECONNECT_CONNECT_MS: "1500", CLAUDECONNECT_LIVE_MS: "300", CLAUDECONNECT_GUI_NO_OPEN: "1", CLAUDECONNECT_ACCESS_LATE_MS: "1500", CLAUDECONNECT_READY_MS: "1500",
     ...extraEnv
   };
   // its own process group, so the installer the launcher starts goes too when the test ends

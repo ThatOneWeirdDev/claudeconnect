@@ -109,6 +109,12 @@ test("a first install, then an update, through the real launcher and installer",
   // the agent was started and logged that it is running
   await new Promise(r => setTimeout(r, 1500));
   assert.match(readFileSync(join(dir, "agent.log"), "utf8"), new RegExp(`My Site ${RELEASE.version} starting`));
+  // Access doesn't let it in before the owner's first visit, so it leaves the chats and the plan usage in the site's storage
+  for (let i = 0; i < 60 && !cf.kvValue("kv-new", "preload"); i++) await new Promise(r => setTimeout(r, 250));
+  const preload = JSON.parse(cf.kvValue("kv-new", "preload") || "null");
+  assert.ok(preload && Array.isArray(preload.sessions), readFileSync(join(dir, "agent.log"), "utf8"));
+  assert.equal(preload.limits.windows.five_hour.pct, 42, "the plan usage, read with a tiny message to the cheapest model");
+  assert.match(readFileSync(join(dir, "agent.log"), "utf8"), /ready for the site/);
   const firstPid = Number(readFileSync(join(dir, "agent.pid"), "utf8"));
 
   // ---- the site now exists; --update (what `<command> update` runs) updates it in place and asks nothing

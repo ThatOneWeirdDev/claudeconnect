@@ -1473,6 +1473,27 @@ async function loadState() {
   syncTheme(S.state.prefs);
   if (S.state.update) applyUpdate(S.state.update);
   renderChrome();
+  readUsageOnce();
+  // just opened and the computer isn't connected yet (the first visit after setup, say): look again in a moment, not in 20s
+  clearTimeout(loadState.soon);
+  if (!S.state.agent.online && performance.now() < 120000) loadState.soon = setTimeout(() => { if (!document.hidden) loadState(); }, 3000);
+}
+// No plan usage at all yet: the computer reads it as soon as it's online, without Plan usage having to be opened. Once a page.
+let usageAsked = false;
+async function readUsageOnce() {
+  if (usageAsked || !S.state || !S.state.agent.online || S.state.limits) return;
+  usageAsked = true;
+  try {
+    await apiJson("/api/limits/refresh", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    for (let i = 0; i < 20 && !S.state.limits; i++) {
+      await new Promise(res => setTimeout(res, 1500));
+      const l = await apiJson("/api/limits");
+      if (l) S.state.limits = l;
+    }
+  } catch {}
+  renderBar();
+  renderProfile();
+  updateSend();
 }
 
 // one list, newest first, like ChatGPT's: just the titles.
