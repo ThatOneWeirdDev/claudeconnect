@@ -28,13 +28,13 @@ aside{background:var(--side);padding:14px 10px;display:flex;flex-direction:colum
 .steps li.bad .ic{color:var(--err)}
 .spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--text);animation:spin .8s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
-main{display:flex;justify-content:center;padding:48px 24px 64px;overflow:auto}
+main{display:flex;justify-content:center;padding:32px 24px 32px;overflow:auto}
 .col{width:100%;max-width:640px}
-h1{font-size:28px;line-height:34px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
-.lede{color:var(--text-2);margin:0 0 28px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 1px 2px #0000000a}
+h1{font-size:24px;line-height:30px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.lede{color:var(--text-2);margin:0 0 16px;font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px #0000000a}
 .card h2{font-size:20px;line-height:28px;margin:0 0 6px;font-weight:600}
-.card .help{color:var(--text-2);margin:0 0 18px;font-size:15px}
+.card .help{color:var(--text-2);margin:0 0 16px;font-size:15px}
 .card .help:empty{display:none}
 .notes{margin:0 0 16px;padding:0;list-style:none;color:var(--text-2);font-size:14px}
 .notes li{padding:3px 0}
@@ -59,18 +59,19 @@ label.field{display:block;font-size:14px;font-weight:500;margin:0 0 6px}
 .choice .c-ic{width:24px;height:24px;border-radius:6px;flex:none;margin-top:0}
 .alert{border-radius:12px;padding:10px 14px;font-size:14px;margin:0 0 14px;background:var(--warn-bg);color:var(--warn)}
 .alert.err{background:var(--err-bg);color:var(--err)}
-.howto{margin:0 0 18px;padding:0;list-style:none;counter-reset:s}
-.howto li{position:relative;padding:0 0 16px 40px;counter-increment:s}
+.howto{margin:0 0 14px;padding:0;list-style:none;counter-reset:s}
+.howto li{position:relative;padding:0 0 10px 40px;counter-increment:s;min-height:26px}
+.howto li .btn{margin-top:-6px}
 .howto li::before{content:counter(s);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-size:13px;font-weight:600}
 .howto b{font-weight:600}
 .howto .path{display:inline-block;background:var(--soft);border-radius:6px;padding:0 6px;font-size:14px}
-.card-note{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 18px;font-size:14px;color:var(--text-2)}
+.card-note{border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin:0 0 16px;font-size:14px;color:var(--text-2)}
 .card-note b{color:var(--text)}
 .wait{display:flex;align-items:center;gap:10px;color:var(--text-2);font-size:15px}
 .big-ok{width:44px;height:44px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;margin-bottom:14px}
 .big-ok svg{width:24px;height:24px}
 .linkbox{display:flex;align-items:center;gap:8px;background:var(--soft);border-radius:12px;padding:10px 12px;margin:0 0 16px;font-size:14px;word-break:break-all}
-details.log{margin-top:22px;font-size:13px;color:var(--text-2)}
+details.log{margin-top:14px;font-size:13px;color:var(--text-2)}
 details.log summary{cursor:pointer;width:max-content;padding:4px 0;list-style:none}
 details.log summary::-webkit-details-marker{display:none}
 details.log summary::before{content:"›";display:inline-block;margin-right:6px;transition:transform .15s}
@@ -140,7 +141,7 @@ function apply(ev) {
     }
     S.since = [];
   } else if (ev.type === "access_status") {
-    S.access = { ok: !!ev.ok, text: ev.text || "" };
+    S.access = { late: !!ev.late };
   } else if (["access", "online", "done", "fatal", "cancelled"].includes(ev.type)) {
     if (ev.type === "done" || ev.type === "fatal" || ev.type === "cancelled") {
       S.end = ev;
@@ -154,7 +155,7 @@ function shown(q, v) {
   if (q.kind === "yesno") return /^y/i.test(v) ? (q.yes || "Yes") : (q.no || "No");
   if (q.kind === "choice") { const o = (q.options || []).find(o => String(o.value) === String(v)); return o ? o.label : v; }
   if (q.kind === "image") return v ? (/^(default|none)$/i.test(v) ? "The built-in one" : v.split(/[\\/]/).pop().replace(/^[0-9a-f]{8}-/, "")) : (q.keepLabel || "Kept as it is");
-  if (q.kind === "continue" || q.kind === "access") return "";
+  if (q.kind === "continue" || q.kind === "access" || q.kind === "claim") return "";
   return v || (q.def ? String(q.def) : "");
 }
 
@@ -187,25 +188,33 @@ function askHtml(q) {
   }
   if (q.kind === "continue") return head + notesHtml() + `<div class="row"><button type="button" class="primary" data-answer="">${esc(q.button || "Continue")}</button>${q.link ? `<a class="btn" href="${esc(q.link)}" target="_blank" rel="noopener noreferrer">${esc(q.linkLabel || "Open")} ${ICON.ext}</a>` : ""}${q.skip ? `<button type="button" class="btn" data-answer="s">${esc(q.skip)}</button>` : ""}</div>`;
   if (q.kind === "access") return accessHtml(q);
+  if (q.kind === "claim") return claimHtml(q);
   // text
   return head + warnHtml() + `<form data-text><label class="field" for="text">${esc(q.label || q.title)}</label><input type="text" id="text" autocomplete="off" spellcheck="false" value="${esc(q.def || "")}" placeholder="${esc(q.placeholder || "")}"><div class="row" style="margin-top:14px"><button type="submit" class="primary">${esc(q.button || "Continue")}</button></div></form>`;
 }
 
-// Cloudflare Access: the one step that happens in Cloudflare's dashboard, explained in full, credit card included.
+// Cloudflare Access: the one step that happens in Cloudflare's dashboard. One button there, three short things to do, why it
+// asks for a card, and the page moves on by itself once Access is on. Everything fits without scrolling.
 function accessHtml(q) {
-  const st = S.access || {};
-  const line = st.text ? `<div class="wait" style="margin:0 0 18px">${st.ok ? `<span style="color:var(--ok)">${ICON.check}</span>` : '<span class="spin"></span>'}<span>${esc(st.text)}</span></div>` : "";
-  return `<h2>${esc(q.title || "Lock it to your account")}</h2>
-  <p class="help">Until this is done, the site shows a locked page to everyone, you included. It takes about two minutes, once.</p>
+  const late = S.access && S.access.late;
+  return `<h2>${esc(q.title || "Turn on Cloudflare Access")}</h2>
+  <p class="help">This locks your site so only you can open it. It takes about two minutes, once.</p>
   <ol class="howto">
-    <li><b>Turn on Cloudflare Zero Trust</b> (skip this if you've done it before on this Cloudflare account). Open <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">Zero Trust</a>, pick any <b>team name</b> (your name works), choose the <b>Zero Trust Free</b> plan, and add a card when it asks (see below).</li>
-    <li><b>Turn on Access for your site.</b> <a href="${esc(q.accessPage)}" target="_blank" rel="noopener noreferrer">Open your site's settings</a> (<span class="path">Workers &amp; Pages</span> → <span class="path">${esc(q.worker || "your site")}</span> → <span class="path">Settings</span> → <span class="path">Domains &amp; Routes</span>). On the <span class="path">workers.dev</span> row, choose <b>Enable Cloudflare Access</b>. You can close the box it shows; there's nothing to copy.</li>
-    <li><b>Check that only you are allowed in.</b> Choose <b>Manage Cloudflare Access</b>: it should let in only your own email address. Use the workers.dev row, not the Worker's <b>Access</b> tab, which blocks the connection your computer needs.</li>
-    <li><b>Claim your site.</b> Press the button below. Your one-time claim link opens; sign in with the same email. That makes the site yours.</li>
+    <li><a class="btn primary" href="${esc(q.accessPage)}" target="_blank" rel="noopener noreferrer">Open Cloudflare Access ${ICON.ext}</a></li>
+    <li>If Cloudflare asks you to set up <b>Zero Trust</b>: type any team name (your name is fine) and pick the <b>Free</b> plan.</li>
+    <li>Turn on <b>Access</b> for your site.</li>
+    <li>Let in only <b>your own email address</b>.</li>
   </ol>
-  <div class="card-note"><b>About the card.</b> To turn on Zero Trust, Cloudflare asks for a payment card, even on the Free plan. Choose <b>Zero Trust Free</b>: it's $0, and Cloudflare says you won't be charged for it. Think of the card as Cloudflare checking you're a real person. You'd only ever pay if you upgraded to a paid plan yourself, and you never need to: the Free plan covers up to 50 people, and this is just you.</div>
-  ${line}
-  <div class="row"><button type="button" class="primary" data-claim="${esc(q.claimLink)}">Access is on. Open my claim link ${ICON.ext}</button><a class="btn" href="${esc(q.accessPage)}" target="_blank" rel="noopener noreferrer">Site settings ${ICON.ext}</a></div>`;
+  <div class="card-note"><b>Cloudflare asks for a card, even on the Free plan.</b> It's only to check you're a real person. The Free plan costs $0 and you won't be charged.</div>
+  <div class="wait"><span class="spin"></span><span>${late ? "Still waiting for Access to be on." : "Waiting for Access to be on. This moves on by itself."}</span>${late ? `<button type="button" data-answer="skip" style="margin-left:auto">It's on. Continue</button>` : ""}</div>`;
+}
+
+// The claim link, offered only once Access is on: it makes the site yours.
+function claimHtml(q) {
+  return `<div class="big-ok">${ICON.check}</div><h2>${esc(q.title || "Claim your site")}</h2>
+  <p class="help">Access is on. Last step: open your claim link and sign in with the same email address. That makes the site yours.</p>
+  <div class="row"><button type="button" class="primary" data-claim="${esc(q.claimLink)}">Open my claim link ${ICON.ext}</button></div>
+  <p class="help" style="margin:14px 0 0;font-size:13px">The link works once. After that, your site opens for you and nobody else.</p>`;
 }
 
 function render() {
@@ -220,7 +229,7 @@ function render() {
   } else if (e && e.type === "cancelled") {
     html = `<h2>Setup cancelled</h2><p class="help">Run it again whenever you like.</p>`;
   } else if (S.ask) {
-    html = (S.ask.kind === "continue" ? "" : notesHtml()) + askHtml(S.ask);
+    html = (["continue", "access", "claim"].includes(S.ask.kind) ? "" : notesHtml()) + askHtml(S.ask);
   } else if (S.special && S.special.type === "online") {
     html = `<h2>${esc(S.special.title || "Almost there")}</h2>${notesHtml()}<div class="wait"><span class="spin"></span><span>${esc(S.special.text || "")}</span></div>`;
   } else {

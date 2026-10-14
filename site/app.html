@@ -127,9 +127,6 @@ svg{display:block;flex:none}
 .item a{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;color:var(--nav);text-decoration:none;border-radius:10px;font-size:14px;line-height:20px}
 .item:hover a,.item.on a{color:var(--text)}
 .item a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item a.sub{min-height:48px;padding-top:6px;padding-bottom:6px}
-.item a .tt{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.3}
-.item a .tt small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-3);font-size:12px}
 .item:hover{background:var(--hover)}
 .item.on{background:var(--select)}
 .item .more{opacity:0;width:28px;height:28px;margin-right:6px;border-radius:8px;display:grid;place-items:center;color:var(--text-2);flex:none}
@@ -452,6 +449,7 @@ svg{display:block;flex:none}
 .c-pill:hover,.c-pill[aria-expanded="true"]{background:var(--hover-2);color:var(--text)}
 .c-pill>span{overflow:hidden;text-overflow:ellipsis}
 .c-pill .sub{color:var(--text-3)}
+.c-pill.only-ic{width:36px;padding:0;justify-content:center}
 .c-pill[aria-pressed="false"]{color:var(--text-2)}
 .c-pill[aria-pressed="false"]:hover{background:var(--hover-2);color:var(--text)}
 .ring{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;color:var(--text-2);flex:none}
@@ -855,7 +853,7 @@ svg{display:block;flex:none}
           </div>
           <textarea id="input" rows="1" placeholder="Ask __SITE_NAME__" aria-label="Message"></textarea>
           <div class="c-trail">
-            <button type="button" class="c-pill" id="modelBtn" aria-haspopup="menu" aria-expanded="false" title="Model and effort"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg><span id="modelName">Opus 5.5</span><span class="sub" id="effortName">Medium</span></button>
+            <button type="button" class="c-pill only-ic" id="modelBtn" aria-haspopup="menu" aria-expanded="false" title="Model and effort"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg></button>
             <button type="button" class="c-pill" id="permBtn" aria-haspopup="menu" aria-expanded="false" title="Permissions"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.34 10.03a1 1 0 1 0-1.68-1.07l-2.47 3.89-.943-1.03a1 1 0 0 0-1.47 1.34l1.82 2a1 1 0 0 0 1.58-.138l3.17-5Z"/><path fill-rule="evenodd" d="M13.20 1.93a3 3 0 0 0-2.40 0l-6 2.62A3 3 0 0 0 3 7.30V13a9 9 0 1 0 18 0V7.30a3 3 0 0 0-1.79-2.74l-6-2.62Zm-1.60 1.83a1 1 0 0 1 .802 0l6 2.62a1 1 0 0 1 .599.91V13a7 7 0 1 1-14 0V7.30a1 1 0 0 1 .6-.916l6-2.62Z" clip-rule="evenodd"/></svg><span id="permName">Auto</span></button>
             <button type="button" class="ring" id="ctxBtn" aria-haspopup="true" aria-expanded="false" aria-label="Context is empty" title="Context is empty"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" aria-hidden="true"><circle class="trk" cx="12" cy="12" r="9"/><circle class="bar" id="ctxBar" cx="12" cy="12" r="9" stroke-dasharray="56.549" stroke-dashoffset="56.549"/></svg></button>
             <button type="submit" class="send" id="sendBtn" aria-label="Send" disabled><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.8 19.2V7.69l-3.95 3.96a1.2 1.2 0 0 1-1.7-1.7l6-6a1.2 1.2 0 0 1 1.7 0l6 6a1.2 1.2 0 0 1-1.7 1.7L13.2 7.69V19.2a1.2 1.2 0 0 1-2.4 0Z"/></svg></button>
@@ -1258,15 +1256,11 @@ function ctxOf(meta) { const c = meta && meta.context; return c && c.window > 0 
 function fmtTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n); }
 function ctxPct(c) { const f = c ? Math.min(1, c.used / c.window) : 0; return { f, text: !c ? "0%" : f * 100 < 1 ? "<1%" : Math.round(f * 100) + "%" }; }
 
-// The model switcher at the top, like ChatGPT's "ChatGPT 5 Thinking": the model, then the effort in grey. Its menu has both.
+// The model and effort: just the lightbulb in the message box. Its menu shows and changes both.
 function renderBar() {
   const put = (id, v) => { if ($(id).textContent !== v) $(id).textContent = v; };
   const m = modelOf(modelNow());
   const e = effortFor(m.id);
-  put("modelName", m.name);
-  // a model with no effort setting has nothing after its name
-  $("effortName").hidden = !effortsOf(m).length;
-  if (e) put("effortName", EFF_LABEL[e]);
   $("modelBtn").setAttribute("aria-label", `Choose model and effort. Now: ${m.name}${e ? ", " + EFF_LABEL[e] : ""}`);
   $("permBtn").hidden = !permsOk();
   put("permName", permOf(permNow()).name);
@@ -1481,20 +1475,18 @@ async function loadState() {
   renderChrome();
 }
 
-// one list, newest first, like ChatGPT's. Under the title: the project folder of a chat from Claude Code.
+// one list, newest first, like ChatGPT's: just the titles.
 function renderHistory() {
   const h = $("history");
   const q = S.query.trim().toLowerCase();
-  const list = S.chats.filter(c => !q || (c.title || "").toLowerCase().includes(q) || (c.folder || "").toLowerCase().includes(q));
+  const list = S.chats.filter(c => !q || (c.title || "").toLowerCase().includes(q));
   if (!list.length) {
     h.innerHTML = `<div class="empty-list">${q ? "No chats match that search." : "Your chats will show up here."}</div>`;
     return;
   }
   let html = "";
   for (const c of list) {
-    const sub = c.folder || "";
-    const tip = `Started in ${c.folder}`;
-    html += `<div class="item${c.id === S.chatId ? " on" : ""}" data-id="${c.id}"><a href="/c/${c.id}" data-open="${c.id}"${sub ? ` class="sub" title="${esc(tip)}"` : ""}>${sub ? `<span class="tt"><span>${esc(c.title || "New chat")}</span><small>${esc(sub)}</small></span>` : `<span>${esc(c.title || "New chat")}</span>`}${c.running ? '<i class="live" title="Answering"></i>' : ""}</a><button class="more" type="button" data-more="${c.id}" aria-label="Chat options" aria-expanded="false">${I.dots}</button></div>`;
+    html += `<div class="item${c.id === S.chatId ? " on" : ""}" data-id="${c.id}"><a href="/c/${c.id}" data-open="${c.id}"><span>${esc(c.title || "New chat")}</span>${c.running ? '<i class="live" title="Answering"></i>' : ""}</a><button class="more" type="button" data-more="${c.id}" aria-label="Chat options" aria-expanded="false">${I.dots}</button></div>`;
   }
   h.innerHTML = html;
 }

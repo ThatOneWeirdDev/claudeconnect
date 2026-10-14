@@ -24,7 +24,7 @@ async function setUp(t, extraEnv = {}, args = []) {
   const env = {
     ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"),
     CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50",
-    CLAUDECONNECT_CONNECT_MS: "1500", CLAUDECONNECT_LIVE_MS: "300", CLAUDECONNECT_GUI_NO_OPEN: "1",
+    CLAUDECONNECT_CONNECT_MS: "1500", CLAUDECONNECT_LIVE_MS: "300", CLAUDECONNECT_GUI_NO_OPEN: "1", CLAUDECONNECT_ACCESS_LATE_MS: "1500",
     ...extraEnv
   };
   // its own process group, so the installer the launcher starts goes too when the test ends
@@ -87,20 +87,27 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.match(text, /startup item/);
   await s.click('[data-answer="n"]');
 
-  // Cloudflare Access, step by step, with what the card is for, and a button that opens the claim link
-  text = await s.card("Lock it to your Cloudflare account", 60000);
-  assert.match(text, /Enable Cloudflare Access/);
+  // Cloudflare Access: one button straight to the Worker's Access tab, three short things to do there, and why it asks for a
+  // card. No claim link yet, and no other dashboard link
+  text = await s.card("Turn on Cloudflare Access", 60000);
   assert.match(text, /Zero Trust/);
   assert.match(text, /Free/);
-  assert.match(text, /it's \$0/);
-  assert.match(text, /up to 50 people/);
-  assert.match(text, /not the Worker's Access tab/, "the tab that would block the computer's connection is warned against");
+  assert.match(text, /costs \$0/);
   assert.match(text, /real person/);
   assert.match(text, /won't be charged/);
+  assert.match(text, /your own email address/);
+  assert.deepEqual(JSON.parse(await s.page.evaluate(`JSON.stringify([...document.querySelectorAll("#card a")].map(a => a.href))`)), ["https://dash.cloudflare.com/acct-1/workers/services/view/my-site/production/access"]);
+  assert.equal(await s.page.evaluate(`document.querySelector("[data-claim]")`), null, "the claim link only comes once Access is on");
+  assert.equal(await s.page.evaluate(`document.documentElement.scrollHeight <= innerHeight`), true, "it fits without scrolling");
+  // Access can't be seen from the test, so after a while (CLAUDECONNECT_ACCESS_LATE_MS) there's a way on
+  await s.page.until(`document.querySelector('[data-answer="skip"]')`, "the way on");
+  await s.click('[data-answer="skip"]');
+
+  // then the claim link, as its own step
+  text = await s.card("Claim your site");
+  assert.match(text, /Access is on/);
   const claim = await s.page.evaluate(`document.querySelector("[data-claim]").dataset.claim`);
   assert.match(claim, /^https:\/\/my-site\.testacct\.workers\.dev\/\?claim=/);
-  // the dashboard link is the site's Settings (Domains & Routes), not its Access tab
-  assert.match(await s.page.evaluate(`[...document.querySelectorAll("#card a")].map(a => a.href).join(" ")`), /\/workers\/services\/view\/my-site\/production\/settings/);
   await s.click("[data-claim]");
 
   // nothing connects in the test, so it ends saying it will by itself, with the address to open

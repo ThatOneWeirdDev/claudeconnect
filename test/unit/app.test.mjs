@@ -36,14 +36,13 @@ test("the usage chart and token counting are gone", () => {
 });
 
 test("the model and effort are a pill in the message box, where ChatGPT has Think, and every model has every effort", () => {
-  // one pill with the model, then the effort in grey; no effort button or stairs anywhere else, and nothing of it at the top
-  assert.match(html, /<div class="c-trail">\s*<button type="button" class="c-pill" id="modelBtn"[^>]*><svg[\s\S]*?<\/svg><span id="modelName">[^<]*<\/span><span class="sub" id="effortName">/);
+  // just the lightbulb, with no model name or effort written next to it; no effort button or stairs anywhere else, and
+  // nothing of it at the top. Its name says what's picked, for screen readers
+  assert.match(html, /<div class="c-trail">\s*<button type="button" class="c-pill only-ic" id="modelBtn"[^>]*><svg[\s\S]*?<\/svg><\/button>/);
+  assert.doesNotMatch(html, /id="modelName"|id="effortName"/);
   assert.doesNotMatch(/<header class="top">([\s\S]*?)<\/header>/.exec(html)[1], /modelBtn/);
   assert.doesNotMatch(html, /id="effortBtn"|id="effortMenu"|class="stairs"|pickerBtn|picker-btn|renderPickerBtn|id="topTitle"/);
-  assert.match(script, /put\("modelName", m\.name\)/);
-  assert.match(script, /put\("effortName", EFF_LABEL\[e\]\)/);
-  // a model with no effort setting has nothing after its name
-  assert.match(script, /\$\("effortName"\)\.hidden = !effortsOf\(m\)\.length/);
+  assert.match(script, /\$\("modelBtn"\)\.setAttribute\("aria-label", `Choose model and effort\. Now: \$\{m\.name\}/);
   // as Claude Code's own model catalog (2.1.296) has them: all four models have Low to Max with Extra high, so Ultracode
   // (Extra high with workflows) too, when the computer's Claude Code knows it and has workflows on; the defaults are its own
   assert.deepEqual([...script.matchAll(/\{ id: "(claude-[a-z0-9-]+)",[^\n]*efforts: (\w+), def: "(\w+)"/g)].map(m => [m[1], m[2], m[3]]), [["claude-fable-5-1", "EFF", "high"], ["claude-opus-5-5", "EFF", "medium"], ["claude-sonnet-5-5", "EFF", "medium"], ["claude-haiku-5-5", "EFF", "medium"]]);

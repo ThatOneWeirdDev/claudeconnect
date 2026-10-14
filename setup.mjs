@@ -137,7 +137,15 @@ export async function startGui({ title, version, logo = null }) {
         push({ type: "ask", id, ...spec });
       });
     },
-    // something the page shows as its own card, like the Cloudflare Access instructions or the end of the setup
+    // answers the open question for the page, when what it was waiting for has happened by itself (Access turned on, say)
+    settle(value = "") {
+      for (const q of [...questions.values()]) {
+        questions.delete(q.id);
+        push({ type: "answered", id: q.id, value: q.secret ? "" : value });
+        q.resolve(value);
+      }
+    },
+    // something the page shows as its own card, like the end of the setup
     show: (type, data) => push({ type, ...data }),
     // waits until the page has seen everything so far (or a few seconds, if nobody is looking), so nothing is lost on exit
     async flush(ms = 4000) {

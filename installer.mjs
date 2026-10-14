@@ -1554,35 +1554,47 @@ try {
 spawnSync(process.execPath, [agentPath, "background"], { stdio: "ignore" });
 note(/^y/i.test(auto) ? `${displayName} is running and will start again when you log in.` : `${displayName} is running in the background.`);
 
-// the Worker's Settings (Domains & Routes), where the workers.dev row has "Enable Cloudflare Access". Not its Access tab:
-// Cloudflare says Access set up there blocks WebSocket connections, which this computer's connection to the site is.
-const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/settings`;
+// Straight to the Worker's Access tab: turning Access on there asks for Zero Trust first, so it's the one place to send people.
+// (Cloudflare's docs say Access set on the Worker itself doesn't pass WebSocket connections, which is how this computer talks
+// to the site; this is the owner's call, made knowing that.)
+const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/access`;
 const claimLink = `${site}/?claim=${claim}`;
+// Once Cloudflare Access is in front of the site, a request with no sign-in is sent to Cloudflare's sign-in page instead.
+async function accessIsOn() {
+  try {
+    const r = await fetch(`${site}/agent/check`, { redirect: "manual", signal: AbortSignal.timeout(8000) });
+    return r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(r.headers.get("location") || "");
+  } catch {
+    return false;
+  }
+}
 if (mode === "fresh" && UI) {
-  // the window explains Cloudflare Access (and Zero Trust's card) step by step, and opens the claim link from its button
-  step("Locking it to your Cloudflare account");
-  // While the steps are on screen, the site is checked every few seconds: once Cloudflare Access is in front of it, a request
-  // with no sign-in is sent to Cloudflare's sign-in page instead of reaching the site.
+  // Two steps in the window, each fitting on the screen: turning Access on (the page notices by itself), then the claim link,
+  // which is only offered once Access is on.
+  step("Turning on Cloudflare Access");
   let watching = true;
+  const startedAt = Date.now();
   (async () => {
-    let last = "";
+    let shownLate = false;
     while (watching) {
-      let st = { ok: false, text: "Waiting for Cloudflare Access to be turned on for your site…" };
-      try {
-        const r = await fetch(`${site}/agent/check`, { redirect: "manual", signal: AbortSignal.timeout(8000) });
-        if (r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(r.headers.get("location") || "")) st = { ok: true, text: "Cloudflare Access is on. Now open your claim link." };
-      } catch {}
-      if (watching && st.text !== last) {
-        UI.show("access_status", st);
-        last = st.text;
+      if (await accessIsOn()) {
+        if (watching) UI.settle("on");
+        return;
+      }
+      // in case Cloudflare's sign-in page can't be seen from here: after a few minutes, a way on
+      if (!shownLate && Date.now() - startedAt > (Number(process.env.CLAUDECONNECT_ACCESS_LATE_MS) || 180000)) {
+        shownLate = true;
+        UI.show("access_status", { late: true });
       }
       for (let i = 0; i < 30 && watching; i++) await new Promise(r => setTimeout(r, 100));
     }
   })();
-  await ask("", "", { kind: "access", title: "Lock it to your Cloudflare account", accessPage, claimLink, worker: slug });
+  await ask("", "", { kind: "access", title: "Turn on Cloudflare Access", accessPage });
   watching = false;
+  step("Claiming your site");
+  await ask("", "", { kind: "claim", title: "Claim your site", claimLink });
 } else if (mode === "fresh") {
-  step("Locking it to your Cloudflare account");
+  step("Turning on Cloudflare Access");
   console.log(`  1. Turn on Cloudflare Access on the page that's opening:`);
   console.log(`     ${teal(accessPage)}`);
   console.log(`  2. Then open your claim link (one time only):`);
