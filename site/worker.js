@@ -4,6 +4,7 @@ import BRAND from "./brand.js";
 import { parseVersion, compareVersions, isNewer, cleanManifest, validRepo, validRef } from "./version.js";
 import { cleanSiteName, cleanAddress } from "./names.js";
 import { checkImage } from "./image.js";
+import { TEMPLATES, findTemplate, templateOf } from "./templates.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -396,7 +397,8 @@ const PAGE_HEADERS = {
 function appPage(env, site) {
   // no logo on the page: the collapsed sidebar shows the tab icon
   const mark = `<img src="/favicon?v=${site.v}" alt="">`;
-  const cfg = JSON.stringify({ name: site.name, tab: site.tab || "", command: site.command || commandName(env), version: appVersion(env) }).replace(/</g, "\\u003c");
+  const templates = TEMPLATES.map(t => ({ id: t.id, name: t.name, about: t.about }));
+  const cfg = JSON.stringify({ name: site.name, tab: site.tab || "", command: site.command || commandName(env), version: appVersion(env), templates }).replace(/</g, "\\u003c");
   const html = APP_HTML.split("__TAB_TITLE__").join(escHtml(site.tab || site.name)).split("__SITE_NAME__").join(escHtml(site.name)).split("__BRAND_MARK__").join(mark).split("__CFG__").join(cfg).split('href="/favicon"').join(`href="/favicon?v=${site.v}"`);
   return new Response(html, { headers: PAGE_HEADERS });
 }
@@ -430,7 +432,7 @@ async function hubFetch(env, request) {
 }
 
 function deployedSettings(env) {
-  return { name: siteName(env), tab: tabTitle(env), command: commandName(env), logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
+  return { name: siteName(env), tab: tabTitle(env), command: commandName(env), logo: !!brandImage("logo"), favicon: !!brandImage("favicon"), template: templateOf(siteName(env), brandImage("favicon")), v: fingerprint([brandImage("logo") && fingerprint(brandImage("logo").b64), brandImage("favicon") && fingerprint(brandImage("favicon").b64)]) };
 }
 
 async function siteOf(env, hub) {
@@ -486,6 +488,12 @@ async function handle(req, env, ctx) {
     const hub = env.HUB.get(env.HUB.idFromName("main"));
     const icon = url.pathname === "/favicon.svg" || url.pathname === "/favicon" || url.pathname === "/favicon.ico" ? "favicon" : url.pathname === "/logo" ? "logo" : "";
     if (icon) return brandResponse(icon, await siteImageOf(env, hub, icon), url.searchParams.has("v"));
+    // a template's icon, for Settings to show before it's picked: the same for every site, so nothing to sign in for
+    const tpl = /^\/templates\/([a-z0-9-]{1,40})$/.exec(url.pathname);
+    if (tpl) {
+      const t = TEMPLATES.find(t => t.id === tpl[1]);
+      return t ? brandResponse("favicon", t.favicon, url.searchParams.has("v")) : new Response("Not found", { status: 404 });
+    }
     const a = await authenticate(req, env, hub, url);
     const isAgent = url.pathname === "/agent" || url.pathname === "/agent/check" || url.pathname === "/agent/progress" || url.pathname === "/agent/version" || url.pathname === "/agent/prefs";
     if (!a.ok) {
@@ -618,7 +626,7 @@ export class ChatgqlHub extends DurableObject {
   siteSettings(version) {
     this.restartIfOlder(version);
     const s = this.site();
-    return { name: s.name, tab: s.tab || "", command: this.commandName(), logo: !!s.logo, favicon: !!s.favicon, v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
+    return { name: s.name, tab: s.tab || "", command: this.commandName(), logo: !!s.logo, favicon: !!s.favicon, template: templateOf(s.name, s.favicon), v: fingerprint([s.logo && fingerprint(s.logo.b64), s.favicon && fingerprint(s.favicon.b64)]) };
   }
 
   // The tab icon falls back to the logo.
@@ -628,8 +636,14 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async setSite(req) {
-    const b = await req.json().catch(() => null);
+    let b = await req.json().catch(() => null);
     if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
+    // a template is its name and tab icon, with the tab saying the name
+    if ("template" in b) {
+      const t = findTemplate(b.template);
+      if (!t) return json({ error: "There's no such template." }, 400);
+      b = { displayName: t.name, tab: "", favicon: t.favicon };
+    }
     const d = this.deployedSite();
     const rec = { ...this.siteRec };
     if ("displayName" in b) {

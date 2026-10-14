@@ -12,6 +12,7 @@ import { createInterface } from "node:readline/promises";
 import { SLUG_RE, NAME_RE, toSlug, cleanSiteName, cleanAddress } from "./site/names.js";
 import { MAX_IMG, sniffImage, checkImage } from "./site/image.js";
 import { QUESTION_KEYS } from "./site/version.js";
+import { TEMPLATES, findTemplate, templateOf } from "./site/templates.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = process.platform === "win32";
@@ -419,7 +420,13 @@ function pickCommand(displayName, extraDirs) {
   return { cmd, renamed: cmd !== base, base };
 }
 
+// A new site's working folder: the Claude folder in your home folder (~/Claude) when there is one, whatever the site is
+// called. Otherwise a folder named after the site, or "<name> Workspace" when that's already a folder with things in it.
 function pickWorkspace(name) {
+  const claude = join(HOME, "Claude");
+  try {
+    if (statSync(claude).isDirectory()) return claude;
+  } catch {}
   const base = join(HOME, name);
   if (!existsSync(base)) return base;
   try {
@@ -1388,11 +1395,34 @@ if (found.names.length || existsSync(CONFIG) || legacy) {
 const same = mode === "update" && prior.name === target && (!prior.accountId || prior.accountId === accountId);
 
 step(mode === "update" ? "Your site" : "Naming your site");
+const priorBrand = mode === "update" && !legacy ? readBrand() : { logo: null, favicon: null };
+// A template names the site and picks its tab icon in one go (site/templates.js). Settings on the site offers the same later.
+let template = null;
+if (opt("--template") !== null) {
+  const want = opt("--template");
+  template = findTemplate(want);
+  if (!template && !/^(none|own)$/i.test(want)) fail(`There's no template called ${want}. Templates: ${TEMPLATES.map(t => t.name).join(", ")}, or none.`);
+} else if (!opt("--name") && interactive()) {
+  const now = mode === "update" ? templateOf(prior.displayName, priorBrand.favicon) : "";
+  termOnly(`  Templates: ${TEMPLATES.map(t => `${bold(t.name)}, ${t.about.charAt(0).toLowerCase()}${t.about.slice(1)}`).join(" ")}`);
+  for (;;) {
+    const pick = await ask(now ? `  Start from a template? Its name, or own for your own name and icon [${findTemplate(now).name}]: ` : "  Start from a template? Its name, or Enter for your own name and icon: ", now, {
+      kind: "choice",
+      title: "Start from a template?",
+      help: "A template names your site and picks its tab icon for you. You can switch to one, or back to your own, at any time in Settings on the site.",
+      options: [{ value: "", label: "Your own", desc: "Pick a name and a tab icon yourself." }, ...TEMPLATES.map(t => ({ value: t.id, label: t.name, desc: t.about, icon: `data:${t.favicon.type};base64,${t.favicon.b64}` }))]
+    });
+    template = findTemplate(pick);
+    if (template || !String(pick || "").trim() || /^(none|own)$/i.test(pick.trim())) break;
+    console.log(`  There's no template called ${pick.trim()}. Type ${TEMPLATES.map(t => t.name).join(" or ")}, or press Enter for your own.`);
+  }
+}
+if (template) note(`Using the ${template.name} template: the site is called ${template.name} and has its icon.`);
 note("The name shows at the top of the site, and it's also the command you'll type to run it.");
 let displayName = null;
 let slug = mode === "update" ? target : null;
-let preset = opt("--name");
-const nameDef = mode === "update" ? prior.displayName || "" : "";
+let preset = opt("--name") || (template ? template.name : null);
+const nameDef = template ? template.name : mode === "update" ? prior.displayName || "" : "";
 for (;;) {
   const raw = preset || (await ask(`  Name${nameDef ? ` [${nameDef}]` : ""}: `, nameDef, {
     kind: "text",
@@ -1429,11 +1459,12 @@ for (;;) {
   displayName = n;
   break;
 }
-const priorBrand = mode === "update" && !legacy ? readBrand() : { logo: null, favicon: null };
-if (priorBrand.logo || priorBrand.favicon) note("Type default to go back to the built-in tab icon.");
+if (!template && (priorBrand.logo || priorBrand.favicon)) note("Type default to go back to the built-in tab icon.");
 // there's no logo on the site any more: a logo set before stays as the tab icon unless another is picked
 const logo = null;
-const favicon = await askImage("Tab icon", "the current one", "the built-in one", "--favicon", priorBrand.favicon || priorBrand.logo);
+const favicon = template ? template.favicon : await askImage("Tab icon", "the current one", "the built-in one", "--favicon", priorBrand.favicon || priorBrand.logo);
+// the browser tab says the site's name, unless it was given its own text; a template's tab says the template's name
+const tabTitle = same && !template ? prior.tabTitle || "" : "";
 const { prefix: npmPrefix } = shimDirs();
 let binDir = npmPrefix ? (IS_WIN ? npmPrefix : join(npmPrefix, "bin")) : "";
 let onPath = true;
@@ -1462,7 +1493,7 @@ stopLocal();
 removeShims([prior.command, "chatgql"], [prior.shim]);
 installSite(payload);
 writeFileSync(join(SITE, "brand.js"), "export default " + JSON.stringify({ logo, favicon }) + ";\n");
-writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, tab: same ? prior.tabTitle : "", version: payload.version, repo: REPO, ref: REF }), null, 2));
+writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug, accountId, kvId, displayName, command, tab: tabTitle, version: payload.version, repo: REPO, ref: REF }), null, 2));
 if ((await runLive(`${WR} deploy -c wrangler.jsonc`, { cwd: SITE })).status !== 0) fail(UI ? "Cloudflare didn't accept the site. Details, below, says why." : "Cloudflare didn't accept the site. The messages above say why.");
 const secret = same && prior.secret ? prior.secret : crypto.randomBytes(32).toString("base64url");
 const claim = crypto.randomBytes(18).toString("base64url");
@@ -1487,7 +1518,7 @@ mkdirSync(binDir, { recursive: true });
 const agentPath = join(DIR, "agent.mjs");
 const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
 const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
-if (same && prior.tabTitle) cfg.tabTitle = prior.tabTitle;
+if (tabTitle) cfg.tabTitle = tabTitle;
 if (same && prior.id) cfg.id = prior.id;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;
@@ -1523,35 +1554,47 @@ try {
 spawnSync(process.execPath, [agentPath, "background"], { stdio: "ignore" });
 note(/^y/i.test(auto) ? `${displayName} is running and will start again when you log in.` : `${displayName} is running in the background.`);
 
-// the Worker's Settings (Domains & Routes), where the workers.dev row has "Enable Cloudflare Access". Not its Access tab:
-// Cloudflare says Access set up there blocks WebSocket connections, which this computer's connection to the site is.
-const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/settings`;
+// Straight to the Worker's Access tab: turning Access on there asks for Zero Trust first, so it's the one place to send people.
+// (Cloudflare's docs say Access set on the Worker itself doesn't pass WebSocket connections, which is how this computer talks
+// to the site; this is the owner's call, made knowing that.)
+const accessPage = `https://dash.cloudflare.com/${accountId}/workers/services/view/${slug}/production/access`;
 const claimLink = `${site}/?claim=${claim}`;
+// Once Cloudflare Access is in front of the site, a request with no sign-in is sent to Cloudflare's sign-in page instead.
+async function accessIsOn() {
+  try {
+    const r = await fetch(`${site}/agent/check`, { redirect: "manual", signal: AbortSignal.timeout(8000) });
+    return r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(r.headers.get("location") || "");
+  } catch {
+    return false;
+  }
+}
 if (mode === "fresh" && UI) {
-  // the window explains Cloudflare Access (and Zero Trust's card) step by step, and opens the claim link from its button
-  step("Locking it to your Cloudflare account");
-  // While the steps are on screen, the site is checked every few seconds: once Cloudflare Access is in front of it, a request
-  // with no sign-in is sent to Cloudflare's sign-in page instead of reaching the site.
+  // Two steps in the window, each fitting on the screen: turning Access on (the page notices by itself), then the claim link,
+  // which is only offered once Access is on.
+  step("Turning on Cloudflare Access");
   let watching = true;
+  const startedAt = Date.now();
   (async () => {
-    let last = "";
+    let shownLate = false;
     while (watching) {
-      let st = { ok: false, text: "Waiting for Cloudflare Access to be turned on for your site…" };
-      try {
-        const r = await fetch(`${site}/agent/check`, { redirect: "manual", signal: AbortSignal.timeout(8000) });
-        if (r.status >= 300 && r.status < 400 && /\.cloudflareaccess\.com/.test(r.headers.get("location") || "")) st = { ok: true, text: "Cloudflare Access is on. Now open your claim link." };
-      } catch {}
-      if (watching && st.text !== last) {
-        UI.show("access_status", st);
-        last = st.text;
+      if (await accessIsOn()) {
+        if (watching) UI.settle("on");
+        return;
+      }
+      // in case Cloudflare's sign-in page can't be seen from here: after a few minutes, a way on
+      if (!shownLate && Date.now() - startedAt > (Number(process.env.CLAUDECONNECT_ACCESS_LATE_MS) || 180000)) {
+        shownLate = true;
+        UI.show("access_status", { late: true });
       }
       for (let i = 0; i < 30 && watching; i++) await new Promise(r => setTimeout(r, 100));
     }
   })();
-  await ask("", "", { kind: "access", title: "Lock it to your Cloudflare account", accessPage, claimLink, worker: slug });
+  await ask("", "", { kind: "access", title: "Turn on Cloudflare Access", accessPage });
   watching = false;
+  step("Claiming your site");
+  await ask("", "", { kind: "claim", title: "Claim your site", claimLink });
 } else if (mode === "fresh") {
-  step("Locking it to your Cloudflare account");
+  step("Turning on Cloudflare Access");
   console.log(`  1. Turn on Cloudflare Access on the page that's opening:`);
   console.log(`     ${teal(accessPage)}`);
   console.log(`  2. Then open your claim link (one time only):`);

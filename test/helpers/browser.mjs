@@ -7,30 +7,50 @@ import { tmpdir } from "node:os";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// Starts Chromium and waits for its debugging connection. A cold start on a busy CI machine can be slow, so it gets a while
+// and a second go; a Chromium that didn't come up is always stopped, since a leftover one would keep the test file running.
+async function launch(chrome, width, height) {
+  for (let attempt = 1; ; attempt++) {
+    const profile = mkdtempSync(join(tmpdir(), "cc-browser-"));
+    const proc = spawn(chrome, ["--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--no-pings", `--window-size=${width},${height}`, "about:blank"], { stdio: "ignore" });
+    proc.unref();
+    let exited = false;
+    proc.on("exit", () => (exited = true));
+    let port = 0;
+    let target = null;
+    for (let i = 0; i < 300 && !port && !exited; i++) {
+      try {
+        port = Number(readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]) || 0;
+      } catch {}
+      if (!port) await sleep(100);
+    }
+    for (let i = 0; port && i < 100 && !target; i++) {
+      const list = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json()).catch(() => []);
+      target = list.find(t => t.type === "page");
+      if (!target) await sleep(100);
+    }
+    if (target) return { proc, profile, target };
+    proc.kill("SIGKILL");
+    rmSync(profile, { recursive: true, force: true });
+    if (attempt >= 2) throw new Error("Chromium didn't open its debugging port");
+  }
+}
+
 export async function openPage(url, { width = 1280, height = 800, dark = false } = {}) {
   const chrome = await findChromium();
   if (!chrome) return null;
-  const profile = mkdtempSync(join(tmpdir(), "cc-browser-"));
-  const proc = spawn(chrome, ["--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--no-pings", `--window-size=${width},${height}`, "about:blank"], { stdio: "ignore" });
-  let port = 0;
-  for (let i = 0; i < 100 && !port; i++) {
-    try {
-      port = Number(readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]) || 0;
-    } catch {}
-    if (!port) await sleep(100);
-  }
-  if (!port) throw new Error("Chromium didn't open its debugging port");
-  let target = null;
-  for (let i = 0; i < 50 && !target; i++) {
-    const list = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json()).catch(() => []);
-    target = list.find(t => t.type === "page");
-    if (!target) await sleep(100);
-  }
+  const { proc, profile, target } = await launch(chrome, width, height);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((res, rej) => {
-    ws.onopen = res;
-    ws.onerror = rej;
-  });
+  try {
+    await new Promise((res, rej) => {
+      ws.onopen = res;
+      ws.onerror = () => rej(new Error("couldn't connect to Chromium"));
+    });
+  } catch (e) {
+    proc.kill("SIGKILL");
+    rmSync(profile, { recursive: true, force: true });
+    throw e;
+  }
   let id = 0;
   const waiting = new Map();
   ws.onmessage = ev => {

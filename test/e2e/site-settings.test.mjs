@@ -3,6 +3,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startSite, connectAgent } from "../helpers/site.mjs";
+import { findTemplate } from "../../site/templates.js";
+import { openPage, findChromium } from "../helpers/browser.mjs";
+
+const CHROME = await findChromium();
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
@@ -71,4 +75,72 @@ test("a deploy with a different name (from `<command> edit`) wins over a name se
   // a deploy that kept the name it had (an update): it still does
   await s.putStorage("site", rec);
   assert.equal((await s.api("/api/state")).body.site.name, "From Settings");
+});
+
+test("the ChatGPT template from Settings: its name and tab icon at once, the tab saying the name, and the page knows it's in use", async t => {
+  const s = await startSite({ appVersion: "1.10.0" });
+  t.after(() => s.stop());
+  await s.claim();
+  const agent = await connectAgent(s);
+  const T = findTemplate("chatgpt");
+  // the page knows the templates, and each one's icon can be shown before it's picked
+  const page = await (await s.asOwner("/")).text();
+  assert.match(page, /"templates":\[\{"id":"chatgpt","name":"ChatGPT","about":"[^"]+"\}\]/);
+  assert.doesNotMatch(page, new RegExp(T.favicon.b64.slice(0, 40).replace(/[+/]/g, "\\$&")), "not the icon itself, which has its own address");
+  const icon = await s.mf.dispatchFetch(s.origin + "/templates/chatgpt?v=1", { headers: { "x-test-anonymous": "1" } });
+  assert.equal(icon.status, 200);
+  assert.equal(icon.headers.get("content-type"), "image/png");
+  assert.equal(Buffer.from(await icon.arrayBuffer()).toString("base64"), T.favicon.b64);
+  assert.equal((await s.asOwner("/templates/nope")).status, 404);
+
+  await s.post("/api/site", { tab: "My own tab" });
+  assert.equal((await s.api("/api/state")).body.site.template, "");
+  const r = await s.post("/api/site", { template: "chatgpt" });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual([r.body.name, r.body.tab, r.body.favicon, r.body.template], ["ChatGPT", "", true, "chatgpt"]);
+  const fav = await s.asOwner(`/favicon?v=${r.body.v}`);
+  assert.equal(Buffer.from(await fav.arrayBuffer()).toString("base64"), T.favicon.b64);
+  assert.match(await (await s.asOwner("/")).text(), /<title>ChatGPT<\/title>/);
+  // the computer keeps its own copy, for the next update's deploy and the command's new name
+  const told = await agent.next(m => m.type === "site" && m.displayName === "ChatGPT");
+  assert.equal(told.tab, "");
+  assert.equal(told.brand.favicon.b64, T.favicon.b64);
+
+  // another tab icon, and it isn't the template any more; an unknown template changes nothing
+  assert.equal((await s.post("/api/site", { favicon: { b64: PNG } })).body.template, "");
+  assert.equal((await s.post("/api/site", { template: "nope" })).status, 400);
+  const now = (await s.api("/api/state")).body.site;
+  assert.deepEqual([now.name, now.template], ["ChatGPT", ""]);
+});
+
+test("Settings → Appearance offers the ChatGPT template, asks in the page's own dialog, then shows it's in use", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const s = await startSite({ appVersion: "1.10.0" });
+  t.after(() => s.stop());
+  await s.claim();
+  const page = await openPage(s.origin + "/");
+  t.after(() => page.close());
+  await page.until(`document.getElementById("input")`, "the page");
+  await page.evaluate(`document.getElementById("profileBtn").click()`);
+  await page.until(`document.querySelector('[data-pm="settings"]')`, "the profile menu");
+  await page.evaluate(`document.querySelector('[data-pm="settings"]').click()`);
+  await page.until(`document.querySelector('[data-tab-set="appearance"]')`, "Settings");
+  await page.evaluate(`document.querySelector('[data-tab-set="appearance"]').click()`);
+  await page.until(`document.querySelector('[data-template="chatgpt"]')`, "the template's Use button");
+  const row = await page.evaluate(`document.querySelector('[data-template="chatgpt"]').closest(".img-field").innerText`);
+  assert.match(row, /ChatGPT[\s\S]*ChatGPT's icon/);
+  assert.equal(await page.until(`(() => { const i = document.querySelector('[data-template="chatgpt"]').closest(".img-field").querySelector("img"); return i.complete && i.naturalWidth; })()`, "the template's icon"), 256);
+  // asked first, never with the browser's own confirm(); No changes nothing
+  await page.evaluate(`document.querySelector('[data-template="chatgpt"]').click()`);
+  await page.until(`document.getElementById("askDlg").open`, "the page's dialog");
+  assert.match(await page.evaluate(`document.getElementById("askTitle").textContent`), /Use the ChatGPT template\?/);
+  await page.evaluate(`document.getElementById("askNo").click()`);
+  await page.until(`!document.getElementById("askDlg").open`, "the dialog closed");
+  assert.equal((await s.api("/api/state")).body.site.name, "Test Site");
+  await page.evaluate(`document.querySelector('[data-template="chatgpt"]').click()`);
+  await page.until(`document.getElementById("askDlg").open`, "the page's dialog");
+  await page.evaluate(`document.getElementById("askYes").click()`);
+  assert.match(await page.until(`(() => { const o = document.querySelector(".tpl-on"); return o && o.textContent; })()`, "In use"), /In use/);
+  assert.equal(await page.evaluate(`document.title`), "ChatGPT");
+  assert.equal(await page.evaluate(`document.getElementById("brand").innerText.trim()`), "ChatGPT", "the sidebar says the new name without a reload");
+  assert.equal((await s.api("/api/state")).body.site.template, "chatgpt");
 });

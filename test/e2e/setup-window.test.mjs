@@ -24,7 +24,7 @@ async function setUp(t, extraEnv = {}, args = []) {
   const env = {
     ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"),
     CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50",
-    CLAUDECONNECT_CONNECT_MS: "1500", CLAUDECONNECT_LIVE_MS: "300", CLAUDECONNECT_GUI_NO_OPEN: "1",
+    CLAUDECONNECT_CONNECT_MS: "1500", CLAUDECONNECT_LIVE_MS: "300", CLAUDECONNECT_GUI_NO_OPEN: "1", CLAUDECONNECT_ACCESS_LATE_MS: "1500",
     ...extraEnv
   };
   // its own process group, so the installer the launcher starts goes too when the test ends
@@ -64,9 +64,14 @@ async function setUp(t, extraEnv = {}, args = []) {
 
 test("the setup window asks everything a first install needs, explains Cloudflare Access and its card, and ends with the site's address", { skip: !CHROME && "needs a Chromium" }, async t => {
   const s = await setUp(t);
-  // there's no plan to pick (replies always come from Claude Code): it starts with the name. One the site can't use is
-  // said, and asked again
-  let text = await s.card("Name your site");
+  // there's no plan to pick (replies always come from Claude Code): it starts with a template, your own name and icon picked
+  let text = await s.card("Start from a template?");
+  assert.match(text, /Your own[\s\S]*ChatGPT/);
+  assert.equal(await s.page.evaluate(`document.querySelector('.choice.on').dataset.pick`), "");
+  assert.match(await s.page.evaluate(`document.querySelector('[data-pick="chatgpt"] img').src`), /^data:image\/png;base64,/);
+  await s.click("[data-send-pick]");
+  // then the name. One the site can't use is said, and asked again
+  text = await s.card("Name your site");
   assert.doesNotMatch(text, /paid plan|free plan/i);
   await s.type("!!!");
   text = await s.page.until(`(() => { const a = document.querySelector("#card .alert"); return a && a.textContent; })()`, "the reason the name won't work");
@@ -82,20 +87,27 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.match(text, /startup item/);
   await s.click('[data-answer="n"]');
 
-  // Cloudflare Access, step by step, with what the card is for, and a button that opens the claim link
-  text = await s.card("Lock it to your Cloudflare account", 60000);
-  assert.match(text, /Enable Cloudflare Access/);
+  // Cloudflare Access: one button straight to the Worker's Access tab, three short things to do there, and why it asks for a
+  // card. No claim link yet, and no other dashboard link
+  text = await s.card("Turn on Cloudflare Access", 60000);
   assert.match(text, /Zero Trust/);
   assert.match(text, /Free/);
-  assert.match(text, /it's \$0/);
-  assert.match(text, /up to 50 people/);
-  assert.match(text, /not the Worker's Access tab/, "the tab that would block the computer's connection is warned against");
+  assert.match(text, /costs \$0/);
   assert.match(text, /real person/);
   assert.match(text, /won't be charged/);
+  assert.match(text, /your own email address/);
+  assert.deepEqual(JSON.parse(await s.page.evaluate(`JSON.stringify([...document.querySelectorAll("#card a")].map(a => a.href))`)), ["https://dash.cloudflare.com/acct-1/workers/services/view/my-site/production/access"]);
+  assert.equal(await s.page.evaluate(`document.querySelector("[data-claim]")`), null, "the claim link only comes once Access is on");
+  assert.equal(await s.page.evaluate(`document.documentElement.scrollHeight <= innerHeight`), true, "it fits without scrolling");
+  // Access can't be seen from the test, so after a while (CLAUDECONNECT_ACCESS_LATE_MS) there's a way on
+  await s.page.until(`document.querySelector('[data-answer="skip"]')`, "the way on");
+  await s.click('[data-answer="skip"]');
+
+  // then the claim link, as its own step
+  text = await s.card("Claim your site");
+  assert.match(text, /Access is on/);
   const claim = await s.page.evaluate(`document.querySelector("[data-claim]").dataset.claim`);
   assert.match(claim, /^https:\/\/my-site\.testacct\.workers\.dev\/\?claim=/);
-  // the dashboard link is the site's Settings (Domains & Routes), not its Access tab
-  assert.match(await s.page.evaluate(`[...document.querySelectorAll("#card a")].map(a => a.href).join(" ")`), /\/workers\/services\/view\/my-site\/production\/settings/);
   await s.click("[data-claim]");
 
   // nothing connects in the test, so it ends saying it will by itself, with the address to open
@@ -109,6 +121,17 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.equal(cfg.command, "MySite", "the command is the site's name");
   // every step is ticked off in the window's list
   assert.equal(await s.page.evaluate(`document.querySelectorAll("#steps li.done").length > 3 && !document.querySelector("#steps li.now")`), true);
+});
+
+test("picking the ChatGPT template in the window names the site and picks its icon, so neither is asked", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const s = await setUp(t);
+  await s.card("Start from a template?");
+  await s.click('[data-pick="chatgpt"]');
+  await s.click("[data-send-pick]");
+  // straight on to the computer: no name and no tab icon to pick
+  await s.card("Start ChatGPT when you log in?");
+  assert.equal(JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8")).displayName, "ChatGPT");
+  assert.match(readFileSync(join(s.dir, "site", "brand.js"), "utf8"), /"favicon":\{"type":"image\/png","b64":"iVBOR/);
 });
 
 test("when the setup stops, the window says why", { skip: !CHROME && "needs a Chromium" }, async t => {

@@ -1,26 +1,30 @@
 {
   "name": "claudeconnect",
-  "version": "2.5.3",
+  "version": "2.7.0",
   "released": "2026-10-14",
   "notes": [
-    "Signing in to claude.ai during setup works on a Mac now. The install command handed setup your terminal as /dev/tty, which Claude Code can't read the keyboard from on a Mac, so its sign-in crashed with \"EINVAL: invalid argument, kqueue\" (2.5.2 didn't fix the cause). The install command now hands over your terminal by its own name.",
-    "A site that's already running was never affected: it talks to Claude Code another way, not through the terminal."
+    "Setup's Cloudflare Access step is simpler. One button opens your site's Access page in Cloudflare, which asks you to set up Zero Trust if you haven't. Then there are three short things to do, and a line on why Cloudflare asks for a card (it's $0 on the Free plan).",
+    "Setup only gives you your claim link once Access is on, as its own step, and it moves there by itself. No step needs scrolling any more, and the extra Site settings button is gone.",
+    "The sidebar lists chats by title only, without the small grey folder name (like an old site's name) under them.",
+    "The model and effort button in the message box is just the lightbulb now. Click it to see and change the model and effort.",
+    "Everything from 2.6.0 is here too: the ChatGPT template in setup and in Settings → Appearance, and ~/Claude as a new site's working folder when you have one."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "6baa62d8592e3eced2536fb171ef8c4c809e95bbfe72252537ca0845dd0a21f5",
-    "setup.mjs": "d90558814e509e9718594c030bb1df24b393df936820ff06288797d2da34781e",
-    "setup.html": "e29224d5a89236379ba1cfe93abc997d4ffa0e611195690d7617589345972c6c",
+    "installer.mjs": "c37b5fde531a3c5b201ec4e879e21cbd33d56f46b123ec4b095bc840bcf3831e",
+    "setup.mjs": "5074e245069469b21b0c5c59239d20498c34ae2d75ec7472bd4166593fd69f37",
+    "setup.html": "00b184f1993089dfe94fedd8b96d9589f88f301e10d6ad37d163328f2f13075d",
     "agent/agent.mjs": "a810c070ddb40150446a8d0fc15ec50f5c61102d8c7bf65a5a82c2517b43639a",
     "agent/sessions.mjs": "501ff207add7b3a3c4a652dd9d42a68426a936adfe05b26c6fc50ae5812853e5",
     "agent/limits.mjs": "19e70b8b46ef0afd0944b7ce7b63655442563c62201b323f22959cddbabab520",
     "agent/files.mjs": "194511f52b72d5b8bc64fadd8990449585b14c70fe2ff77ac4e30cf88e30be53",
     "agent/trash.mjs": "98380aad5dee3b9a38882285df88d0f52126bf7444ed95b155a762ad97ed09dc",
     "agent/permit.mjs": "d6607a5da852305283dd8216b891f0d7925a1bc114c49dcf5226f59dfaebc1d6",
-    "site/worker.js": "8a4fd8055e1fe95538c5bd7ff0bb541f55dbbac55cdd9eb09327126955c3b5ec",
-    "site/app.html": "20533cc7ee724077a2eb235481e9ceaeef32f7bc4dee8c7c986fcad2e0cbedeb",
+    "site/worker.js": "4045695673cb578d2150b7c551ed6653097e537957c6ec0e2b9ca7b8115f1d39",
+    "site/app.html": "8dcc00b98fe75f135d892d3f9c2ffc0ff9ff7f567c43537e172456fc348c7e0e",
     "site/version.js": "2c56b3032c090182dd54d5dd93151a7b401350b5bdf5aa67ed783ab8fcedee69",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
-    "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559"
+    "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559",
+    "site/templates.js": "f17cf361b356a20bb6703b2049744aa8afd5ce6b79e320513cefd96c7c448dda"
   }
 }
