@@ -64,9 +64,14 @@ async function setUp(t, extraEnv = {}, args = []) {
 
 test("the setup window asks everything a first install needs, explains Cloudflare Access and its card, and ends with the site's address", { skip: !CHROME && "needs a Chromium" }, async t => {
   const s = await setUp(t);
-  // there's no plan to pick (replies always come from Claude Code): it starts with the name. One the site can't use is
-  // said, and asked again
-  let text = await s.card("Name your site");
+  // there's no plan to pick (replies always come from Claude Code): it starts with a template, your own name and icon picked
+  let text = await s.card("Start from a template?");
+  assert.match(text, /Your own[\s\S]*ChatGPT/);
+  assert.equal(await s.page.evaluate(`document.querySelector('.choice.on').dataset.pick`), "");
+  assert.match(await s.page.evaluate(`document.querySelector('[data-pick="chatgpt"] img').src`), /^data:image\/png;base64,/);
+  await s.click("[data-send-pick]");
+  // then the name. One the site can't use is said, and asked again
+  text = await s.card("Name your site");
   assert.doesNotMatch(text, /paid plan|free plan/i);
   await s.type("!!!");
   text = await s.page.until(`(() => { const a = document.querySelector("#card .alert"); return a && a.textContent; })()`, "the reason the name won't work");
@@ -109,6 +114,17 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.equal(cfg.command, "MySite", "the command is the site's name");
   // every step is ticked off in the window's list
   assert.equal(await s.page.evaluate(`document.querySelectorAll("#steps li.done").length > 3 && !document.querySelector("#steps li.now")`), true);
+});
+
+test("picking the ChatGPT template in the window names the site and picks its icon, so neither is asked", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const s = await setUp(t);
+  await s.card("Start from a template?");
+  await s.click('[data-pick="chatgpt"]');
+  await s.click("[data-send-pick]");
+  // straight on to the computer: no name and no tab icon to pick
+  await s.card("Start ChatGPT when you log in?");
+  assert.equal(JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8")).displayName, "ChatGPT");
+  assert.match(readFileSync(join(s.dir, "site", "brand.js"), "utf8"), /"favicon":\{"type":"image\/png","b64":"iVBOR/);
 });
 
 test("when the setup stops, the window says why", { skip: !CHROME && "needs a Chromium" }, async t => {

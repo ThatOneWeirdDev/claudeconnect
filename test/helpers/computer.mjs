@@ -112,7 +112,7 @@ if (/ deploy /.test(" " + a + " ")) {
   mkdirSync(join(home, "deploys"), { recursive: true });
   const n = require("node:fs").readdirSync(join(home, "deploys")).length + 1;
   copyFileSync(join(process.cwd(), "wrangler.jsonc"), join(home, "deploys", n + ".json"));
-  for (const f of ["worker.js", "app.html", "version.js", "names.js", "image.js"]) if (!existsSync(join(process.cwd(), f))) { console.error("missing " + f); process.exit(2); }
+  for (const f of ["worker.js", "app.html", "version.js", "names.js", "image.js", "templates.js"]) if (!existsSync(join(process.cwd(), f))) { console.error("missing " + f); process.exit(2); }
   console.log("Deployed (fake)"); process.exit(0);
 }
 console.error("fake npx: unexpected " + a); process.exit(3);

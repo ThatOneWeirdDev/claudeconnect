@@ -676,6 +676,8 @@ svg{display:block;flex:none}
 .img-meta{flex:1;min-width:0}
 .img-meta b{display:block;font-weight:500;font-size:14px}
 .img-meta small{color:var(--text-3);font-size:12px}
+.tpl-on{display:inline-flex;align-items:center;gap:6px;color:var(--text-2);font-size:14px;padding:0 6px}
+.tpl-on svg{width:16px;height:16px;color:var(--ok)}
 .seg{display:inline-flex;padding:2px;border-radius:999px;background:var(--seg)}
 .seg button{height:28px;padding:0 12px;border-radius:999px;font-size:13px;color:var(--text-2);white-space:nowrap}
 .seg button:hover{color:var(--text)}
@@ -3117,6 +3119,21 @@ function imgField(key, label, hint) {
   return `<div class="img-field"><div class="img-prev">${prev}</div><div class="img-meta"><b>${label}</b><small>${state} · ${hint}</small></div><button type="button" class="btn ghost" data-img="${key}"${SET.saving ? " disabled" : ""}>Choose…</button>${own ? `<button type="button" class="btn ghost" data-img-reset="${key}"${SET.saving ? " disabled" : ""}>Built-in</button>` : ""}</div>`;
 }
 
+// Templates (site/templates.js): a name and a tab icon in one go. The one the site looks like now says so.
+function templatesHtml() {
+  const list = CFG.templates || [];
+  if (!list.length) return "";
+  const now = siteNow().template || "";
+  const row = t => `<div class="img-field"><div class="img-prev"><img src="/templates/${esc(t.id)}?v=${esc(CFG.version)}" alt=""></div><div class="img-meta"><b>${esc(t.name)}</b><small>${esc(t.about)}</small></div>${now === t.id ? `<span class="tpl-on">${I.check}<span>In use</span></span>` : `<button type="button" class="btn ghost" data-template="${esc(t.id)}"${SET.saving ? " disabled" : ""}>${SET.saving === "template" ? "Saving…" : "Use"}</button>`}</div>`;
+  return `<div class="sec"><h3>Template</h3><p>A ready-made name and tab icon. Your chats and the working folder stay as they are, and you can change either afterwards.</p>${list.map(row).join("")}</div>`;
+}
+async function useTemplate(id) {
+  const t = (CFG.templates || []).find(t => t.id === id);
+  if (!t || SET.saving) return;
+  if (!(await askConfirm({ title: `Use the ${t.name} template?`, text: `${CFG.name} becomes ${t.name}, with ${t.name}'s icon in the browser tab. The command on your computer follows the name.`, ok: "Use it" }))) return;
+  saveSite("template", { template: t.id });
+}
+
 // The text in the browser tab, next to the tab icon: the site's name unless it's given its own.
 function tabField() {
   const status = SET.saving === "tab" ? "Saving…" : SET.saved === "tab" ? "Saved" : "";
@@ -3137,7 +3154,7 @@ function paneHtml() {
   }
   if (SET.tab === "appearance") {
     const curTheme = store.get("theme", "system");
-    return `<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB. A new one is used as soon as you pick it.</p>${imgField("favicon", "Tab icon", "the browser tab and the collapsed sidebar")}${tabField()}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
+    return `${templatesHtml()}<div class="sec"><h3>Branding</h3><p>PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB. A new one is used as soon as you pick it.</p>${imgField("favicon", "Tab icon", "the browser tab and the collapsed sidebar")}${tabField()}${SET.err && SET.tab === "appearance" ? `<div class="err-text">${esc(SET.err)}</div>` : ""}<input type="file" id="fImg" accept="image/*,.ico,.svg" hidden></div><div class="sec srow"><h3>Theme</h3><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => `<button type="button" data-theme-set="${k}" class="${k === curTheme ? "on" : ""}" aria-pressed="${k === curTheme}">${label}</button>`).join("")}</div></div>`;
   }
   if (SET.tab === "address") {
     const h = hostParts();
@@ -3234,6 +3251,8 @@ function applySite(site) {
   if (site.command) CFG.command = site.command;
   document.title = S.chat && S.chat.title ? `${S.chat.title} · ${tabName()}` : tabName();
   $("brand").setAttribute("aria-label", CFG.name);
+  const label = $("brand").querySelector("span:not(.brand-open)");
+  if (label) label.textContent = CFG.name;
   const mark = $("brand").firstElementChild;
   // no logo on the page: the rail shows the tab icon
   const want = `<img src="/favicon?v=${esc(site.v)}" alt="">`;
@@ -3310,6 +3329,8 @@ $("setBody").addEventListener("click", async e => {
   if (ans) { ANSWERS[ans.dataset.answer] = ans.getAttribute("aria-checked") !== "true"; return renderSettings(); }
   const img = e.target.closest("[data-img]");
   if (img) { SET.pickKey = img.dataset.img; $("fImg").click(); return; }
+  const tpl = e.target.closest("[data-template]");
+  if (tpl) return useTemplate(tpl.dataset.template);
   const reset = e.target.closest("[data-img-reset]");
   if (reset) return saveSite(reset.dataset.imgReset, { [reset.dataset.imgReset]: null });
   const act = e.target.closest("[data-act]");

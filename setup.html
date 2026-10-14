@@ -56,6 +56,7 @@ label.field{display:block;font-size:14px;font-weight:500;margin:0 0 6px}
 .choice small{color:var(--text-2);font-size:13px;display:block}
 .choice .dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--text-3);flex:none;margin-top:3px}
 .choice.on .dot{border:5px solid var(--text)}
+.choice .c-ic{width:24px;height:24px;border-radius:6px;flex:none;margin-top:0}
 .alert{border-radius:12px;padding:10px 14px;font-size:14px;margin:0 0 14px;background:var(--warn-bg);color:var(--warn)}
 .alert.err{background:var(--err-bg);color:var(--err)}
 .howto{margin:0 0 18px;padding:0;list-style:none;counter-reset:s}
@@ -179,7 +180,7 @@ function askHtml(q) {
     return head + warnHtml() + `<div class="row">${yesFirst ? yes + no : no + yes}</div>`;
   }
   if (q.kind === "choice") {
-    return head + warnHtml() + `<div class="choices" role="radiogroup">${(q.options || []).map(o => `<button type="button" class="choice${String(o.value) === S.pick ? " on" : ""}" role="radio" aria-checked="${String(o.value) === S.pick}" data-pick="${esc(o.value)}"><span class="dot"></span><span><b>${esc(o.label)}</b>${o.desc ? `<small>${esc(o.desc)}</small>` : ""}</span></button>`).join("")}</div><div class="row"><button type="button" class="primary" data-send-pick${S.pick == null ? " disabled" : ""}>${esc(q.button || "Continue")}</button></div>`;
+    return head + warnHtml() + `<div class="choices" role="radiogroup">${(q.options || []).map(o => `<button type="button" class="choice${String(o.value) === S.pick ? " on" : ""}" role="radio" aria-checked="${String(o.value) === S.pick}" data-pick="${esc(o.value)}"><span class="dot"></span>${o.icon ? `<img class="c-ic" src="${esc(o.icon)}" alt="">` : ""}<span><b>${esc(o.label)}</b>${o.desc ? `<small>${esc(o.desc)}</small>` : ""}</span></button>`).join("")}</div><div class="row"><button type="button" class="primary" data-send-pick${S.pick == null ? " disabled" : ""}>${esc(q.button || "Continue")}</button></div>`;
   }
   if (q.kind === "image") {
     return head + warnHtml() + `<input type="file" id="file" accept="image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,.ico,.svg" hidden><div class="row"><button type="button" class="primary" data-file>Choose an image…</button><button type="button" data-answer="">${esc(q.keepLabel || "Skip")}</button>${q.current ? `<button type="button" data-answer="default">Use the built-in one</button>` : ""}</div><p class="help" style="margin:14px 0 0;font-size:13px">PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB.</p>`;

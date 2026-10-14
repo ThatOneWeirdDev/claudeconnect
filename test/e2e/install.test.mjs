@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import { startRepo } from "../helpers/github.mjs";
 import { ROOT } from "../helpers/computer.mjs";
 import { startFakeCloudflare } from "../helpers/cloudflare.mjs";
+import { findTemplate } from "../../site/templates.js";
 
 const RELEASE = JSON.parse(readFileSync(join(ROOT, "manifest.json"), "utf8"));
 const sha = p => crypto.createHash("sha256").update(readFileSync(p)).digest("hex");
@@ -93,6 +94,7 @@ test("a first install, then an update, through the real launcher and installer",
   assert.equal(cfg1.repo, "ThatOneWeirdDev/claudeconnect");
   assert.equal(cfg1.ref, "main");
   assert.equal(cfg1.kvId, "kv-new");
+  assert.equal(cfg1.workspace, join(home, "My Site"), "without a Claude folder, the working folder is named after the site");
   assert.ok(cfg1.secret.length >= 32);
   assert.equal(statSync(join(dir, "config.json")).mode & 0o077, 0, "the config is private to the user");
   assert.ok(existsSync(cfg1.shim));
@@ -139,6 +141,46 @@ test("a first install, then an update, through the real launcher and installer",
   }
   assert.ok(pid > 0, "a new agent is running");
   assert.equal(running(firstPid), false, "the old agent is gone");
+});
+
+test("the ChatGPT template names the site and gives it ChatGPT's icon, and the Claude folder is the working folder", async t => {
+  const github = await startRepo(ROOT);
+  const home = mkdtempSync(join(tmpdir(), "cc-install-"));
+  const cf = await startFakeCloudflare(home);
+  const bin = join(home, "bin");
+  mkdirSync(bin, { recursive: true });
+  const { makeFakes } = await import("../helpers/computer.mjs");
+  makeFakes(bin);
+  const env = { ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}:${process.env.PATH}`, npm_config_prefix: join(home, "npm"), CLAUDECONNECT_RAW: github.url, CLAUDECONNECT_CF_API: cf.url, CLAUDECONNECT_RETRY_MS: "50", CLAUDECONNECT_CONNECT_MS: "500", CLAUDECONNECT_LIVE_MS: "300" };
+  const dir = join(home, ".claudeconnect");
+  t.after(async () => {
+    try {
+      process.kill(Number(readFileSync(join(dir, "agent.pid"), "utf8")), "SIGKILL");
+    } catch {}
+    await github.close();
+    await cf.close();
+    rmSync(home, { recursive: true, force: true });
+  });
+  // a template that doesn't exist stops before anything is made
+  const bad = await runLauncher(home, env, ["--template", "nope", "--no-autostart"]);
+  assert.equal(bad.status, 1, bad.out);
+  assert.match(bad.out, /There's no template called nope\. Templates: ChatGPT, or none\./);
+  assert.ok(!existsSync(join(home, "deploys")), "nothing was deployed");
+
+  mkdirSync(join(home, "Claude"));
+  const r = await runLauncher(home, env, ["--template", "chatgpt", "--no-autostart"]);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /Using the ChatGPT template/);
+  const T = findTemplate("chatgpt");
+  assert.equal(readFileSync(join(dir, "site", "brand.js"), "utf8"), "export default " + JSON.stringify({ logo: null, favicon: T.favicon }) + ";\n");
+  assert.equal(sha(join(dir, "site", "templates.js")), RELEASE.files["site/templates.js"]);
+  const wr = JSON.parse(readFileSync(join(dir, "site", "wrangler.jsonc"), "utf8"));
+  assert.equal(wr.name, "chatgpt");
+  assert.equal(wr.vars.SITE_NAME, "ChatGPT");
+  assert.equal(wr.vars.TAB_TITLE, undefined, "the tab says the name");
+  const cfg = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+  assert.deepEqual([cfg.displayName, cfg.command, cfg.workspace], ["ChatGPT", "ChatGPT", join(home, "Claude")]);
+  assert.ok(!existsSync(join(home, "ChatGPT")), "no folder of its own");
 });
 
 test("the one-line install script sets everything up, and tells you if Node is too old or missing", async t => {
