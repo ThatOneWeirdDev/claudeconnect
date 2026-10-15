@@ -880,6 +880,7 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "command") return this.noteCommand(m.command);
     if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
+    if (m.type === "commands") return this.saveCommands(m.commands);
     if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result") return this.gotTranscript(m);
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
@@ -1010,6 +1011,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/limits" && method === "GET") return json(await this.limitsView());
     if (p === "/api/credits" && method === "GET") return json((await this.ctx.storage.get("credits")) || null);
     if (p === "/api/limits/refresh" && method === "POST") return this.askLimits();
+    if (p === "/api/commands" && method === "GET") return json({ commands: (await this.ctx.storage.get("commands")) || [] });
     if (p === "/api/prefs" && method === "POST") return this.setPrefs(req);
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/remote" && method === "POST") return this.answerRemote(req);
@@ -1741,6 +1743,19 @@ export class ChatgqlHub extends DurableObject {
       this.sql.exec("DELETE FROM computer_sessions");
       for (const r of rows) this.sql.exec("INSERT OR REPLACE INTO computer_sessions (id, title, folder, updated) VALUES (?, ?, ?, ?)", ...r);
     });
+  }
+
+  // Claude Code's slash commands as the computer last listed them, for the page's "/" list. Kept for when it's offline.
+  async saveCommands(list) {
+    if (!Array.isArray(list)) return;
+    const NAME = /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,63}$/;
+    const text = (v, n) => String(typeof v === "string" ? v : "").replace(/\s+/g, " ").trim().slice(0, n);
+    const out = [];
+    for (const c of list.slice(0, 400)) {
+      if (!c || typeof c !== "object" || !NAME.test(String(c.name))) continue;
+      out.push({ name: c.name, description: text(c.description, 300), hint: text(c.hint, 80), aliases: (Array.isArray(c.aliases) ? c.aliases : []).filter(a => NAME.test(String(a))).slice(0, 6) });
+    }
+    await this.ctx.storage.put("commands", out);
   }
 
   historyOn() {

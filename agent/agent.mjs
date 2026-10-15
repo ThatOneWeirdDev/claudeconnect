@@ -1429,6 +1429,67 @@ function reportSessions(force) {
 }
 setInterval(() => reportSessions(false), 15000).unref();
 
+// Claude Code's slash commands, for the site's "/" list: its own, skills, plugins' and the ones in .claude/commands, each with
+// what it's for and what it takes, as Claude Code tells an SDK that starts a session ("initialize"). Asking sends nothing to the
+// model. Typed on the site, a command goes to Claude Code like any message, and it runs it.
+const HIDDEN_COMMANDS = new Set(["color", "focus", "heapdump", "reload-plugins", "workflow-launch-exec"]); // the terminal's own
+function readCommands() {
+  return new Promise(resolve => {
+    if (!CLAUDE) return resolve(null);
+    let child;
+    try {
+      child = spawnClaude(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]);
+    } catch {
+      return resolve(null);
+    }
+    let done = false;
+    const finish = v => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      killTree(child);
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(null), 20000);
+    child.on("error", () => finish(null));
+    child.on("close", () => finish(null));
+    child.stderr.on("data", () => {});
+    createInterface({ input: child.stdout }).on("line", line => {
+      let o;
+      try {
+        o = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (o && o.type === "control_response" && o.response && o.response.request_id === "commands") {
+        const list = o.response.response && o.response.response.commands;
+        finish(Array.isArray(list) ? list : null);
+      }
+    });
+    child.stdin.on("error", () => {});
+    child.stdin.write(JSON.stringify({ type: "control_request", request_id: "commands", request: { subtype: "initialize" } }) + "\n");
+  });
+}
+let lastCommands = "";
+async function reportCommands() {
+  if (!ws || ws.readyState !== 1) return;
+  const raw = await readCommands();
+  if (!raw) return;
+  const commands = [];
+  for (const c of raw) {
+    if (!c || typeof c.name !== "string" || c.name.startsWith("__") || HIDDEN_COMMANDS.has(c.name)) continue;
+    const description = String(c.description || "").replace(/\s+/g, " ").trim();
+    if (/^\(removed\)/i.test(description)) continue;
+    commands.push({ name: c.name, description: description.slice(0, 300), hint: String(c.argumentHint || "").slice(0, 80), aliases: (Array.isArray(c.aliases) ? c.aliases : []).filter(a => typeof a === "string").slice(0, 6) });
+  }
+  const sig = JSON.stringify(commands);
+  if (sig === lastCommands) return;
+  lastCommands = sig;
+  send({ type: "commands", commands });
+}
+// new skills or commands on disk show up within ten minutes, and at once after a restart
+setInterval(() => reportCommands().catch(() => {}), 600000).unref();
+
 // The newest release, read from here too and passed to the site. The site reads it itself, but from Cloudflare's servers
 // GitHub can be slow to answer, or turn it away for a while; from this computer it's another way of hearing of it.
 const RAW = String(process.env.CLAUDECONNECT_RAW || "https://raw.githubusercontent.com").replace(/\/+$/, "");
@@ -1692,6 +1753,8 @@ async function connect() {
     if (LIMITS) send({ type: "limits", limits: LIMITS });
     lastSessions = "";
     setTimeout(() => reportSessions(true), 400);
+    lastCommands = "";
+    setTimeout(() => reportCommands().catch(() => {}), 2500);
     setTimeout(() => checkRelease(), 5000);
     // whether there are usage credits (Fable 5.1 is only offered then), read with Claude Code's sign-in
     setTimeout(() => readCredits().catch(() => {}), 1500);
