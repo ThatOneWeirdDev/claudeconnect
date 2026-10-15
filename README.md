@@ -79,6 +79,14 @@ A file the reply writes shows as a card you can open in a panel beside the chat.
 
 Asking on the site needs a Claude Code that can ask through another program (`--permission-prompt-tool`) and the program on your computer at 2.0.0 or newer. Without that, anything that would need permission is skipped and **Ask first** isn't offered. Updating from the site brings it up to date.
 
+### Slash commands
+
+Type `/` in the message box and a list opens above it with every command you can use, each with what it's for and what it takes. It narrows as you type, by name first and then by description. Use the up and down arrows to move, **Tab** to fill a name in, and **Enter** to run it; a command that needs something after it gets a space for that instead. **Esc** closes the list.
+
+- **Claude Code's own commands** go to Claude Code like any message, and it runs them in the chat's conversation. That covers its built-in ones (`/compact`, `/context`, `/init`, `/review`, `/security-review` and the rest), your skills and plugins, and your own commands in `~/.claude/commands` and the working folder's `.claude/commands`. The list comes from the Claude Code on your computer: it asks the same way an SDK does when it starts, which sends nothing to the model. It's refreshed every time your computer connects and every ten minutes. `/context` comes back as a bar showing how full the conversation is and what fills it, above Claude Code's table.
+- **A few the site does itself**, with its own controls: `/clear` (or `/new`) starts a new chat; `/model` and `/effort` pick them, or open the menu when nothing follows; `/usage` (or `/cost`) opens Plan usage; `/config` (or `/settings`) opens Settings; `/permissions` opens the permissions menu; `/files` opens the file browser; `/rename` renames the chat; `/help` lists everything.
+- The terminal's own commands (like `/color` and `/focus`) aren't listed.
+
 ### Plan usage
 
 **Plan usage** in the account menu shows how much of your Claude plan you've used: the current 5-hour session and the weekly limit, as percentages, with when each resets. These are the real numbers from your Claude account, not an estimate. Claude Code reads them from Anthropic's responses to every reply and reports them to ClaudeConnect. Each time you open Plan usage it reads the latest by itself, with one tiny message to the cheapest model (at most every 20 seconds).

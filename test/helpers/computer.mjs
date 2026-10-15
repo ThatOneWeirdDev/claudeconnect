@@ -22,6 +22,23 @@ if (a[0] === "--help") {
   if (!fs.existsSync(path.join(home, "old-claude"))) console.log("  --system-prompt-snapshot <on|off>  Record the system prompt once per conversation");
   process.exit(0);
 }
+if (a.includes("--input-format")) {
+  // an SDK starting a session asks which commands there are; the answer's shape is Claude Code 2.1.300's
+  require("node:readline").createInterface({ input: process.stdin }).on("line", line => {
+    const m = JSON.parse(line);
+    if (m.type !== "control_request" || m.request.subtype !== "initialize") return;
+    const commands = [
+      { name: "compact", description: "Free up context by summarizing the conversation so far", argumentHint: "<optional custom summarization instructions>", builtin: true },
+      { name: "context", description: "Show current context usage", argumentHint: "", builtin: true },
+      { name: "usage", description: "Show session cost, plan usage, and what's contributing to your limits", argumentHint: "", aliases: ["cost", "stats"], builtin: true },
+      { name: "color", description: "Set the prompt bar color for this session", argumentHint: "[red|blue|default]", builtin: true },
+      { name: "__remote-workflow", description: "Run the workflow script delivered in this session environment", argumentHint: "", builtin: true },
+      { name: "deploy", description: "Ship the shop to staging", argumentHint: "[environment]" }
+    ];
+    console.log(JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: m.request_id, response: { commands } } }));
+  });
+  return;
+}
 let prompt = "";
 process.stdin.on("data", d => (prompt += d)).on("end", () => {
   // every real run leaves its arguments and what it was asked, for the tests to look at
@@ -66,6 +83,12 @@ process.stdin.on("data", d => (prompt += d)).on("end", () => {
     fs.writeFileSync(f, '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>');
     out({ type: "assistant", message: { id: "m0", content: [{ type: "tool_use", id: "toolu_w", name: "Write", input: { file_path: f, content: "<svg/>" } }] } });
     out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_w", content: "File created" }] } });
+  }
+  if (prompt.trim() === "/context") {
+    // a command Claude Code answers itself, with no model: its reply is ready-made markdown
+    out({ type: "assistant", message: { id: "ctx", model: "<synthetic>", content: [{ type: "text", text: "## Context Usage\\n\\n**Model:** claude-opus-5-5  \\n**Tokens:** 25.8k / 1m (3%)\\n\\n### Estimated usage by category\\n\\n| Category | Tokens | Percentage |\\n|----------|--------|------------|\\n| System prompt | 1.9k | 0.2% |\\n| System tools | 18.1k | 1.8% |\\n| Messages | 5.8k | 0.6% |\\n| Free space | 941.2k | 94.1% |\\n" }] } });
+    out({ type: "result", subtype: "success", is_error: false, result: "", permission_denials: [] });
+    return;
   }
   if (/interleave/.test(prompt)) {
     // thinking, text, thinking, text in one reply, streamed the way Claude Code streams it

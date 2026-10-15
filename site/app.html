@@ -462,6 +462,25 @@ svg{display:block;flex:none}
 .send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none;transition:background .15s,color .15s,opacity .15s}
 .send:hover{opacity:.88}
 .send[disabled]{background:var(--accent);color:#fff;opacity:1;cursor:default}
+/* ---- "/" commands: a list above the message box, narrowing as you type */
+.composer{position:relative}
+.slash{position:absolute;left:0;right:0;bottom:calc(100% + 8px);z-index:60;max-height:360px;overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--menu);border-radius:16px;box-shadow:var(--shadow);cursor:default;text-align:left}
+.sl-item{padding:7px 10px;border-radius:10px;cursor:pointer}
+.sl-item.on{background:var(--hover-2)}
+.sl-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.sl-top b{font-weight:500;font-size:14px;line-height:20px;color:var(--text);white-space:nowrap}
+.sl-hint{color:var(--text-3);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl-desc{color:var(--text-3);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl-none{padding:8px 10px;color:var(--text-3);font-size:13px}
+/* /context: how full the conversation is, by what fills it */
+.ctx-card{margin:0 0 14px;padding:14px 16px;border-radius:16px;background:var(--surface-2)}
+.ctx-card .ctx-top{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin:0 0 10px}
+.ctx-card .ctx-top span{color:var(--text-3)}
+.ctx-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--border)}
+.ctx-bar i{display:block;height:100%;min-width:2px}
+.ctx-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 0;padding:0;list-style:none;font-size:12px;color:var(--text-2)}
+.ctx-legend li{display:flex;align-items:center;gap:6px}
+.ctx-legend i{width:8px;height:8px;border-radius:50%;flex:none}
 .c-note{margin:0 auto 8px;padding:0 12px;color:var(--text-3);font-size:12px;line-height:16px;text-align:center}
 .c-note:empty{display:none}
 .c-note.warn{color:var(--warn)}
@@ -846,6 +865,7 @@ svg{display:block;flex:none}
         <button class="jump" id="jump" type="button" hidden aria-label="Jump to latest"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21C11.73 21 11.48 20.89 11.29 20.70L4.29 13.70C3.90 13.31 3.90 12.68 4.29 12.29C4.68 11.90 5.31 11.90 5.70 12.29L11 17.58V4C11 3.44 11.44 3 12 3C12.55 3 13 3.44 13 4V17.58L18.29 12.29C18.68 11.90 19.31 11.90 19.70 12.29C20.09 12.68 20.09 13.31 19.70 13.70L12.70 20.70C12.51 20.89 12.26 21 12 21Z" fill="currentColor"/></svg></button>
         <div class="c-note" id="cNote"></div>
         <form class="composer" id="composer" autocomplete="off">
+          <div class="slash" id="slash" role="listbox" aria-label="Commands" hidden></div>
           <div class="chips" id="chips"></div>
           <div class="c-lead">
             <button type="button" class="c-icon" id="attachBtn" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.59C12.58 3.59 13.06 4.07 13.06 4.66V10.93H19.33C19.92 10.93 20.4 11.41 20.4 12C20.4 12.58 19.92 13.06 19.33 13.06H13.06V19.33C13.06 19.92 12.58 20.4 12 20.4C11.41 20.4 10.93 19.92 10.93 19.33V13.06H4.66C4.07 13.06 3.59 12.58 3.59 12C3.59 11.41 4.07 10.93 4.66 10.93H10.93V4.66C10.93 4.07 11.41 3.59 12 3.59Z" fill="currentColor"/></svg></button>
@@ -1698,6 +1718,7 @@ function botEl(m) {
       if (m.content) html += `<div class="md">${md(m.content)}</div>`;
     }
   } finally { MD_ARTS = null; }
+  html = contextCard(m.content || "") + html;
   const rest = arts.filter(a => !a._used);
   if (rest.length) html += `<div class="arts">${rest.map(artCard).join("")}</div>`;
   if (meta.error) html += `<div class="note ${meta.error === "Stopped." ? "soft" : "err"}">${meta.error === "Stopped." ? "You stopped this reply." : esc(meta.error)}</div>`;
@@ -1708,6 +1729,24 @@ function botEl(m) {
   el._raw = m.content || "";
   highlight(el);
   return el;
+}
+// What Claude Code's /context answers, drawn: one bar for the whole context window, split by what fills it, over its table.
+const CTX_COLORS = ["#6e56cf", "#2f80ed", "#12a594", "#e5484d", "#f5a524", "#d6409f", "#8e8c99"];
+function contextCard(text) {
+  if (!/^## Context Usage/.test(text)) return "";
+  const total = /\*\*Tokens:\*\*\s*([^/\n]+?)\s*\/\s*([^\s(]+)\s*\(([\d.]+)%\)/.exec(text);
+  const section = (/### Estimated usage by category\s*\n([\s\S]*?)(?:\n#|$)/.exec(text) || [])[1] || "";
+  const rows = [];
+  for (const line of section.split("\n")) {
+    const c = line.split("|").map(x => x.trim());
+    const pct = parseFloat(c[3]);
+    if (c.length >= 5 && c[1] && !/^-+$/.test(c[1]) && c[1] !== "Category" && Number.isFinite(pct)) rows.push({ name: c[1], tokens: c[2], pct });
+  }
+  if (!total && !rows.length) return "";
+  const used = rows.filter(r => !/^free space$/i.test(r.name));
+  const bar = used.map((r, k) => `<i style="width:${Math.min(100, r.pct)}%;background:${CTX_COLORS[k % CTX_COLORS.length]}" title="${esc(r.name)}: ${esc(r.tokens)}"></i>`).join("");
+  const legend = used.map((r, k) => `<li><i style="background:${CTX_COLORS[k % CTX_COLORS.length]}"></i>${esc(r.name)} ${esc(r.tokens)}</li>`).join("");
+  return `<div class="ctx-card"><div class="ctx-top"><b>Context</b>${total ? `<span>${esc(total[1])} of ${esc(total[2])} used (${esc(total[3])}%)</span>` : ""}</div><div class="ctx-bar">${bar}</div>${legend ? `<ul class="ctx-legend">${legend}</ul>` : ""}</div>`;
 }
 // A bubble whose text wraps onto more lines gets more room around it, as in ChatGPT.
 function fitBubbles(root) {
@@ -1986,8 +2025,10 @@ function grow() {
   if (!tall && input.scrollHeight > 36) { box.classList.add("tall"); input.style.height = "auto"; }
   input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.25) + "px";
 }
-input.addEventListener("input", () => { grow(); updateSend(); saveDraft(); });
+input.addEventListener("input", () => { grow(); updateSend(); saveDraft(); renderSlash(); });
+input.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== input) closeSlash(); }, 0));
 input.addEventListener("keydown", e => {
+  if (SL.open && slashKey(e)) return;
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !matchMedia("(hover: none)").matches) {
     e.preventDefault();
     if (!S.busy) send();
@@ -1997,6 +2038,144 @@ $("composer").addEventListener("submit", e => {
   e.preventDefault();
   if ($("sendBtn").dataset.stop === "1") stop();
   else send();
+});
+
+/* ---------- "/" commands ---------- */
+// Claude Code's own (its commands, skills, plugins', and the ones in .claude/commands) come from the computer and go to
+// Claude Code like any message, which runs them. These few the site does itself, with its own controls.
+const SITE_CMDS = [
+  { name: "help", description: "Show every command", run: () => { input.value = "/"; grow(); updateSend(); input.focus(); renderSlash(); } },
+  { name: "clear", aliases: ["new", "reset"], description: "Start a new chat", run: () => newChat(true) },
+  { name: "model", hint: "[fable|opus|sonnet|haiku]", description: "Choose the model", run: arg => {
+    const want = arg.toLowerCase();
+    const m = want && paidModels().find(x => x.id.toLowerCase().includes(want) || x.name.toLowerCase().startsWith(want));
+    if (!m) { if (want) toast(`There's no model called ${arg} here.`); return openPop("model"); }
+    pick(() => { S.model = m.id; store.set("model", S.model); });
+    toast(`Model: ${m.name}`);
+  } },
+  { name: "effort", hint: "[low|medium|high|xhigh|max]", description: "Choose how hard it thinks", run: arg => {
+    const m = modelOf(modelNow());
+    const x = arg.toLowerCase();
+    if (!effortsOf(m).includes(x)) { if (x) toast(`${m.name} has no ${arg} effort.`); return openPop("model"); }
+    S.efforts[m.id] = x;
+    store.set("efforts", S.efforts);
+    renderBar();
+    toast(`Effort: ${EFF_LABEL[x]}`);
+  } },
+  { name: "usage", aliases: ["cost", "stats"], description: "Show your plan usage and when it resets", run: () => openUsage() },
+  { name: "config", aliases: ["settings"], description: "Open Settings", run: () => openSettings("general") },
+  { name: "permissions", description: "Choose how freely it acts", run: () => openPop("perm") },
+  { name: "files", description: "Open the file browser", run: () => showFiles() },
+  { name: "rename", aliases: ["name"], hint: "[name]", description: "Rename this chat", run: async arg => {
+    if (!S.chatId) return toast("Send a message first, then the chat can be renamed.");
+    if (!arg) return renameChat(S.chatId);
+    const c = S.chats.find(x => x.id === S.chatId);
+    try {
+      await apiJson(`/api/chats/${S.chatId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: arg.slice(0, 120) }) });
+      if (c) c.title = arg.slice(0, 120);
+      renderHistory();
+      toast("Renamed.");
+    } catch (e) { toast(e.message); }
+  } }
+];
+// Claude Code's, as the computer last listed them
+let CMDS = [];
+async function loadCommands() {
+  loadCommands.at = Date.now();
+  try { CMDS = (await apiJson("/api/commands")).commands || []; } catch {}
+}
+function siteCommand(name) {
+  const n = String(name).toLowerCase();
+  return SITE_CMDS.find(c => c.name === n || (c.aliases || []).includes(n)) || null;
+}
+// the site's own first, then Claude Code's, leaving out any the site's own stand in for
+function allCommands() {
+  const taken = new Set(SITE_CMDS.flatMap(c => [c.name, ...(c.aliases || [])]));
+  return [...SITE_CMDS, ...CMDS.filter(c => !taken.has(c.name.toLowerCase()) && !(c.aliases || []).some(a => taken.has(a.toLowerCase())))];
+}
+// Narrowing as you type: names that start with it first, then aliases, then names that contain it, then descriptions.
+function slashMatches(q) {
+  q = q.toLowerCase();
+  const out = [];
+  for (const c of allCommands()) {
+    const n = c.name.toLowerCase();
+    const al = (c.aliases || []).map(a => a.toLowerCase());
+    let s = !q ? 5 : n === q || al.includes(q) ? 0 : n.startsWith(q) || n.split(":").pop().startsWith(q) ? 1 : al.some(a => a.startsWith(q)) ? 2 : n.includes(q) ? 3 : (c.description || "").toLowerCase().includes(q) ? 4 : -1;
+    if (s >= 0) out.push([s, c]);
+  }
+  return out.sort((a, b) => a[0] - b[0] || a[1].name.localeCompare(b[1].name)).map(x => x[1]);
+}
+const SL = { open: false, items: [], i: 0, closedFor: null };
+function closeSlash() {
+  SL.open = false;
+  $("slash").hidden = true;
+  input.removeAttribute("aria-activedescendant");
+}
+// Shown while the message is a "/" and a name with nothing after it; Esc hides it until the text changes.
+function renderSlash() {
+  const m = /^\/(\S*)$/.exec(input.value);
+  if (!m || SL.closedFor === input.value) return closeSlash();
+  SL.closedFor = null;
+  if (Date.now() - (loadCommands.at || 0) > 30000) loadCommands().then(() => { if (SL.open) renderSlash(); });
+  const q = m[1];
+  if (SL.q !== q) SL.i = 0;
+  SL.q = q;
+  SL.items = slashMatches(q).slice(0, 80);
+  if (SL.i >= SL.items.length) SL.i = 0;
+  const box = $("slash");
+  box.innerHTML = SL.items.length
+    ? SL.items.map((c, k) => `<div class="sl-item${k === SL.i ? " on" : ""}" role="option" id="sl-${k}" aria-selected="${k === SL.i}" data-k="${k}"><div class="sl-top"><b>/${esc(c.name)}</b>${c.hint ? `<span class="sl-hint">${esc(c.hint)}</span>` : ""}</div>${c.description ? `<div class="sl-desc">${esc(c.description)}</div>` : ""}</div>`).join("")
+    : `<div class="sl-none">No commands match /${esc(q)}</div>`;
+  box.hidden = false;
+  SL.open = true;
+  // as tall as the room above the message box allows (on the empty page, that's under the top bar), up to 360px
+  const top = Math.max($("composer").closest(".dock").getBoundingClientRect().top, document.querySelector(".top").getBoundingClientRect().bottom);
+  box.style.maxHeight = Math.max(120, Math.min(360, $("composer").getBoundingClientRect().top - top - 16)) + "px";
+  if (SL.items.length) input.setAttribute("aria-activedescendant", `sl-${SL.i}`);
+  const on = box.querySelector(".sl-item.on");
+  if (on) on.scrollIntoView({ block: "nearest" });
+}
+// Up and down move, Tab fills the name in, Enter runs it (or fills it in when it needs something after it), Esc closes.
+function slashKey(e) {
+  const n = SL.items.length;
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
+    e.preventDefault();
+    SL.i = (SL.i + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+    renderSlash();
+    return true;
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    SL.closedFor = input.value;
+    closeSlash();
+    return true;
+  }
+  if (n && ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey && !e.isComposing))) {
+    e.preventDefault();
+    chooseSlash(SL.items[SL.i], e.key === "Enter");
+    return true;
+  }
+  return false;
+}
+function chooseSlash(c, go) {
+  if (!c) return;
+  if (go && !/^</.test(c.hint || "")) {
+    input.value = "/" + c.name;
+    closeSlash();
+    return send();
+  }
+  input.value = "/" + c.name + " ";
+  grow();
+  updateSend();
+  saveDraft();
+  closeSlash();
+  input.focus();
+}
+$("slash").addEventListener("mousedown", e => e.preventDefault());
+$("slash").addEventListener("click", e => {
+  e.stopPropagation();
+  const r = e.target.closest("[data-k]");
+  if (r) chooseSlash(SL.items[+r.dataset.k], true);
 });
 
 function bytesToB64(bytes) {
@@ -2063,6 +2242,16 @@ comp.addEventListener("drop", e => { if (!e.dataTransfer.files.length) return; e
 async function send() {
   const text = input.value.trim();
   if ((!text && !S.files.length) || S.busy) return;
+  closeSlash();
+  const cmd = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text);
+  const own = cmd && !S.files.length && siteCommand(cmd[1]);
+  if (own) {
+    input.value = "";
+    saveDraft();
+    grow();
+    updateSend();
+    return own.run((cmd[2] || "").trim());
+  }
   if (updating()) return toast("An update is running. Messages work again when it's done.");
   stopPolling();
   const files = S.files.slice();
@@ -3697,7 +3886,7 @@ applyTheme();
 renderBar();
 renderChrome();
 (async () => {
-  await Promise.all([loadState(), loadChats()]);
+  await Promise.all([loadState(), loadChats(), loadCommands()]);
   announceVersion();
   const m = location.pathname.match(/^\/c\/([\w-]+)/);
   if (m) await openChat(m[1], false);
