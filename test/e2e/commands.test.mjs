@@ -43,20 +43,22 @@ test("typing / lists Claude Code's commands and the site's own, narrowing as you
 
   await type("/");
   const all = await page.until(`(() => { const b = [...document.querySelectorAll("#slash .sl-item b")].map(b => b.textContent); return b.includes("/deploy") && b; })()`, "the list");
-  for (const name of ["/help", "/clear", "/model", "/effort", "/usage", "/config", "/files", "/rename", "/compact", "/context", "/deploy"]) assert.ok(all.includes(name), name);
+  for (const name of ["/help", "/model", "/effort", "/usage", "/config", "/files", "/context", "/deploy"]) assert.ok(all.includes(name), name);
+  // what needs a conversation isn't offered on a new chat
+  for (const name of ["/clear", "/compact", "/rename"]) assert.ok(!all.includes(name), name);
   assert.ok(!all.includes("/color") && !all.includes("/__remote-workflow"));
   assert.equal(all.filter(n => n === "/usage").length, 1, "the site's /usage stands in for Claude Code's");
   assert.match(await page.evaluate(`[...document.querySelectorAll("#slash .sl-item")].find(r => r.querySelector("b").textContent === "/deploy").innerText`), /\[environment\][\s\S]*Ship the shop to staging/);
   // narrowing by name, then by what it's for
   await type("/dep");
   assert.deepEqual(await shown(), ["/deploy"]);
-  await type("/summar");
-  assert.deepEqual(await shown(), ["/compact"]);
+  await type("/sett");
+  assert.deepEqual(await shown(), ["/config"], "by an alias");
   await type("/zzz");
   assert.match(await page.evaluate(`document.getElementById("slash").innerText`), /No commands match \/zzz/);
   // down, then Tab fills in the second; Esc closes
   await type("/con");
-  assert.deepEqual(await shown(), ["/config", "/context", "/compact"], "names first, then what they're for (\"conversation\")");
+  assert.deepEqual(await shown(), ["/config", "/context"]);
   await key("ArrowDown");
   await key("Tab");
   assert.equal(await page.evaluate(`document.getElementById("input").value`), "/context ");
@@ -64,6 +66,19 @@ test("typing / lists Claude Code's commands and the site's own, narrowing as you
   await type("/");
   await key("Escape");
   assert.equal(await shown(), null);
+  // a click puts it in the message box, to send with what's written after it; nothing is sent yet
+  await type("/dep");
+  await page.evaluate(`document.querySelector('#slash [data-k="0"]').click()`);
+  assert.equal(await page.evaluate(`document.getElementById("input").value`), "/deploy ");
+  // and it's highlighted there, while words aren't, nor a / that isn't a command
+  const mark = () => page.evaluate(`(document.querySelector("#cHl mark") || {}).textContent || ""`);
+  assert.equal(await mark(), "/deploy");
+  await type("/deploy to staging please");
+  assert.equal(await mark(), "/deploy");
+  await type("/nothing-like-it");
+  assert.equal(await mark(), "");
+  await type("hello /deploy");
+  assert.equal(await mark(), "");
 
   // one of Claude Code's goes to it like a message, and /context comes back drawn as a bar over its table
   await type("/context");
@@ -71,6 +86,12 @@ test("typing / lists Claude Code's commands and the site's own, narrowing as you
   await page.until(`document.querySelector(".msg.bot .ctx-card .ctx-bar i")`, "the context card");
   assert.match(await page.evaluate(`document.querySelector(".ctx-card").innerText`), /25\.8k of 1m used \(3%\)[\s\S]*System tools 18\.1k/);
   assert.ok(pc.claudeRuns().some(r => r.prompt.trim() === "/context"));
+  assert.equal(await page.evaluate(`[...document.querySelectorAll(".msg.user .bubble .cmd")].map(x => x.textContent).join()`), "/context", "the command stands out in the sent message too");
+  // now there's a conversation, what needs one is offered
+  await type("/");
+  const now = await shown();
+  for (const name of ["/clear", "/compact", "/rename"]) assert.ok(now.includes(name), name);
+  await key("Escape");
   // one of the site's own opens its own controls, and nothing is sent
   const runs = pc.claudeRuns().length;
   await type("/usage");

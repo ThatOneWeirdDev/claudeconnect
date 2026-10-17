@@ -1,19 +1,20 @@
 {
   "name": "claudeconnect",
-  "version": "2.10.0",
+  "version": "2.11.1",
   "released": "2026-10-17",
   "notes": [
-    "Keep running with the lid closed: your site keeps answering while your laptop's lid is closed. Turn it on during setup, in Settings → General → This computer, or with <command> awake on.",
-    "On a Mac, it asks for your password once (in the Mac's own dialog), because only an administrator can stop a Mac from sleeping when its lid closes. While it's on, the Mac doesn't sleep at all, so plug it in when you can.",
-    "On Windows, closing the lid does nothing while it's on, and the computer stays awake while the program runs. No administrator rights needed.",
-    "A computer that's turned off still can't answer: Claude Code runs on it."
+    "Picking a command from the / list (a click, Enter or Tab) now puts it in the message box, like in Claude, so you can write what goes with it and send them together. Enter on a command you've typed out in full still sends it straight away.",
+    "A command at the start of the message box is highlighted, and so is one in a sent message, so it's clear it's a command.",
+    "Commands that need a conversation (/clear, /compact, /rename, /recap) only show once a chat has started.",
+    "Commands that don't work from the site are no longer listed: the terminal's own (/color, /focus, /doctor), /reload-skills, /reload-plugins, /heapdump, /debug and /list-agents.",
+    "Fixed: answering one of the site's own questions (like \"Use the ChatGPT template?\") right after another could be missed, and a change made in Settings could look undone for a moment while the page was still loading."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
     "installer.mjs": "1fa2553d6ac13ee228d07446fee612e4f962594cf3b69312a87b162c05a5890c",
     "setup.mjs": "5074e245069469b21b0c5c59239d20498c34ae2d75ec7472bd4166593fd69f37",
     "setup.html": "7c5f0baac504379267c18b4d75e7848daf13a41fee4e1185459556dd1b654812",
-    "agent/agent.mjs": "120fa54d42cc7ef6b0d8d4b7f3aa425e2d3ff029c92007c8dfd358e16ffd6fff",
+    "agent/agent.mjs": "f33b04c0fb3722241dbce4e6ee9d1789f312136145f9e0dc10b2945ed6aea81a",
     "agent/sessions.mjs": "501ff207add7b3a3c4a652dd9d42a68426a936adfe05b26c6fc50ae5812853e5",
     "agent/limits.mjs": "19e70b8b46ef0afd0944b7ce7b63655442563c62201b323f22959cddbabab520",
     "agent/files.mjs": "194511f52b72d5b8bc64fadd8990449585b14c70fe2ff77ac4e30cf88e30be53",
@@ -21,7 +22,7 @@
     "agent/permit.mjs": "d6607a5da852305283dd8216b891f0d7925a1bc114c49dcf5226f59dfaebc1d6",
     "agent/awake.mjs": "79a9ac208985ff024ae6e4158dd6985917ce4ade39adcac5f1fcc68ca4844fce",
     "site/worker.js": "b15cccc95681b0c0bb2edc738a76d8831b4794107299dad36b5dac9c3379f469",
-    "site/app.html": "5aa4849f915ed911958a060c7862416a2ae16b9e6aa956604537b52a5ac9929c",
+    "site/app.html": "a5ac95648ecd8174133686b1c93444f8359bd0295261d2bd0ec92b08b9aaa476",
     "site/version.js": "2c56b3032c090182dd54d5dd93151a7b401350b5bdf5aa67ed783ab8fcedee69",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559",

@@ -139,7 +139,11 @@ test("Settings → Appearance offers the ChatGPT template, asks in the page's ow
   await page.evaluate(`document.querySelector('[data-template="chatgpt"]').click()`);
   await page.until(`document.getElementById("askDlg").open`, "the page's dialog");
   await page.evaluate(`document.getElementById("askYes").click()`);
-  assert.match(await page.until(`(() => { const o = document.querySelector(".tpl-on"); return o && o.textContent; })()`, "In use"), /In use/);
+  // if it doesn't come, say what the page shows instead
+  const inUse = await page.until(`(() => { const o = document.querySelector(".tpl-on"); return o && o.textContent; })()`, "In use").catch(async e => {
+    throw new Error(`${e.message}. The page shows: ${await page.evaluate(`JSON.stringify({ dialog: document.getElementById("askDlg").open, pane: (document.getElementById("setPane") || {}).innerText })`)}; the site has: ${JSON.stringify((await s.api("/api/state")).body.site)}`);
+  });
+  assert.match(inUse, /In use/);
   assert.equal(await page.evaluate(`document.title`), "ChatGPT");
   assert.equal(await page.evaluate(`document.getElementById("brand").innerText.trim()`), "ChatGPT", "the sidebar says the new name without a reload");
   assert.equal((await s.api("/api/state")).body.site.template, "chatgpt");

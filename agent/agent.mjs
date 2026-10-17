@@ -736,6 +736,12 @@ function runClaude(m, prompt, sessionArgs, pre, where = WORKSPACE) {
       if (o.type === "system" && o.subtype === "init") {
         st.started = true;
         st.model = o.model || st.model;
+        // the commands Claude Code says only work in its terminal: if that's changed, the site's "/" list follows
+        const term = Array.isArray(o.terminal_slash_commands) ? o.terminal_slash_commands.filter(x => typeof x === "string") : null;
+        if (term && term.sort().join(" ") !== [...TERMINAL_COMMANDS].sort().join(" ")) {
+          TERMINAL_COMMANDS = new Set(term);
+          reportCommands().catch(() => {});
+        }
       } else if (o.type === "system" && o.subtype === "api_retry") {
         send({ type: "status", runId: m.runId, chatId: m.chatId, text: `Retrying (attempt ${o.attempt})` });
       } else if (o.type === "stream_event" && !o.parent_tool_use_id) {
@@ -1476,7 +1482,11 @@ setInterval(() => reportSessions(false), 15000).unref();
 // Claude Code's slash commands, for the site's "/" list: its own, skills, plugins' and the ones in .claude/commands, each with
 // what it's for and what it takes, as Claude Code tells an SDK that starts a session ("initialize"). Asking sends nothing to the
 // model. Typed on the site, a command goes to Claude Code like any message, and it runs it.
-const HIDDEN_COMMANDS = new Set(["color", "focus", "heapdump", "reload-plugins", "workflow-launch-exec"]); // the terminal's own
+// Left out because they don't work from the site: the terminal's own (Claude Code names them in its start-up message, kept in
+// TERMINAL_COMMANDS; these are the ones it names now), ones about the process itself, which every message on the site starts
+// afresh (reloading, a heap dump, a debug log), and the list of other Claude sessions.
+const HIDDEN_COMMANDS = new Set(["color", "focus", "doctor", "reload-plugins", "reload-skills", "heapdump", "debug", "list-agents", "workflow-launch-exec"]);
+let TERMINAL_COMMANDS = new Set();
 function readCommands() {
   return new Promise(resolve => {
     if (!CLAUDE) return resolve(null);
@@ -1521,7 +1531,7 @@ async function reportCommands() {
   if (!raw) return;
   const commands = [];
   for (const c of raw) {
-    if (!c || typeof c.name !== "string" || c.name.startsWith("__") || HIDDEN_COMMANDS.has(c.name)) continue;
+    if (!c || typeof c.name !== "string" || c.name.startsWith("__") || HIDDEN_COMMANDS.has(c.name) || TERMINAL_COMMANDS.has(c.name)) continue;
     const description = String(c.description || "").replace(/\s+/g, " ").trim();
     if (/^\(removed\)/i.test(description)) continue;
     commands.push({ name: c.name, description: description.slice(0, 300), hint: String(c.argumentHint || "").slice(0, 80), aliases: (Array.isArray(c.aliases) ? c.aliases : []).filter(a => typeof a === "string").slice(0, 6) });

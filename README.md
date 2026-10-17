@@ -82,11 +82,11 @@ Asking on the site needs a Claude Code that can ask through another program (`--
 
 ### Slash commands
 
-Type `/` in the message box and a list opens above it with every command you can use, each with what it's for and what it takes. It narrows as you type, by name first and then by description. Use the up and down arrows to move, **Tab** to fill a name in, and **Enter** to run it; a command that needs something after it gets a space for that instead. **Esc** closes the list.
+Type `/` in the message box and a list opens above it with every command you can use, each with what it's for and what it takes. It narrows as you type, by name first and then by description. Use the up and down arrows to move. **Tab**, **Enter** or a click puts the command in the message box, the way Claude does, so you can write what goes with it and send them together; **Enter** on a name you've typed out in full sends it straight away. **Esc** closes the list. A command at the start of the message box is highlighted, and so is a sent one, so it's plain it's a command and not words. Commands about a conversation that has to exist already (`/clear`, `/compact`, `/rename`, `/recap`) are only offered once a chat has started.
 
 - **Claude Code's own commands** go to Claude Code like any message, and it runs them in the chat's conversation. That covers its built-in ones (`/compact`, `/context`, `/init`, `/review`, `/security-review` and the rest), your skills and plugins, and your own commands in `~/.claude/commands` and the working folder's `.claude/commands`. The list comes from the Claude Code on your computer: it asks the same way an SDK does when it starts, which sends nothing to the model. It's refreshed every time your computer connects and every ten minutes. `/context` comes back as a bar showing how full the conversation is and what fills it, above Claude Code's table.
 - **A few the site does itself**, with its own controls: `/clear` (or `/new`) starts a new chat; `/model` and `/effort` pick them, or open the menu when nothing follows; `/usage` (or `/cost`) opens Plan usage; `/config` (or `/settings`) opens Settings; `/permissions` opens the permissions menu; `/files` opens the file browser; `/rename` renames the chat; `/help` lists everything.
-- The terminal's own commands (like `/color` and `/focus`) aren't listed.
+- Commands that don't work from the site aren't listed: the terminal's own (Claude Code names them, like `/color`, `/focus` and `/doctor`), ones about the Claude Code process itself, which every message on the site starts afresh (`/reload-skills`, `/reload-plugins`, `/heapdump`, `/debug`), and `/list-agents`.
 
 ### Plan usage
 
