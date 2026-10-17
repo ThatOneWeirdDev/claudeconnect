@@ -1068,6 +1068,8 @@ function fmtSize(n) {
 // ready for Enter.
 function askConfirm({ title, text = "", ok = "OK", cancel = "Cancel", danger = false }) {
   const d = $("askDlg");
+  // a question still waiting for its answer when another is asked is a no
+  if (askConfirm.settle) askConfirm.settle(false);
   if (d.open) d.close();
   $("askTitle").textContent = title;
   $("askText").textContent = text;
@@ -1076,7 +1078,16 @@ function askConfirm({ title, text = "", ok = "OK", cancel = "Cancel", danger = f
   $("askNo").textContent = cancel;
   return new Promise(resolve => {
     d.returnValue = "";
-    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
+    const settle = v => {
+      d.removeEventListener("close", onClose);
+      if (askConfirm.settle === settle) askConfirm.settle = null;
+      resolve(v);
+    };
+    // The close event comes a moment after the dialog closes, so one from the last question can arrive once this one is
+    // already open: that isn't this answer.
+    const onClose = () => { if (!d.open) settle(d.returnValue === "yes"); };
+    askConfirm.settle = settle;
+    d.addEventListener("close", onClose);
     d.showModal();
     $(danger ? "askNo" : "askYes").focus();
   });
@@ -1490,11 +1501,16 @@ function renderChrome() {
   updateSend();
 }
 async function loadState() {
+  const asked = Date.now();
+  let st;
   try {
-    S.state = await apiJson("/api/state");
+    st = await apiJson("/api/state");
   } catch {
     return;
   }
+  // a change saved here after this was asked for is newer than the site it brings back
+  if (S.siteSaved && S.siteSavedAt >= asked) st.site = S.siteSaved;
+  S.state = st;
   applySite(S.state.site);
   syncTheme(S.state.prefs);
   if (S.state.update) applyUpdate(S.state.update);
@@ -3476,7 +3492,7 @@ function renderFoot() { $("setFoot").hidden = true; }
 // The site's name and images as they are now. Changing them takes effect at once, on every device, with no redeploy.
 // what the browser tab says: its own text when one is set in Settings → Appearance, or the site's name
 function tabName() { return CFG.tab || CFG.name; }
-function siteNow() { return (S.state && S.state.site) || { name: CFG.name, logo: !!document.querySelector("#brand img"), favicon: false, v: "0" }; }
+function siteNow() { return (S.state && S.state.site) || S.siteSaved || { name: CFG.name, logo: !!document.querySelector("#brand img"), favicon: false, v: "0" }; }
 function applySite(site) {
   if (!site) return;
   if (S.state) S.state.site = site;
@@ -3502,7 +3518,10 @@ async function saveSite(what, body) {
   SET.err = "";
   renderSettings();
   try {
-    applySite(await apiJson("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+    const saved = await apiJson("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    S.siteSaved = saved;
+    S.siteSavedAt = Date.now();
+    applySite(saved);
     // what names the site (the line under the message box, the hero) follows a rename at once
     renderChrome();
     SET.saved = what;
