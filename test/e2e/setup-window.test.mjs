@@ -87,6 +87,11 @@ test("the setup window asks everything a first install needs, explains Cloudflar
   assert.match(text, /startup item/);
   await s.click('[data-answer="n"]');
 
+  // and with the lid closed: what it costs (battery) and that a computer that's off can't answer
+  text = await s.card("Keep My Site running with the lid closed?");
+  assert.match(text, /more battery[\s\S]*turned off can't answer/);
+  await s.click('[data-answer="n"]');
+
   // Cloudflare Access: one button straight to the Worker's Access tab, three short things to do there, and why it asks for a
   // card. Only that one link
   text = await s.card("Turn on Cloudflare Access", 60000);

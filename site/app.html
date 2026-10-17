@@ -3402,8 +3402,10 @@ function computerHtml() {
   const off = !c ? " disabled" : "";
   const why = !a || !a.online ? `${esc(CFG.name)} is offline, so these can't be changed right now.` : !c ? `Update ${esc(CFG.name)} to change these here, or run <code>${esc(CFG.command)} edit</code> on your computer.` : "";
   const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
+  // only from a program that knows it (2.10.0 and newer); a Mac asks for its password on its own screen to change it
+  const awake = c && typeof c.awake === "boolean" ? `<div class="switch"><div class="t"><span>Keep running with the lid closed</span><small>Your computer stays awake, even with its lid closed, so ${esc(CFG.name)} keeps answering. It uses more battery. A Mac asks for its password on its own screen to change this.${PC.busy === "awake" ? ' <b class="ok-text">Waiting for your computer…</b>' : ""}</small></div><button type="button" class="toggle" role="switch" data-pc="awake" aria-checked="${!!c.awake}" aria-label="Keep running with the lid closed"${off}${PC.busy === "awake" ? " disabled" : ""}></button></div>` : "";
   const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>Where ${esc(CFG.name)} works and where files you attach go. Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
-  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
+  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${awake}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
 }
 // The switch moves at once; if the computer says no, it moves back and says why.
 async function setComputer(key, value) {

@@ -9,6 +9,7 @@ import os from "node:os";
 import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID } from "./sessions.mjs";
 import { resetsFrom } from "./limits.mjs";
 import { list as listFiles, info as fileInfo, readPart, trash as trashFile, write as writeFile, places, FilesError } from "./files.mjs";
+import { awakeOn, setAwake, holdAwake } from "./awake.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -192,6 +193,7 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     ["background", "same, but in the background"],
     ["stop", "stop a background copy"],
     ["autostart on", "start in the background every time you log in (off to undo)"],
+    ["awake on", "keep running with the lid closed (off to undo; a Mac asks for its password)"],
     ["open", `open ${NAME} in your browser`],
     ["logs", "show recent activity"],
     ["status", "show whether it's running"],
@@ -281,6 +283,24 @@ if (cmd === "autostart") {
   autostart((process.argv[3] || "on").toLowerCase() !== "off");
   process.exit(0);
 }
+// Staying awake with the lid closed (awake.mjs): on, off, or whether it is. A running copy picks a change up when it restarts.
+if (cmd === "awake") {
+  const want = (process.argv[3] || "on").toLowerCase();
+  if (want === "status") {
+    console.log((await awakeOn({ cfg })) ? "on" : "off");
+    process.exit(0);
+  }
+  const on = want !== "off";
+  if (process.platform === "darwin") console.log(`Your Mac is asking for your password${on ? ", so it can stay awake with the lid closed" : ""}.`);
+  const error = await setAwake(on, { cfg, name: NAME });
+  if (error) {
+    console.log(error);
+    process.exit(1);
+  }
+  saveConfig();
+  console.log(on ? `This computer now stays awake with the lid closed, so ${NAME} keeps answering. It uses more battery: plug it in when you can.` : "This computer sleeps again when its lid is closed.");
+  process.exit(0);
+}
 if (cmd === "background" || cmd === "bg") {
   background();
   process.exit(0);
@@ -296,7 +316,20 @@ if (other) {
   process.exit(0);
 }
 writeFileSync(PID_PATH, String(process.pid));
+// awake with the lid closed (awake.mjs): what it is now, and on Windows and Linux held for as long as this runs
+let AWAKE = await awakeOn({ cfg }).catch(() => false);
+let awakeHold = null;
+function holdIfAwake() {
+  const want = AWAKE && process.platform !== "darwin";
+  if (want && !awakeHold) awakeHold = holdAwake({ name: NAME });
+  if (!want && awakeHold) {
+    awakeHold.release();
+    awakeHold = null;
+  }
+}
+holdIfAwake();
 const cleanup = () => {
+  if (awakeHold) awakeHold.release();
   try {
     if (readFileSync(PID_PATH, "utf8").trim() === String(process.pid)) unlinkSync(PID_PATH);
   } catch {}
@@ -922,11 +955,12 @@ function creditsOn() {
   return true;
 }
 
-// This computer's own settings, which the site shows and can change: starting at login and the working folder. (`plan`,
+// This computer's own settings, which the site shows and can change: starting at login, staying awake with the lid closed,
+// and the working folder. (`plan`,
 // `credits` and `history` are what they always are now; they're still said for a site from before.)
 // Answers to an update's new questions arrive the same way, once the new version is running.
 function computerSettings() {
-  return { autostart: existsSync(startupPaths().file), workspace: WORKSPACE, plan: "paid", subscription: subscription(), credits: creditsOn(), history: HISTORY };
+  return { autostart: existsSync(startupPaths().file), awake: AWAKE, workspace: WORKSPACE, plan: "paid", subscription: subscription(), credits: creditsOn(), history: HISTORY };
 }
 
 async function setComputer(m) {
@@ -937,6 +971,16 @@ async function setComputer(m) {
     log("Couldn't change a setting:", e.message || e);
   }
   let error = "";
+  // with the lid closed: a Mac asks for its password on its own screen, so this can wait a few minutes for someone to answer
+  if (typeof v.awake === "boolean" && v.awake !== AWAKE) {
+    error = await setAwake(v.awake, { cfg, name: NAME });
+    if (!error) {
+      AWAKE = v.awake;
+      saveConfig();
+      holdIfAwake();
+      log(AWAKE ? "Staying awake with the lid closed." : "Sleeping again when the lid is closed.");
+    }
+  }
   // the folder Claude Code works in; it's made if it isn't there
   if (typeof v.workspace === "string" && v.workspace.trim() && v.workspace.trim() !== WORKSPACE) {
     const dir = resolvePath(v.workspace.trim().replace(/^~(?=$|[\\/])/, os.homedir()));
