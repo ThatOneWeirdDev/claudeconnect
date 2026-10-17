@@ -438,6 +438,11 @@ svg{display:block;flex:none}
 .composer textarea{grid-area:main;display:block;width:100%;min-width:0;min-height:24px;max-height:25dvh;margin:0;padding:0 4px;border:0;outline:0;background:none;resize:none;font-size:16px;line-height:24px;overflow-y:auto}
 .composer.tall textarea{padding:4px 6px 0}
 .composer textarea::placeholder{color:var(--ph)}
+/* a command at the start of the message: a tinted pill under its text, which stays the textarea's own */
+.c-hl{grid-area:main;align-self:center;min-width:0;height:24px;padding:0 4px;overflow:hidden;font-size:16px;line-height:24px;white-space:pre;color:transparent;pointer-events:none}
+.composer.tall .c-hl{align-self:start;height:28px;padding:4px 6px 0}
+.c-hl mark{color:transparent;background:color-mix(in srgb,var(--link) 22%,transparent);border-radius:6px;box-shadow:0 0 0 2px color-mix(in srgb,var(--link) 22%,transparent)}
+.bubble .cmd{color:var(--link);font-weight:500}
 .c-lead{grid-area:lead;display:flex;align-items:center;gap:4px;min-width:0}
 .c-trail{grid-area:trail;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0}
 .c-icon{width:36px;height:36px;border-radius:9999px;display:grid;place-items:center;color:var(--text);flex:none;cursor:pointer}
@@ -871,6 +876,7 @@ svg{display:block;flex:none}
             <button type="button" class="c-icon" id="attachBtn" title="Add files" aria-label="Add files"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.59C12.58 3.59 13.06 4.07 13.06 4.66V10.93H19.33C19.92 10.93 20.4 11.41 20.4 12C20.4 12.58 19.92 13.06 19.33 13.06H13.06V19.33C13.06 19.92 12.58 20.4 12 20.4C11.41 20.4 10.93 19.92 10.93 19.33V13.06H4.66C4.07 13.06 3.59 12.58 3.59 12C3.59 11.41 4.07 10.93 4.66 10.93H10.93V4.66C10.93 4.07 11.41 3.59 12 3.59Z" fill="currentColor"/></svg></button>
             <input type="file" id="fileInput" multiple hidden>
           </div>
+          <div class="c-hl" id="cHl" aria-hidden="true"></div>
           <textarea id="input" rows="1" placeholder="Ask __SITE_NAME__" aria-label="Message"></textarea>
           <div class="c-trail">
             <button type="button" class="c-pill only-ic" id="modelBtn" aria-haspopup="menu" aria-expanded="false" title="Model and effort"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3c3.58 0 6.5 2.92 6.5 6.53A6.54 6.54 0 0 1 15.57 15h-7.15A6.54 6.54 0 0 1 5.5 9.53C5.5 5.92 8.41 3 12 3Zm2.86 14v1h-5.73v-1h5.73Zm-1.13 3a2 2 0 0 1-3.46 0h3.46Zm-5.60 0a4.00 4.00 0 0 0 7.74 0 1 1 0 0 0 .991-1v-2.46A8.54 8.54 0 0 0 20.5 9.53C20.5 4.82 16.7 1 12 1S3.5 4.82 3.5 9.53a8.54 8.54 0 0 0 3.63 7.00V19a1 1 0 0 0 .991 1Z"/></svg></button>
@@ -1637,7 +1643,7 @@ function filesHtml(files) {
 function userEl(m) {
   const el = document.createElement("div");
   el.className = "msg user";
-  el.innerHTML = filesHtml(m.meta && m.meta.files) + (m.content ? `<div class="bubble${/\n/.test(m.content.trim()) ? " multi" : ""}">${esc(m.content)}</div><div class="ufoot"><button type="button" data-copy-msg title="Copy" aria-label="Copy message">${I.copy}</button></div>` : "");
+  el.innerHTML = filesHtml(m.meta && m.meta.files) + (m.content ? `<div class="bubble${/\n/.test(m.content.trim()) ? " multi" : ""}">${withCommand(m.content)}</div><div class="ufoot"><button type="button" data-copy-msg title="Copy" aria-label="Copy message">${I.copy}</button></div>` : "");
   el._raw = m.content || "";
   return el;
 }
@@ -2018,6 +2024,7 @@ const input = $("input");
 // The message box is one row, like ChatGPT's: +, the text, the pills and send. When the text needs a second line, or files are
 // attached, it opens into two rows (the text on top, the buttons under it), and stays that way until it's empty again.
 function grow() {
+  renderHl();
   const box = $("composer");
   const tall = S.files.length > 0 || (!!input.value && (box.classList.contains("tall") || input.value.includes("\n")));
   box.classList.toggle("tall", tall);
@@ -2027,6 +2034,7 @@ function grow() {
 }
 input.addEventListener("input", () => { grow(); updateSend(); saveDraft(); renderSlash(); });
 input.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== input) closeSlash(); }, 0));
+input.addEventListener("scroll", renderHl);
 input.addEventListener("keydown", e => {
   if (SL.open && slashKey(e)) return;
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !matchMedia("(hover: none)").matches) {
@@ -2080,9 +2088,30 @@ const SITE_CMDS = [
 ];
 // Claude Code's, as the computer last listed them
 let CMDS = [];
+// about a conversation that has to be there already, so not offered on a new chat
+const CONVO_ONLY = new Set(["clear", "compact", "rename", "recap"]);
 async function loadCommands() {
   loadCommands.at = Date.now();
   try { CMDS = (await apiJson("/api/commands")).commands || []; } catch {}
+  renderHl();
+}
+// a name that is a command, the site's or Claude Code's, under its name or an alias
+function isCommand(name) {
+  const n = String(name).toLowerCase();
+  return allCommands().some(c => c.name.toLowerCase() === n || (c.aliases || []).some(a => a.toLowerCase() === n));
+}
+// A command at the start of the message box is highlighted, so it's plain it isn't sent as words.
+function renderHl() {
+  const m = /^\/\S+/.exec(input.value);
+  const html = m && isCommand(m[0].slice(1)) ? `<mark>${esc(m[0])}</mark>` : "";
+  const box = $("cHl");
+  if (box.innerHTML !== html) box.innerHTML = html;
+  box.scrollTop = input.scrollTop;
+}
+// the same in a message that was sent
+function withCommand(text) {
+  const m = /^(\s*)(\/\S+)([\s\S]*)$/.exec(text);
+  return m && isCommand(m[2].slice(1)) ? `${esc(m[1])}<span class="cmd">${esc(m[2])}</span>${esc(m[3])}` : esc(text);
 }
 function siteCommand(name) {
   const n = String(name).toLowerCase();
@@ -2100,6 +2129,7 @@ function slashMatches(q) {
   for (const c of allCommands()) {
     const n = c.name.toLowerCase();
     const al = (c.aliases || []).map(a => a.toLowerCase());
+    if (!S.chatId && CONVO_ONLY.has(n)) continue;
     let s = !q ? 5 : n === q || al.includes(q) ? 0 : n.startsWith(q) || n.split(":").pop().startsWith(q) ? 1 : al.some(a => a.startsWith(q)) ? 2 : n.includes(q) ? 3 : (c.description || "").toLowerCase().includes(q) ? 4 : -1;
     if (s >= 0) out.push([s, c]);
   }
@@ -2135,7 +2165,8 @@ function renderSlash() {
   const on = box.querySelector(".sl-item.on");
   if (on) on.scrollIntoView({ block: "nearest" });
 }
-// Up and down move, Tab fills the name in, Enter runs it (or fills it in when it needs something after it), Esc closes.
+// Up and down move; Tab, Enter or a click puts the command in the message box to send with what you write after it, and Enter
+// on a name typed out in full sends it at once; Esc closes.
 function slashKey(e) {
   const n = SL.items.length;
   if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
@@ -2152,14 +2183,15 @@ function slashKey(e) {
   }
   if (n && ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey && !e.isComposing))) {
     e.preventDefault();
-    chooseSlash(SL.items[SL.i], e.key === "Enter");
+    const c = SL.items[SL.i];
+    chooseSlash(c, e.key === "Enter" && input.value.toLowerCase() === "/" + c.name.toLowerCase());
     return true;
   }
   return false;
 }
 function chooseSlash(c, go) {
   if (!c) return;
-  if (go && !/^</.test(c.hint || "")) {
+  if (go) {
     input.value = "/" + c.name;
     closeSlash();
     return send();
@@ -2175,7 +2207,7 @@ $("slash").addEventListener("mousedown", e => e.preventDefault());
 $("slash").addEventListener("click", e => {
   e.stopPropagation();
   const r = e.target.closest("[data-k]");
-  if (r) chooseSlash(SL.items[+r.dataset.k], true);
+  if (r) chooseSlash(SL.items[+r.dataset.k], false);
 });
 
 function bytesToB64(bytes) {

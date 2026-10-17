@@ -116,7 +116,8 @@ test("the message box grows to two rows only when the text wraps or files are at
   const cls = new Set();
   const box = { classList: { contains: c => cls.has(c), toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)), add: c => cls.add(c) } };
   const input = { value: "", scrollHeight: 24, style: {} };
-  const ctx = { $: () => box, input, S: { files: [] }, window: { innerHeight: 900 } };
+  // the command highlight that grow() keeps in step isn't what's tested here
+  const ctx = { $: () => box, input, S: { files: [] }, window: { innerHeight: 900 }, renderHl: () => {} };
   vm.runInNewContext(lift("grow") + "this.grow = grow;", ctx);
   ctx.grow();
   assert.equal(cls.has("tall"), false, "empty");
