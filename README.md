@@ -94,7 +94,11 @@ Type `/` in the message box and a list opens above it with every command you can
 
 It also shows your **usage credits** (claude.ai's "extra usage"): whether they're on, in use because you're past a plan limit, close to the spending limit you set, used up, or off (and why, when Claude says). Past a plan limit with credits on, replies carry on, so the page says you're using credits rather than that you've hit a limit. "You've hit a limit" only shows when replies really have stopped, and only until the limit resets.
 
-**Limit resets** on your Claude account (Anthropic gives resets you can use whenever you choose, including free daily or weekly ones) are listed there too, with how many are left, what each clears and how often a new one comes, and **Use one** uses one, the same way Claude's own reset does. When you're out of usage, the note that says so also says when the limit resets, and offers **Use a free reset** when you have one. It's done by your computer with Claude's own sign-in there, like the balance below.
+**Limit resets** on your Claude account show in Plan usage right under your limits, whenever you have any left. There are two kinds:
+- **Free resets to use whenever you choose.** Anthropic gives these, sometimes daily or weekly ones.
+- **The weekly session reset.** It clears the 5-hour limit once a week, and Claude only offers it while you're at a limit.
+
+Each one says what it clears, how many are left, when a new one comes and the date to use it by. **Use one** uses it the same way Claude Code's `/limit-reset` does. Before a limit is reached, the page first says how much of it is still left. When you're out of usage, the note that says so also says when the limit resets, and offers **Use a free reset** when you have one. Your computer reads all of this with Claude's own sign-in, asking the same way Claude Code does, like the balance below.
 
 **Use usage credits from this site** is a switch on the same page (and in `<command> edit`), kept on the site so it applies on every device. Turned off, the site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1 (which runs on credits) is paused. A reply already under way can still go past the limit; that part is Claude's.
 

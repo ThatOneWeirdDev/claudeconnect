@@ -942,7 +942,8 @@ async function claimReset(m) {
     r = await fetch(`${ANTHROPIC_API}/api/organizations/${s.org}/reset_rate_limits`, {
       method: "POST",
       headers: { authorization: "Bearer " + s.token, "anthropic-beta": "oauth-2025-04-20", "content-type": "application/json", accept: "application/json", "user-agent": `ClaudeConnect/${VERSION}` },
-      body: JSON.stringify({ program: m.program, grant_id: m.grant, request_id: randomBytes(16).toString("hex") }),
+      // the weekly session reset is asked for by its name alone, as Claude Code does
+      body: JSON.stringify(m.program === "juniper_tide" ? { program: m.program } : { program: m.program, grant_id: m.grant, request_id: randomBytes(16).toString("hex") }),
       signal: AbortSignal.timeout(25000)
     });
   } catch {
@@ -1106,8 +1107,10 @@ async function readCredits() {
   };
   const num = v => (typeof v === "number" && Number.isFinite(v) ? v : null);
   const out = {};
-  // ?cedar_ember=1 asks for the limit resets too; an account or server that won't have it gets the plain reading
-  const u = (await get("/api/oauth/usage?cedar_ember=1")) || (await get("/api/oauth/usage"));
+  // The spending, and the limit resets read the way Claude Code reads them: at a limit, the ones that can be used there (the
+  // weekly session reset is only reported then); otherwise the ones that can be used any time.
+  const atLimit = !!(LIMITS && LIMITS.status === "rejected" && Number.isFinite(LIMITS.resetsAt) && LIMITS.resetsAt * 1000 > Date.now());
+  const [u, r] = await Promise.all([get("/api/oauth/usage"), get(atLimit ? "/api/oauth/usage?at_wall=1&skip_spend=1" : "/api/oauth/usage?cedar_ember=1&skip_spend=1")]);
   const e = u && u.extra_usage && typeof u.extra_usage === "object" ? u.extra_usage : null;
   if (e) out.extra = { enabled: e.is_enabled === true, limit: num(e.monthly_limit), used: num(e.used_credits) };
   // Promotional credit that comes with an amount in dollars, like the Claude Code cloud-session credit (Claude calls that one
@@ -1124,10 +1127,10 @@ async function readCredits() {
     const promos = (Array.isArray(p.promo_tranches) ? p.promo_tranches : []).filter(t => t && num(t.remaining_amount_minor_units) > 0);
     out.balance = { amount: p.amount, currency: typeof p.currency === "string" ? p.currency : "", promos: promos.slice(0, 10).map(t => ({ amount: t.remaining_amount_minor_units, currency: typeof t.currency === "string" ? t.currency : "", expires: Date.parse(t.expires_at) || null, name: typeof t.name === "string" ? t.name : "" })) };
   }
-  // Limit resets: Claude gives subscribers resets they can use whenever they like (cedar_ember), and reports any other reset
-  // program the same way. Each grant says how many are left, whether it can be used now, which limits it clears, and, when
-  // Claude says, how often it comes back (every day or every week).
-  const resets = resetsFrom(u);
+  // Limit resets: the ones Claude gives to use whenever you like (cedar_ember), and the weekly session reset (juniper_tide).
+  // Each says how many are left, whether it can be used now, which limits it clears, and, when Claude says, how often it
+  // comes back.
+  const resets = resetsFrom(r || u);
   if (resets.length) out.resets = resets;
   if (!out.extra && !out.balance && !out.dollars && !out.resets) out.error = "unavailable";
   send({ type: "credits", credits: out });

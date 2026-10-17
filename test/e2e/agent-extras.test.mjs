@@ -174,12 +174,14 @@ test("the site's name and logo set in Settings are kept on the computer for the 
 
 test("limit resets on the account are listed, and one can be used from the site", async t => {
   const claims = [];
+  const reads = new Set();
   let left = 1;
   const api = http.createServer((req, res) => {
     res.setHeader("content-type", "application/json");
     let body = "";
     req.on("data", d => (body += d));
     req.on("end", () => {
+      if (req.url.startsWith("/api/oauth/usage")) reads.add(req.url);
       if (req.url.startsWith("/api/oauth/usage")) return res.end(JSON.stringify({ five_hour: { utilization: 100 }, extra_usage: { is_enabled: false }, cedar_ember: { eligible: true, at_limit: true, grants: [{ id: "launch_reset", label: "Limit reset", resets_total: 1, resets_left: left, usable_now: left > 0, use_requires_limit: true, paused: false, clears: ["five_hour", "seven_day"] }], next_grant_id: "launch_reset" } }));
       if (req.method === "POST" && req.url === `/api/organizations/${ORG}/reset_rate_limits`) {
         claims.push({ auth: req.headers.authorization, body: JSON.parse(body) });
@@ -198,8 +200,11 @@ test("limit resets on the account are listed, and one can be used from the site"
   writeFileSync(join(pc.home, ".claude.json"), JSON.stringify({ oauthAccount: { organizationUuid: ORG } }));
   await site.post("/api/limits/refresh");
   const c = await until(async () => (await site.api("/api/credits")).body?.resets, "the resets");
-  assert.deepEqual(c[0].grants[0], { id: "launch_reset", label: "Limit reset", left: 1, total: 1, usableNow: true, needsLimit: true, paused: false, endsAt: "", every: "", nextAt: "", clears: ["five_hour", "seven_day"] });
+  assert.deepEqual(c[0].grants[0], { id: "launch_reset", label: "Limit reset", left: 1, total: 1, usableNow: true, needsLimit: true, paused: false, endsAt: "", every: "", nextAt: "", clears: ["five_hour", "seven_day"], blocking: [], next: true });
   assert.equal(c[0].atLimit, true);
+  // the spending, and the resets asked for the way Claude Code asks
+  assert.ok(reads.has("/api/oauth/usage"), [...reads].join());
+  assert.ok(reads.has("/api/oauth/usage?cedar_ember=1&skip_spend=1"), [...reads].join());
   const used = await site.post("/api/resets/use", { program: "cedar_ember", grant: "launch_reset" });
   assert.equal(used.status, 200, used.text);
   assert.deepEqual(used.body, { result: "reset", reason: "", resetsLeft: 0, cleared: ["five_hour", "seven_day"] });
