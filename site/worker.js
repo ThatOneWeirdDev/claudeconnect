@@ -1202,8 +1202,9 @@ export class ChatgqlHub extends DurableObject {
     const promos = (Array.isArray(raw.dollars) ? raw.dollars.slice(0, 6) : []).filter(d => d && typeof d === "object" && typeof d.key === "string" && /^[a-z0-9_]{1,40}$/.test(d.key));
     const dollars = promos.map(d => ({ key: d.key, limit: cents(d.limit), used: cents(d.used), remaining: cents(d.remaining), expires: num(d.expires) })).filter(d => d.remaining !== null || d.limit !== null);
     if (dollars.length) out.dollars = dollars;
-    // Limit resets on the account (Claude's cedar_ember, and any other reset program it reports the same way)
+    // Limit resets on the account (Claude's cedar_ember, and the weekly session reset, juniper_tide)
     const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+    const limitKeys = v => (Array.isArray(v) ? v : []).filter(c => typeof c === "string" && /^[a-z0-9_]{1,40}$/.test(c)).slice(0, 8);
     const resets = (Array.isArray(raw.resets) ? raw.resets.slice(0, 4) : []).filter(r => r && typeof r === "object" && /^[a-z0-9_]{1,40}$/.test(r.program)).map(r => ({
       program: r.program,
       eligible: r.eligible === true,
@@ -1220,7 +1221,9 @@ export class ChatgqlHub extends DurableObject {
         endsAt: str(g.endsAt, 40),
         every: ["day", "week", "month"].includes(g.every) ? g.every : "",
         nextAt: str(g.nextAt, 40),
-        clears: (Array.isArray(g.clears) ? g.clears : []).filter(c => typeof c === "string" && /^[a-z0-9_]{1,40}$/.test(c)).slice(0, 8)
+        clears: limitKeys(g.clears),
+        blocking: limitKeys(g.blocking),
+        next: g.next === true
       }))
     }));
     if (resets.length) out.resets = resets;

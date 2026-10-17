@@ -573,6 +573,35 @@ test("out of usage, the note under the message box says when it comes back, and 
   assert.match(lift("renderUsage"), /Resets \$\{esc\(relTime\(w\.resetsAt\)\)\} \(\$\{esc\(clock\(w\.resetsAt\)\)\}\)/);
 });
 
+test("Plan usage shows the free resets there are, first, and the one Claude says to use next", () => {
+  const ctx = { esc: v => String(v), relTime: s => `in ${Math.round((s * 1000 - Date.now()) / 3600e3)}h`, U: { resetting: "" }, S: { state: { credits: {} } } };
+  vm.runInNewContext(`const WINDOW_WORDS = ${JSON.stringify({ five_hour: "5-hour limit", seven_day: "weekly limit" })};` + lift("clearsText") + lift("usableResets") + "const EVERY = { day: \"every day\", week: \"every week\", month: \"every month\" };" + lift("resetsHtml") + "this.usableResets = usableResets; this.resetsHtml = resetsHtml;", ctx);
+  const grant = o => ({ id: "g", label: "Limit reset", left: 1, total: 1, usableNow: true, needsLimit: false, paused: false, endsAt: "", clears: ["seven_day"], blocking: [], next: false, every: "", nextAt: "", ...o });
+  const set = resets => (ctx.S.state.credits = { resets });
+  set([]);
+  assert.equal(ctx.resetsHtml(), "", "nothing to show without resets");
+  set([{ program: "cedar_ember", eligible: true, atLimit: false, cooldownUntil: "", grants: [grant({ id: "spent", left: 0, next: false })] }]);
+  assert.equal(ctx.resetsHtml(), "", "or with none left");
+  set([{ program: "cedar_ember", eligible: true, atLimit: false, cooldownUntil: "", grants: [grant({ id: "a", label: "Launch reset", left: 1, endsAt: "2099-01-05T00:00:00Z" }), grant({ id: "b", label: "Bonus reset", left: 2, next: true })] }]);
+  const [r] = ctx.usableResets();
+  assert.deepEqual([r.id, r.all, r.can], ["b", 3, true], "the next one is used, and all that are left are counted");
+  const html = ctx.resetsHtml();
+  assert.match(html, /<b>Free limit resets<\/b>/);
+  assert.match(html, /<span>Bonus reset<\/span><small>Clears your weekly limit · 3 left<\/small><\/div><button type="button" class="btn ghost" data-reset="cedar_ember" data-grant="b" data-clears="weekly limit" data-keys="seven_day">Use one<\/button>/);
+  set([{ program: "cedar_ember", eligible: true, atLimit: false, cooldownUntil: "", grants: [grant({ next: true, usableNow: false, blocking: ["seven_day"], clears: ["five_hour"] })] }]);
+  assert.match(ctx.resetsHtml(), /<small class="muted">Not until your weekly limit resets<\/small>/);
+  set([{ program: "cedar_ember", eligible: true, atLimit: false, cooldownUntil: "", grants: [grant({ next: true, usableNow: false, needsLimit: true })] }]);
+  assert.match(ctx.resetsHtml(), /Usable once you hit a limit/);
+  set([{ program: "cedar_ember", eligible: false, atLimit: false, cooldownUntil: "", grants: [grant({ next: true })] }]);
+  assert.equal(ctx.resetsHtml(), "", "not offered on this account");
+  // the weekly session reset, while at a limit
+  set([{ program: "juniper_tide", eligible: true, atLimit: true, cooldownUntil: "", grants: [grant({ id: "session", label: "Session limit reset", clears: ["five_hour"], next: true, needsLimit: true, every: "week" })] }]);
+  assert.match(ctx.resetsHtml(), /<span>Session limit reset<\/span><small>Clears your 5-hour limit · 1 left · A new one every week · Still counts toward your weekly limit<\/small>/);
+  // they come before the usage credits, and before a limit is reached the question says how much is left
+  assert.match(lift("renderUsage"), /html \+= resetsHtml\(\) \+ creditsHtml\(l\);/);
+  assert.match(lift("useReset"), /`You still have \$\{100 - Math\.round\(most\[1\]\.pct\)\}% of your/);
+});
+
 test("only a newer site makes the page out of date, and once Reload was pressed for a version the notice stays away", () => {
   const ctx = { CFG: { version: "1.7.0" }, UP: { data: { current: "1.7.0" } }, stored: {} };
   ctx.store = { get: (k, d) => (k in ctx.stored ? ctx.stored[k] : d), set: (k, v) => (ctx.stored[k] = v) };

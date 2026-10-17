@@ -3103,7 +3103,7 @@ function creditsHtml(l) {
   const why = c && c.state === "off" && CREDIT_WHY[c.reason] ? " " + CREDIT_WHY[c.reason] : "";
   const resets = c && c.resetsAt && c.state !== "on" ? ` Their period resets ${relTime(c.resetsAt)}.` : "";
   const on = useCredits();
-  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div>${balanceHtml()}</div>${resetsHtml()}`;
+  return `<div class="credits"><div class="mt-top"><b>Usage credits</b><span class="state ${c ? esc(c.state) : ""}">${esc(label)}</span></div><p>${esc(text + why + resets)}</p><div class="switch"><div class="t"><span>Use usage credits from this site</span><small>${on ? "When you reach a plan limit, replies carry on using your credits." : "This site holds new messages while you're at a plan limit, so they don't use credits, and Fable 5.1, which runs on them, is paused. A reply already under way can still go past the limit."}</small></div><button type="button" class="toggle" role="switch" data-usage="credits" aria-checked="${on}" aria-label="Use usage credits from this site"${U.saving ? " disabled" : ""}></button></div>${balanceHtml()}</div>`;
 }
 // Limit resets on the account: Claude gives subscribers resets they can use whenever they like, which clear a usage limit.
 const WINDOW_WORDS = { five_hour: "5-hour limit", seven_day: "weekly limit", seven_day_opus: "weekly Opus limit", seven_day_sonnet: "weekly Sonnet limit" };
@@ -3111,29 +3111,35 @@ function clearsText(list) {
   const words = [...new Set((list || []).map(k => WINDOW_WORDS[k] || (k.startsWith("seven_day") ? "weekly limit" : "usage limit")))];
   return words.length ? words.join(" and ") : "your usage limit";
 }
-// The resets you can use right now, and the first of them: for Plan usage, and for the note under the message box when a
-// limit is hit.
+// The limit resets on the account, one row for each kind that has resets left: the one Claude says to use next, how many
+// there are in all, and whether it can be used now or why not. For Plan usage, and for the note under the message box when
+// a limit is hit.
 function usableResets() {
   const b = S.state && S.state.credits;
-  const groups = (b && b.resets) || [];
-  return groups.flatMap(g => g.grants.map(x => ({ ...x, program: g.program, atLimit: g.atLimit, cooldownUntil: g.cooldownUntil, eligible: g.eligible }))).map(x => {
-    const cool = x.cooldownUntil && Date.parse(x.cooldownUntil) > Date.now() ? x.cooldownUntil : "";
-    return { ...x, cool, can: x.left > 0 && (x.usableNow || (!x.paused && !cool && (!x.needsLimit || x.atLimit))) };
-  });
+  const now = Date.now();
+  return ((b && b.resets) || []).map(g => {
+    const live = g.grants.filter(x => x.left > 0 && !(x.endsAt && Date.parse(x.endsAt) <= now));
+    const x = live.find(x => x.next) || live.find(x => x.usableNow) || live[0];
+    if (!g.eligible || !x) return null;
+    const cool = g.cooldownUntil && Date.parse(g.cooldownUntil) > now ? g.cooldownUntil : "";
+    const can = x.usableNow && !x.paused && !cool;
+    const blocked = (x.blocking || [])[0];
+    const why = can ? "" : blocked ? `Not until your ${WINDOW_WORDS[blocked] || "usage limit"} resets` : x.paused ? "Paused" : cool ? `Usable again ${relTime(Date.parse(cool) / 1000)}` : x.needsLimit && !g.atLimit ? "Usable once you hit a limit" : "Not usable right now";
+    return { ...x, program: g.program, all: live.reduce((n, y) => n + y.left, 0), can, why };
+  }).filter(Boolean);
 }
 const EVERY = { day: "every day", week: "every week", month: "every month" };
 function resetsHtml() {
-  const grants = usableResets();
-  if (!grants.length) return "";
-  const rows = grants.map(x => {
-    const left = x.left === null ? "" : `${x.left}${x.total !== null ? ` of ${x.total}` : ""} left`;
-    const why = !x.left ? "None left" : x.paused ? "Paused" : x.cool ? `Usable again ${relTime(Date.parse(x.cool) / 1000)}` : x.needsLimit && !x.atLimit ? "Usable once you hit a limit" : "";
+  const list = usableResets();
+  if (!list.length) return "";
+  const rows = list.map(x => {
     // how often a free reset comes back, and when the next one does, when Claude says
     const next = x.nextAt && Date.parse(x.nextAt) > Date.now() ? `next one ${relTime(Date.parse(x.nextAt) / 1000)}` : "";
     const refill = EVERY[x.every] ? `A new one ${EVERY[x.every]}${next ? `, ${next}` : ""}` : next ? next[0].toUpperCase() + next.slice(1) : "";
-    const ends = x.endsAt && Date.parse(x.endsAt) ? `until ${new Date(x.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "";
-    const detail = [`Clears your ${clearsText(x.clears)}`, left, refill, ends].filter(Boolean).join(" · ");
-    return `<div class="reset-row"><div class="t"><span>${esc(x.label || "Free reset")}</span><small>${esc(detail)}</small></div>${x.can ? `<button type="button" class="btn ghost" data-reset="${esc(x.program)}" data-grant="${esc(x.id)}" data-clears="${esc(clearsText(x.clears))}"${U.resetting ? " disabled" : ""}>${U.resetting === x.id ? "Using…" : "Use one"}</button>` : `<small class="muted">${esc(why)}</small>`}</div>`;
+    const ends = x.endsAt && Date.parse(x.endsAt) ? `use by ${new Date(x.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "";
+    const weekly = x.program === "juniper_tide" ? "Still counts toward your weekly limit" : "";
+    const detail = [`Clears your ${clearsText(x.clears)}`, `${x.all} left`, refill, ends, weekly].filter(Boolean).join(" · ");
+    return `<div class="reset-row"><div class="t"><span>${esc(x.label || "Free reset")}</span><small>${esc(detail)}</small></div>${x.can ? `<button type="button" class="btn ghost" data-reset="${esc(x.program)}" data-grant="${esc(x.id)}" data-clears="${esc(clearsText(x.clears))}" data-keys="${esc(x.clears.join(" "))}"${U.resetting ? " disabled" : ""}>${U.resetting === x.id ? "Using…" : "Use one"}</button>` : `<small class="muted">${esc(x.why)}</small>`}</div>`;
   }).join("");
   return `<div class="credits"><div class="mt-top"><b>Free limit resets</b></div><p>Your plan comes with these for free. Each one clears a usage limit straight away, so you can keep going without waiting for it to reset.</p>${rows}</div>`;
 }
@@ -3148,7 +3154,11 @@ const RESET_SAID = {
 };
 async function useReset(btn) {
   if (U.resetting) return;
-  if (!(await askConfirm({ title: "Use a limit reset now?", text: `It clears your ${btn.dataset.clears}.`, ok: "Use it" }))) return;
+  // before a limit is reached, how much of it is still left, as Claude Code says
+  const l = S.state && S.state.limits;
+  const most = (btn.dataset.keys || "").split(" ").map(k => [k, l && l.windows && l.windows[k]]).filter(([, w]) => w && !w.reset).sort((a, b) => b[1].pct - a[1].pct)[0];
+  const early = most && most[1].pct < 100 && !(l && l.over) ? `You still have ${100 - Math.round(most[1].pct)}% of your ${WINDOW_WORDS[most[0]] || "usage limit"} left. ` : "";
+  if (!(await askConfirm({ title: "Use a limit reset now?", text: `${early}It clears your ${btn.dataset.clears}.`, ok: "Use it" }))) return;
   U.resetting = btn.dataset.grant;
   renderUsage();
   renderLimitNote();
@@ -3213,7 +3223,8 @@ function renderUsage() {
     if (l.limited) html += `<div class="note err">You've hit a limit. Replies resume when it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}${canReset ? ", or use a free reset below" : ""}.</div>`;
     else if (l.over && !useCredits()) html += `<div class="note warn">You've reached a plan limit. Usage credits are turned off for this site, so new messages wait until it resets${l.resetsAt ? " " + esc(relTime(l.resetsAt)) : ""}.</div>`;
   }
-  html += creditsHtml(l);
+  // the free resets come first, where they're seen without scrolling
+  html += resetsHtml() + creditsHtml(l);
   if (offline) html += `<div class="note soft">${esc(CFG.name)} is offline, so this is the last reading. Run <code>${esc(CFG.command)}</code> on your computer for a fresh one.</div>`;
   else html += `<p class="fine">Read on your computer each time you open this, and after every reply.</p>`;
   body.innerHTML = html;
