@@ -37,7 +37,7 @@ const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
 // The settings that live on the computer, which the site can show and change: starting at login and the folder Claude Code
 // works in. The computer also says which Claude plan it's signed in with, and an older one says what it reads (credits,
 // history), which nobody can change anymore.
-const COMPUTER_KEYS = ["autostart", "credits"];
+const COMPUTER_KEYS = ["autostart", "awake", "credits"];
 const HISTORY_SCOPES = ["all", "workspace", "off"];
 
 function cleanComputer(v) {
@@ -1247,8 +1247,9 @@ export class ChatgqlHub extends DurableObject {
     if (!ws) return json({ error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
     const caps = this.agentInfo(ws).caps || [];
     if (!caps.includes("computer")) return json({ error: `The ${this.commandName()} program on your computer is too old for this. Update it first.`, code: "agent_old" }, 409);
-    const r = await this.askAgent({ type: "computer", values }, 10000, "computer");
-    if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
+    // staying awake with the lid closed: a Mac asks for its password on its own screen first, which can take a while
+    const r = await this.askAgent({ type: "computer", values }, "awake" in values ? 200000 : 10000, "computer");
+    if (!r) return json({ error: "awake" in values ? "Your computer didn't answer in time. On a Mac, its password has to be typed on the Mac itself." : "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
     if (r.error) return json({ error: String(r.error).slice(0, 200), computer: cleanComputer(r.values) }, 400);
     return json({ computer: cleanComputer(r.values) });
   }

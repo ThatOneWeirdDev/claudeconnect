@@ -1139,6 +1139,8 @@ async function editSettings() {
   // This computer
   const auto = autostartOn();
   if (await yes(`${auto ? "Stop" : "Start"} ${name} when you log in to this computer? It ${auto ? "does" : "doesn't"} now.`)) local.autostart = !auto;
+  const awakeNow = String(spawnSync(process.execPath, [agentPath, "awake", "status"], { encoding: "utf8" }).stdout || "").trim() === "on";
+  if (await yes(`${awakeNow ? "Stop keeping" : "Keep"} ${name} running when the lid is closed? It ${awakeNow ? "does" : "doesn't"} now.`)) local.awake = !awakeNow;
   const ws = old.workspace || join(HOME, name);
   if (await yes(`Change the working folder, where ${name} works and files you attach go? Now: ${tilde(ws)}.`)) {
     for (;;) {
@@ -1207,6 +1209,7 @@ async function editSettings() {
     "tab" in job && `tab title: ${job.tab || "the name"}`,
     prefs.theme && `theme: ${THEME_NAMES[prefs.theme]}`,
     "autostart" in local && `start at login: ${local.autostart ? "yes" : "no"}`,
+    "awake" in local && `keep running with the lid closed: ${local.awake ? "yes" : "no"}`,
     local.workspace && `working folder: ${tilde(local.workspace)}`,
     "useCredits" in prefs && `usage credits from the site: ${prefs.useCredits ? "used" : "not used"}`,
     address && `address: ${address} (a new link; the old one stops working)`
@@ -1222,6 +1225,7 @@ async function editSettings() {
   }
   let failed = false;
   if ("autostart" in local) spawnSync(process.execPath, [agentPath, "autostart", local.autostart ? "on" : "off"], { stdio: "ignore" });
+  if ("awake" in local && spawnSync(process.execPath, [agentPath, "awake", local.awake ? "on" : "off"], { stdio: "inherit" }).status !== 0) failed = true;
   if (local.workspace) {
     try {
       mkdirSync(join(local.workspace, "uploads"), { recursive: true });
@@ -1546,6 +1550,18 @@ const auto = flag("--no-autostart") ? "n" : await ask(`  Keep ${displayName} onl
   no: "Not now"
 });
 if (/^y/i.test(auto)) spawnSync(process.execPath, [agentPath, "autostart", "on"], { stdio: "ignore" });
+// With the lid closed (agent/awake.mjs). Only asked of a person: nothing changes power settings by itself.
+const awake = flag("--no-awake") ? "n" : await ask(`  Keep ${displayName} running when this computer's lid is closed? [Y/n] `, interactive() ? "y" : "n", {
+  title: `Keep ${displayName} running with the lid closed?`,
+  help: `${process.platform === "darwin" ? "Your Mac stays awake even with its lid closed" : "Closing the lid won't put this computer to sleep"}, so ${displayName} keeps answering. ${process.platform === "darwin" ? "Your Mac asks for your password once to allow it. " : ""}It uses more battery: plug it in when you can, and don't carry it closed in a bag while it's on. A computer that's turned off can't answer. You can change this in Settings on the site.`,
+  yes: "Yes, keep it running",
+  no: "Not now"
+});
+if (/^y/i.test(awake)) {
+  if (process.platform === "darwin") note("Your Mac is asking for your password, so it can stay awake with the lid closed.");
+  const r = await runLive(`${q(process.execPath)} ${q(agentPath)} awake on`);
+  if (r.status !== 0) note(`It wasn't turned on. You can turn it on later in Settings on the site, or with ${command} awake on.`);
+}
 const logPath = join(DIR, "agent.log");
 let logFrom = 0;
 try {

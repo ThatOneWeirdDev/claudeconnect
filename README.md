@@ -39,7 +39,8 @@ The setup still works in the terminal: it's used automatically over SSH or where
 | Command | What it does |
 | --- | --- |
 | `<command> update` | Updates the site and this computer to the newest version, in place. Your chats, name, look and settings are kept. If the new version brings a setting of its own, it asks about that, and nothing else. |
-| `<command> edit` | Goes through every setting the site's **Settings** has, in the same order, each with what it is now and a y/n: the name, tab icon, tab title and theme; starting when you log in, and the working folder; whether the site uses usage credits (on a paid plan); and the address. Then it shows what will change and asks once more before saving. Last it asks whether to delete the site, which needs you to type its name. |
+| `<command> edit` | Goes through every setting the site's **Settings** has, in the same order, each with what it is now and a y/n: the name, tab icon, tab title and theme; starting when you log in, staying awake with the lid closed, and the working folder; whether the site uses usage credits (on a paid plan); and the address. Then it shows what will change and asks once more before saving. Last it asks whether to delete the site, which needs you to type its name. |
+| `<command> awake on` | Keeps the computer awake with its lid closed, so the site keeps answering (`off` to undo, `status` to see). A Mac asks for its password. |
 | `<command> help` | Lists the rest: start, stop, logs, status, open, claim and so on. |
 
 ## Everything from the site
@@ -48,7 +49,7 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 
 | Settings page | What it does |
 | --- | --- |
-| **General** | The site's name. Under **This computer**: **Start when you log in**, which makes it a startup item (a Login Item on macOS, the Startup folder on Windows) so it's online whenever you are; and the **Working folder**. |
+| **General** | The site's name. Under **This computer**: **Start when you log in**, which makes it a startup item (a Login Item on macOS, the Startup folder on Windows) so it's online whenever you are; and the **Working folder**. **Keep running with the lid closed** (see below).|
 | **Appearance** | A **template**: **ChatGPT** gives the site ChatGPT's name and tab icon in one go, after asking, and says **In use** while the site still looks that way. The tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), which is also the picture at the top of the sidebar when it's folded away (the page has no separate logo); the **tab title**, the text next to the tab icon in the browser, which is the site's name unless you give it its own; and light, dark or system theme. The theme is kept on the site, so it's the same on every device. |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
 | **Updates** | Shows when a new version is out and installs it in place. The program on your computer looks for one every minute, from its own connection, and tells the site (GitHub often turns away Cloudflare's servers, where the site runs); it reads the release at the newest commit, so GitHub's five-minute cache can't hold it back. **Check again** asks your computer too. |
@@ -102,6 +103,18 @@ It also shows your **usage credits** (claude.ai's "extra usage"): whether they'r
 **Your balance, promotional credits (including the free Claude Code cloud credits, with what's left and when they run out) and this month's spending** show on the same page too. That needs your Claude account, and claude.ai doesn't let other sites in, so it's done by the program on your computer with Claude Code's own sign-in, the same way Claude Code's `/usage` asks. They're always shown; there's no setting for it. The sign-in is read on your computer and sent only to Anthropic; the site only ever gets the numbers. It's read each time you open Plan usage. These come from parts of Claude's API that Claude Code uses but Anthropic hasn't published, so a future change on their side could make them disappear; the page then says it couldn't read them, and they're always on claude.ai.
 
 Plans billed per token (an API key) don't report these, so nothing is shown. Claude Code marks this field as internal, so a future version could change it; if it disappears, the page just shows nothing.
+
+### With the lid closed
+
+Your site answers through Claude Code on your computer, so it only works while that computer is on and awake. A computer that's turned off can't answer: there's nothing running to answer with.
+
+**Keep running with the lid closed** (asked during setup, in **Settings → General → This computer**, or `<command> awake on`) keeps the computer awake with its lid closed:
+
+- **Mac:** closing the lid always puts a Mac to sleep unless sleep is turned off for the whole system (`pmset disablesleep`), and only an administrator can do that. Your Mac asks for your password in its own dialog, once to turn it on and once to turn it off. It stays on after a restart. While it's on, the Mac never sleeps: it uses more battery, so plug it in when you can, and don't carry it closed in a bag.
+- **Windows:** closing the lid does nothing (the power plan's setting; what it was is kept and put back when you turn this off), and while the program runs it tells Windows the computer is in use, so it doesn't sleep when idle either. No administrator rights needed.
+- **Linux:** while the program runs it holds systemd's sleep, idle and lid-switch locks.
+
+From the site, the switch waits for your computer to answer: on a Mac, the password has to be typed on the Mac itself.
 
 ### If the site is locked
 
