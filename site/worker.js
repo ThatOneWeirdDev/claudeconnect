@@ -175,6 +175,11 @@ function fileMime(name, kind) {
 
 // A path in the working folder as the page sends it: names joined by "/", "" for the folder itself. Null for anything that
 // tries to leave it. The computer checks again, links included.
+// The page's invisible mark for Remote (zero-width characters), which the computer looks for in its own window titles.
+function screenTag(v) {
+  return typeof v === "string" && /^[\u200b\u200c\u200d\u2060]{6,32}$/.test(v) ? v : "";
+}
+
 function cleanFsPath(v) {
   if (v === undefined || v === null) return "";
   const s = String(v);
@@ -1034,6 +1039,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/files" && method === "GET") return this.listFiles(url);
     if (p === "/api/files/raw" && (method === "GET" || method === "HEAD")) return this.serveFile(req, url);
     if (p === "/api/files/trash" && method === "POST") return this.trashFile(req);
+    if (p === "/api/files/search" && method === "GET") return this.searchFiles(url);
     if (p === "/api/files/write" && method === "POST") return this.writeFile(req);
     if (p === "/api/chats" && method === "GET") {
       await this.takePreload();
@@ -1306,7 +1312,7 @@ export class ChatgqlHub extends DurableObject {
     const not = this.screenAgent();
     if (not) return not;
     const num = (v, lo, hi, d) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
-    const r = await this.askAgent({ type: "screen_frame", w: num(b.w, 320, 2560, 1280), q: num(b.q, 20, 90, 60) }, 20000, "screen");
+    const r = await this.askAgent({ type: "screen_frame", w: num(b.w, 320, 2560, 1280), q: num(b.q, 20, 90, 60), tag: screenTag(b.tag) }, 20000, "screen");
     if (!r || !r.ok) return this.screenFailed(r);
     let bytes = null;
     try {
@@ -1322,7 +1328,7 @@ export class ChatgqlHub extends DurableObject {
     if (!events.length) return json({ error: "Nothing to do." }, 400);
     const not = this.screenAgent();
     if (not) return not;
-    const r = await this.askAgent({ type: "screen_input", events }, 15000, "screen");
+    const r = await this.askAgent({ type: "screen_input", events, tag: screenTag(b.tag) }, 15000, "screen");
     if (!r || !r.ok) return this.screenFailed(r);
     return json({ ok: true });
   }
@@ -2054,6 +2060,26 @@ export class ChatgqlHub extends DurableObject {
       .filter(x => x && typeof x.id === "string" && PLACE_RE.test(x.id) && typeof x.label === "string")
       .map(x => ({ id: x.id, label: x.label.slice(0, 60), path: typeof x.path === "string" ? x.path.slice(0, 1024) : "" }));
     return json({ path, place: root, places, root: typeof r.root === "string" ? r.root.slice(0, 1024) : "", total: Math.max(entries.length, Math.round(Number(r.total)) || 0), cut: !!r.cut, entries });
+  }
+
+  // Searching from a folder by name, with filters: done on the computer, which reads the folder once and keeps the names a
+  // little while, so each new letter is answered quickly.
+  async searchFiles(url) {
+    const no = this.filesBlocked();
+    if (no) return no;
+    if (!(this.agentInfo(this.agent()).caps || []).includes("search")) return json({ error: `Update ${this.siteName()} on your computer to search your files here.`, code: "agent_old" }, 409);
+    const path = cleanFsPath(url.searchParams.get("path"));
+    if (path === null) return json({ error: "That isn't in this folder.", code: "outside" }, 403);
+    const q = String(url.searchParams.get("q") || "").slice(0, 200);
+    const pick = (k, list) => (list.includes(url.searchParams.get(k)) ? url.searchParams.get(k) : "");
+    const r = await this.askAgent({ type: "fs_search", root: cleanPlace(url.searchParams.get("root")), path, q, kind: pick("kind", ["folder", "image", "video", "audio", "doc", "code", "archive", "other"]), mod: pick("mod", ["day", "week", "month", "year"]), size: pick("size", ["1m", "10m", "100m", "1g"]), hidden: url.searchParams.get("hidden") === "1" }, 30000, "files");
+    if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "offline" }, 503);
+    if (!r.ok) return fsError(r);
+    const num = v => Math.max(0, Math.round(Number(v)) || 0);
+    const results = (Array.isArray(r.results) ? r.results.slice(0, 500) : [])
+      .filter(e => e && typeof e.name === "string" && e.name && e.name.length <= 1024 && !/[/\0]/.test(e.name) && typeof e.path === "string" && cleanFsPath(e.path) === e.path && e.path)
+      .map(e => ({ path: e.path, name: e.name, dir: !!e.dir, size: num(e.size), mtime: num(e.mtime), kind: FS_KINDS.includes(e.kind) ? e.kind : "file" }));
+    return json({ results, matches: num(r.matches), looked: num(r.looked), done: !!r.done, capped: !!r.capped, partial: !!r.partial });
   }
 
   readPiece(root, path, offset, length) {

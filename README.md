@@ -63,6 +63,13 @@ The command you run on your computer (`<command> help` lists them) is the site's
 
 The **Chat | Files** switch at the top of the page opens the **file browser** in place of the chat, with the sidebar and the switch staying where they are; **Chat** (or Esc) goes back. It reaches everything your site can on your computer, with these places down the side: the **Working folder**, your **Home** folder and the **Desktop**, **Documents** and **Downloads** in it, any folder Claude Code's settings let it into besides (`permissions.additionalDirectories`), and **This computer** (each drive, on Windows). Photos show, video plays, audio plays in the site's own player (play and pause, 10 seconds back and forward, a bar to drag, volume and speed), text and code show as text, and any file can be downloaded. Pointing at a button says what it does. **Edit** (the pencil) opens a text or code file of up to 2 MB to change, and **Save** (or Ctrl+S, ⌘S on a Mac) saves it on your computer, keeping its line endings. If the file changed on your computer since you opened it, it asks before saving over that. The eye button shows hidden files. **Move to Trash** (on a file, or a whole folder) moves it to the Trash on your computer, or the Recycle Bin on Windows, never deleting it, so you can put it back from there. A place itself can't be moved, and a link that leads out of a place is only followed from **This computer**.
 
+**Search** (the magnifier at the top of the file browser, or Ctrl+F, ⌘F on a Mac) looks through the open folder and every folder in it.
+- **Matching:** it searches by name as you type. Every word you type has to be in the name, in any order and any case. The best matches come first: the whole name, then its start, then the start of a word in it.
+- **Filters:** **Kind** (folders, documents, images, videos, audio, code and text, archives), **Any time** (today, the past 7 days, 30 days or year) and **Any size** (over 1 MB, 10 MB, 100 MB or 1 GB). With only a filter and no words, the newest come first.
+- **Results:** a result opens in the preview, and its folder button goes to where it is. **Esc** ends the search.
+- **How it's fast:** your computer reads the folder once, many folders at a time and the shallow ones first. It keeps the names for 45 seconds, so each letter typed after the first is answered from memory. A very big folder shows what's been found while the rest is read.
+- **What's skipped:** `node_modules` and version-control folders; macOS packages (an app or a Photos library counts as one item, as in Finder); hidden things unless the eye button shows them; and `~/Library` or `AppData` at the top of the home folder. Links are listed but not followed.
+
 **Images**, under **New chat** in the sidebar, opens ChatGPT's Images page (chatgpt.com/images) in a new tab.
 
 ### Remote
@@ -72,15 +79,16 @@ The **Chat | Files** switch at the top of the page opens the **file browser** in
 - **Using it:**
   - Click, double-click, right-click, drag and scroll over the picture as you would on the computer.
   - Once you've clicked it (it gets a blue outline), the keys you press go to the computer. Your shortcuts carry over: ⌘ on a Mac works as Ctrl on Windows and Linux, and the other way round.
-  - On a phone: tap to click, hold to right-click, slide a finger to scroll, and the keyboard button to type.
+  - On a phone, turn it sideways: Remote asks for that, then fills the whole screen, with small keyboard and close buttons on top. Tap to click, hold to right-click, slide a finger to scroll, and the keyboard button to type.
   - The full-screen button gives the screen the whole page, and **?** says all this on the page.
+- **Not on the computer it shows:** in a browser on that same computer, Remote would show itself inside itself, over and over, and move the mouse out from under you, so it says to use another device instead. While Remote is open, the page puts a mark no one can see (zero-width characters) in its tab's title. The computer looks for that mark in its own window titles and refuses when it finds it. It uses CoreGraphics or System Events on a Mac, the window list on Windows, and xdotool on Linux.
 - **How it works:** the page asks for one picture of the screen at a time (a JPEG sized to fit), as soon as the last one has arrived, so it's a few pictures a second rather than video. What you do over it is sent in order, with positions as fractions of the picture. It all goes through your own site, only to you, and only while the Remote page is open. Your computer notes in its log when its screen starts being shown.
 - **Mac:**
   - The first time, the Mac asks to allow **Screen Recording** and **Accessibility** for `node` (the program that runs your site there). That has to be answered on the Mac itself.
   - Seeing only the desktop picture means Screen Recording isn't allowed yet. Clicks doing nothing means Accessibility isn't. Turn on `node` for both in **System Settings → Privacy & Security**.
   - A Mac with its **lid closed** has no screen to show unless another display is connected.
   - A locked screen can be seen, but macOS doesn't let anything type the password into it from elsewhere.
-- **Windows:** works as it is. Windows' locked screen and administrator prompts can't be shown.
+- **Windows:** works as it is, with no extra permissions. One PowerShell helper takes the pictures (with the mouse pointer drawn in) and moves the mouse and types. Windows' locked screen and administrator prompts can't be shown.
 - **Linux:** an X11 desktop, with ImageMagick (or ffmpeg) to show the screen and `xdotool` to use it. Wayland isn't supported.
 
 ### Under the message box
@@ -189,6 +197,7 @@ An older version kept the command it was set up with through renames. Updating r
 | `agent/limits.mjs` | Reads the limit resets on your Claude account. |
 | `agent/keepalive.mjs` | The watcher that starts the program again after a crash or a hang. |
 | `agent/screen.mjs` | Remote: pictures of the screen, and the mouse and keyboard, on macOS, Windows and Linux. |
+| `agent/search.mjs` | Searching the file browser by name, with filters. |
 | `agent/permit.mjs` | The small MCP server Claude Code asks through for **Ask first**, which passes each question to the site. |
 | `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
 | `site/app.html` | The web app. Its layout and colours follow ChatGPT's page as it is now: black (or white) for the page and the sidebar, the site's name as a wordmark, **Recents**, the **Chat \| Files** switch at the top, a `#1b1b1b` message box with ChatGPT's blue button, and a teal avatar. |
