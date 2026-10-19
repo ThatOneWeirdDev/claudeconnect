@@ -44,5 +44,11 @@ export function cleanManifest(j) {
     .filter(q => q && typeof q === "object" && QUESTION_KEYS.includes(q.key) && typeof q.label === "string" && q.label.trim() && parseVersion(q.since))
     .slice(0, 6)
     .map(q => ({ key: q.key, label: q.label.trim().slice(0, 160), help: typeof q.help === "string" ? q.help.trim().slice(0, 300) : "", default: q.default === true, since: String(q.since).replace(/^v/, "") }));
-  return { version: String(j.version).replace(/^v/, ""), released: typeof j.released === "string" ? j.released.slice(0, 32) : "", notes, questions };
+  // Releases that don't install by themselves: from `since` on, an update waits for the person and says why (it needs a
+  // permission on the computer, a password, something only they can do). Null when the release doesn't say: an older copy of
+  // the manifest, or an older program passing it on. Nothing installs by itself then.
+  const manual = Array.isArray(j.manual)
+    ? j.manual.filter(m => m && typeof m === "object" && parseVersion(m.since) && typeof m.why === "string" && m.why.trim()).slice(0, 20).map(m => ({ since: String(m.since).replace(/^v/, ""), why: m.why.trim().slice(0, 240) }))
+    : null;
+  return { version: String(j.version).replace(/^v/, ""), released: typeof j.released === "string" ? j.released.slice(0, 32) : "", notes, questions, manual };
 }

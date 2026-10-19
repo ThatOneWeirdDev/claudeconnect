@@ -65,6 +65,8 @@ const CHECK_EVERY = 60000;
 const CHECK_RETRY = 30000;
 // how long a report from the computer stands in for the site's own look
 const HEARD_FOR = 10 * 60000;
+// An update that started by itself and didn't finish isn't tried again for the same version for this long.
+const AUTO_RETRY = 6 * 3600000;
 const UPDATE_LOG_KEEP = 8;
 // The most chats listed in the sidebar (and the most the computer is asked to report). Matches MAX_SESSIONS in agent/sessions.mjs.
 const CHAT_LIST_MAX = 3000;
@@ -980,6 +982,7 @@ export class ChatgqlHub extends DurableObject {
       if (r && r.at >= opened) continue;
       if (!active.has(c.running)) await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${this.siteName()} restarted before the reply finished.` });
     }
+    this.maybeAutoUpdate().catch(() => {});
   }
 
   async webSocketClose(ws) {
@@ -1028,7 +1031,11 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
     if (p === "/api/admin/delete" && method === "POST") return this.startDelete(req);
     if (p === "/api/admin/cancel" && method === "POST") return this.cancelJob();
-    if (p === "/api/update" && method === "GET") return json(await this.updateInfo());
+    if (p === "/api/update" && method === "GET") {
+      const info = await this.updateInfo();
+      this.maybeAutoUpdate().catch(() => {});
+      return json(info);
+    }
     if (p === "/api/update/check" && method === "POST") return json(await this.updateInfo(true));
     if (p === "/api/update/start" && method === "POST") return this.startUpdate(req);
     if (p === "/api/update/dismiss" && method === "POST") {
@@ -1334,7 +1341,7 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async prefs() {
-    return { useCredits: true, ...((await this.ctx.storage.get("prefs")) || {}) };
+    return { useCredits: true, autoUpdate: true, ...((await this.ctx.storage.get("prefs")) || {}) };
   }
 
   // Kept on the site, so they're the same on every device: whether usage credits are used from here, and the theme. A site
@@ -1344,8 +1351,10 @@ export class ChatgqlHub extends DurableObject {
     if (!b || typeof b !== "object") return json({ error: "That couldn't be read." }, 400);
     const p = await this.prefs();
     if (typeof b.useCredits === "boolean") p.useCredits = b.useCredits;
+    if (typeof b.autoUpdate === "boolean") p.autoUpdate = b.autoUpdate;
     if (THEMES.includes(b.theme)) p.theme = b.theme;
     await this.ctx.storage.put("prefs", p);
+    if (b.autoUpdate === true) this.maybeAutoUpdate().catch(() => {});
     return json(p);
   }
 
@@ -1451,6 +1460,7 @@ export class ChatgqlHub extends DurableObject {
   async noteRelease(m) {
     await this.keepRelease(m);
     if (m.req) this.gotTranscript(m); // the answer to a "Check again"
+    await this.maybeAutoUpdate().catch(() => {});
   }
   async keepRelease(m) {
     const src = this.updateSource();
@@ -1570,6 +1580,9 @@ export class ChatgqlHub extends DurableObject {
       run = null;
     }
     const log = (await this.ctx.storage.get("updateLog")) || [];
+    // what's installed on both sides: the older of the site and the computer
+    const agentV = this.agent() ? this.agentInfo(this.agent()).version : "";
+    const base = parseVersion(agentV) && compareVersions(agentV, current) < 0 ? agentV : current;
     // The installed version's patch notes: from the log if it was installed by an update, else from the release if that is the one running.
     const logged = log.find(e => e.version === current);
     const mine = logged || (latest && latest.version === current ? latest : null);
@@ -1580,8 +1593,12 @@ export class ChatgqlHub extends DurableObject {
       notes: latest ? latest.notes : [],
       // what the new version asks: questions added after the version this computer runs
       questions: latest ? (latest.questions || []).filter(q => compareVersions(q.since, (this.agent() && this.agentInfo(this.agent()).version) || current) > 0 && compareVersions(q.since, latest.version) <= 0) : [],
+      // why this update waits for the person instead of installing by itself (a permission, a password…), from the releases
+      // between what's installed and it; null when the release doesn't say (see cleanManifest)
+      manual: latest ? (Array.isArray(latest.manual) ? latest.manual.filter(m => compareVersions(m.since, base) > 0 && compareVersions(m.since, latest.version) <= 0).map(m => m.why) : null) : [],
+      auto: (await this.prefs()).autoUpdate !== false,
       released: latest ? latest.released : "",
-      whatsNew: mine && mine.notes.length ? { version: mine.version, released: mine.released || "", notes: mine.notes, updated: !!logged } : null,
+      whatsNew: mine && mine.notes.length ? { version: mine.version, released: mine.released || "", notes: mine.notes, updated: !!logged, auto: !!(logged && logged.auto) } : null,
       history: log.filter(e => compareVersions(e.version, current) < 0).slice(0, UPDATE_LOG_KEEP).map(({ version, released, notes }) => ({ version, released: released || "", notes })),
       source: src.label,
       checkedAt: c ? c.at : null,
@@ -1595,14 +1612,14 @@ export class ChatgqlHub extends DurableObject {
   }
 
   // Starts a job: records the checklist, then hands the work to the computer.
-  async beginJob(kind, req, { to = null, message, need }) {
+  async beginJob(kind, req, { to = null, message, need, auto = false }) {
     const info = await this.updateInfo();
     const block = this.updateBlock(info.run, need);
     if (block) return json({ error: block.message, code: block.code }, 409);
     const ws = this.agent();
     const now = Date.now();
     const plan = PLANS[kind].map(([key, label]) => ({ key, label }));
-    const run = { id: crypto.randomUUID(), kind, plan, from: info.current, to, state: "running", acked: false, step: plan[0].key, steps: {}, message: "", info: null, cancel: false, startedAt: now, updatedAt: now, finishedAt: null, by: req.headers.get("x-chatgql-user") || "" };
+    const run = { id: crypto.randomUUID(), kind, plan, from: info.current, to, state: "running", acked: false, step: plan[0].key, steps: {}, message: "", info: null, cancel: false, startedAt: now, updatedAt: now, finishedAt: null, by: req ? req.headers.get("x-chatgql-user") || "" : "", auto };
     // what the update brings, kept with the run so the panel can show it while it runs and after
     if (kind === "update") Object.assign(run, { notes: info.notes, released: info.released });
     await this.ctx.storage.put("update", run);
@@ -1625,6 +1642,47 @@ export class ChatgqlHub extends DurableObject {
     for (const q of info.questions) if (b.answers && typeof b.answers[q.key] === "boolean") values[q.key] = b.answers[q.key];
     if (Object.keys(values).length) await this.ctx.storage.put("answers", { version: info.latest, values });
     return this.beginJob("update", req, { to: info.latest, need: "update", message: { type: "update", to: info.latest } });
+  }
+
+  // ---- Updating by itself. A new release installs without anyone asking when the site is set to (it is unless turned off in
+  // Settings → Updates), when it asks nothing and needs nothing from the person (a `manual` entry in its manifest says what
+  // it needs), and only while no reply is being written; the update itself waits for quiet moments too (agentProgress). One
+  // that doesn't finish isn't tried again for the same version for six hours. Looked at when the computer reports a release,
+  // when a reply finishes, when the computer connects, and when a page asks about updates.
+  async maybeAutoUpdate() {
+    const now = Date.now();
+    // (tests turn it off for the site as a whole, and on where it's what they test)
+    if (this.env.AUTO_UPDATE === "off" || this.autoLooking || now - (this.autoLookedAt || 0) < envNum(this.env.AUTO_LOOK_MS, 15000)) return;
+    this.autoLooking = true;
+    this.autoLookedAt = now;
+    try {
+      const info = await this.updateInfo();
+      if (!info.auto || !info.available || info.questions.length || !info.manual || info.manual.length || info.blocked) return;
+      const tried = await this.ctx.storage.get("autoTried");
+      if (tried && tried.to === info.latest && Date.now() - tried.at < envNum(this.env.AUTO_RETRY_MS, AUTO_RETRY)) return;
+      await this.ctx.storage.put("autoTried", { to: info.latest, at: Date.now() });
+      await this.beginJob("update", null, { to: info.latest, need: "update", message: { type: "update", to: info.latest }, auto: true });
+    } finally {
+      this.autoLooking = false;
+    }
+  }
+
+  // Whether a reply is being written or about to be: an update waits for that before it touches the site or the computer.
+  replying() {
+    return (this.sending || 0) > 0 || !!this.one("SELECT 1 AS x FROM chats WHERE running IS NOT NULL");
+  }
+
+  // While an update restarts the program on the computer, a message waits for the new program (up to a minute and a half)
+  // rather than going to the old one as it stops, or finding nobody there.
+  async agentAfter(version, ms) {
+    const until = Date.now() + ms;
+    for (;;) {
+      const w = this.agent();
+      const run = await this.ctx.storage.get("update");
+      if (w && (!run || run.state !== "running" || !run.restarting || compareVersions(this.agentInfo(w).version, version) >= 0)) return w;
+      if (Date.now() > until) return w;
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
 
   // The part of the workers.dev address that is this site's own name.
@@ -1701,7 +1759,7 @@ export class ChatgqlHub extends DurableObject {
     const notes = Array.isArray(run.notes) && run.notes.length ? run.notes : rel ? rel.notes : [];
     const released = run.released || (rel ? rel.released : "");
     const log = ((await this.ctx.storage.get("updateLog")) || []).filter(e => e.version !== run.to);
-    log.unshift({ version: String(run.to), released, notes, at: Date.now() });
+    log.unshift({ version: String(run.to), released, notes, at: Date.now(), ...(run.auto ? { auto: true } : {}) });
     await this.ctx.storage.put("updateLog", log.slice(0, UPDATE_LOG_KEEP + 2));
   }
 
@@ -1725,6 +1783,9 @@ export class ChatgqlHub extends DurableObject {
     if (!run || run.id !== b.id) return json({ error: "No such update" }, 404);
     if (run.state !== "running") return json({ ok: true, cancel: !!run.cancel });
     const now = Date.now();
+    // Before the site is replaced and before the computer's program restarts, the updater waits while a reply is being
+    // written. Once it's told to go ahead with the restart, messages wait for the new program (agentAfter).
+    const busy = (b.step === "site" || b.step === "computer") && b.status === "active" && this.replying();
     const keys = (run.plan || PLANS.update.map(([key]) => ({ key }))).map(x => x.key);
     const next = { ...run, acked: true, updatedAt: now, steps: { ...run.steps } };
     const at = keys.indexOf(b.step);
@@ -1735,6 +1796,8 @@ export class ChatgqlHub extends DurableObject {
     }
     const info = cleanJobInfo(b.info);
     if (info) next.info = info;
+    if (b.step === "site" || b.step === "computer") next.waiting = busy;
+    if (b.step === "computer" && b.status === "active" && !busy) next.restarting = true;
     if (b.status === "error") {
       next.state = "error";
       next.finishedAt = now;
@@ -1744,7 +1807,7 @@ export class ChatgqlHub extends DurableObject {
       return json({ ok: true });
     }
     await this.ctx.storage.put("update", next);
-    return json({ ok: true, cancel: !!next.cancel });
+    return json({ ok: true, cancel: !!next.cancel, busy });
   }
 
   async getChat(id) {
@@ -1932,6 +1995,15 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async send(req) {
+    this.sending = (this.sending || 0) + 1;
+    try {
+      return await this.sendNow(req);
+    } finally {
+      this.sending--;
+    }
+  }
+
+  async sendNow(req) {
     let b;
     try {
       b = await req.json();
@@ -1947,7 +2019,9 @@ export class ChatgqlHub extends DurableObject {
       if (!chat) return json({ error: "That chat doesn't exist anymore." }, 404);
       if (chat.running) return json({ error: "Still answering in this chat." }, 409);
     }
-    const ws = this.agent();
+    let ws = this.agent();
+    const up = await this.ctx.storage.get("update");
+    if (up && up.state === "running" && up.restarting) ws = await this.agentAfter(up.to, envNum(this.env.HOLD_MS, 90000));
     if (!ws) return json({ error: `${this.siteName()} is offline right now. Run ${this.commandName()} to bring it back online, then send again.`, code: "offline" }, 503);
     const info = this.agentInfo(ws);
     const caps = info.caps || [];
@@ -2228,5 +2302,7 @@ export class ChatgqlHub extends DurableObject {
     if (chat.running === m.runId) this.sql.exec("UPDATE chats SET running = NULL, updated = ? WHERE id = ?", now, chat.id);
     this.push(m.runId, { type: "done", message: { id: "a-" + m.runId, role: "assistant", content: text, meta, created: now } });
     this.closeRun(m.runId);
+    // a quiet moment, maybe: a new version can install now
+    this.maybeAutoUpdate().catch(() => {});
   }
 }

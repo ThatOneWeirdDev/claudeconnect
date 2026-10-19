@@ -1668,7 +1668,7 @@ async function checkRelease(req) {
       if (!r.ok) continue;
       const j = JSON.parse((await r.text()).slice(0, 100000));
       if (!j || typeof j.version !== "string") continue;
-      lastRelease = { version: j.version, released: j.released || "", notes: j.notes || [], questions: j.questions || [] };
+      lastRelease = { version: j.version, released: j.released || "", notes: j.notes || [], questions: j.questions || [], ...(Array.isArray(j.manual) ? { manual: j.manual } : {}) };
       lastSha = url.includes(`/${sha}/`) ? sha : "";
       return answer({ release: lastRelease });
     } catch {}

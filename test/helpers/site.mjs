@@ -115,6 +115,8 @@ export async function startSite(opts = {}) {
           UPDATE_API: "https://api.test",
           AGENT_SECRET,
           CLAIM_CODE,
+          // updating by itself is off unless a test is about it
+          AUTO_UPDATE: "off",
           ...(opts.vars || {})
         },
         outboundService: async request => {

@@ -694,6 +694,22 @@ async function siteServes(cfg, version, ms = Number(process.env.CLAUDECONNECT_LI
   return false;
 }
 
+// Before the site is replaced and before the program here restarts: while the site says a reply is being written, this waits
+// (checking every few seconds, for up to two hours), so an update never cuts a reply short. From a terminal, or with a site
+// too old to say, it goes straight on.
+async function quietMoment(step) {
+  const until = Date.now() + (Number(process.env.CLAUDECONNECT_QUIET_MAX_MS) || 2 * 3600000);
+  let said = false;
+  for (;;) {
+    const r = await report(step, "active");
+    if (!r || !r.busy) return;
+    if (!said) console.log("Waiting for the reply being written on the site to finish…");
+    said = true;
+    if (Date.now() > until) throw new Stop("A reply was being written the whole time, so this update waited and stopped. It'll be tried again later.");
+    await sleep(Number(process.env.CLAUDECONNECT_QUIET_POLL_MS) || 3000);
+  }
+}
+
 async function remoteUpdate(manifest) {
   const old = readJson(CONFIG);
   if (!old || !old.accountId || !old.kvId || !old.name || !old.site) fail("This computer isn't set up yet, so there's nothing to update. Run ClaudeConnect.mjs and choose to set it up.");
@@ -704,7 +720,7 @@ async function remoteUpdate(manifest) {
   try {
     await report("verify", "done");
     at = "site";
-    await report("site", "active");
+    await quietMoment("site");
     signIn(old);
     installSite(manifest);
     writeFileSync(join(SITE, "wrangler.jsonc"), JSON.stringify(wranglerConfig({ slug: old.name, accountId, kvId: old.kvId, displayName: old.displayName || "ClaudeConnect", command: old.command || "ClaudeConnect", tab: old.tabTitle, version: manifest.version, repo: REPO, ref: REF }), null, 2));
@@ -713,7 +729,7 @@ async function remoteUpdate(manifest) {
     await siteServes(old, manifest.version);
     await report("site", "done");
     at = "computer";
-    await report("computer", "active");
+    await quietMoment("computer");
     await stopAgentQuietly();
     stopped = true;
     installComputer(manifest);

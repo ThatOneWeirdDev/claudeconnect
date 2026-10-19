@@ -28,9 +28,9 @@ async function until(fn, what, ms = 60000) {
   throw new Error(`timed out waiting for ${what}${last instanceof Error ? ": " + last.message : ""}`);
 }
 
-async function boot(t) {
+async function boot(t, vars = {}) {
   const github = await startRepo(ROOT);
-  const site = await startSite({ appVersion: "1.1.5", release: RELEASE });
+  const site = await startSite({ appVersion: "1.1.5", release: RELEASE, vars });
   await site.claim();
   const pc = makeComputer({ site, githubUrl: github.url });
   const agent = pc.startAgent();
@@ -187,4 +187,18 @@ test("the agent refuses to start an update while it is answering", async t => {
   await until(async () => (await site.api("/api/update")).body.blocked?.code === "busy", "the site to see the run");
   assert.equal((await site.post("/api/update/start", { to: RELEASE.version })).status, 409);
   assert.equal(pc.deploys().length, 0);
+});
+
+test("with nothing asked of the person, a new release installs by itself: site, computer and restart, with no one pressing Update", async t => {
+  const { site, pc } = await boot(t, { AUTO_UPDATE: "on", AUTO_LOOK_MS: "0" });
+  assert.deepEqual(RELEASE.manual, [], "this release can install by itself");
+  const run = await until(async () => {
+    const r = (await site.api("/api/update")).body.run;
+    return r && r.state !== "running" ? r : null;
+  }, "the update to finish by itself", 90000);
+  assert.equal(run.state, "done", `update ended as ${run.state}: ${run.message}\n--- update.log ---\n${pc.updateLog()}`);
+  assert.equal(run.auto, true);
+  assert.equal(JSON.parse(pc.read("config.json")).version, RELEASE.version);
+  assert.equal(pc.deploys().length, 1);
+  await until(async () => (await site.api("/api/state")).body.agent.version === RELEASE.version, "the new version online");
 });
