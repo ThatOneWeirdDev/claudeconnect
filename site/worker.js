@@ -859,7 +859,9 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async webSocketMessage(ws, raw) {
-    if (typeof raw !== "string") return;
+    if (this.agentInfo(ws).viewer) return this.viewerMessage(ws, raw);
+    // from the computer, a binary message is a live picture of its screen
+    if (typeof raw !== "string") return this.screenOut(raw);
     let m;
     try {
       m = JSON.parse(raw);
@@ -888,7 +890,8 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
     if (m.type === "commands") return this.saveCommands(m.commands);
-    if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result" || m.type === "screen_result") return this.gotTranscript(m);
+    if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result") return this.gotTranscript(m);
+    if (m.type === "screen_status") return this.screenSay({ code: typeof m.code === "string" && /^[a-z_]{1,20}$/.test(m.code) ? m.code : "failed", error: String(m.error || "").slice(0, 300), os: typeof m.os === "string" ? m.os.slice(0, 10) : "" });
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
       return this.gotTranscript(m);
@@ -982,6 +985,7 @@ export class ChatgqlHub extends DurableObject {
       if (r && r.at >= opened) continue;
       if (!active.has(c.running)) await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${this.siteName()} restarted before the reply finished.` });
     }
+    this.screenSync();
     this.maybeAutoUpdate().catch(() => {});
   }
 
@@ -989,15 +993,18 @@ export class ChatgqlHub extends DurableObject {
     try {
       ws.close(1000, "bye");
     } catch {}
+    if (this.agentInfo(ws).viewer) return this.screenSync(ws);
     await this.agentGone(ws);
   }
 
   async webSocketError(ws) {
+    if (this.agentInfo(ws).viewer) return this.screenSync(ws);
     await this.agentGone(ws);
   }
 
   async agentGone(ws) {
     if (this.ctx.getWebSockets("agent").some(w => w !== ws)) return;
+    this.screenSync(null, true);
     await this.ctx.storage.put("lastSeen", Date.now());
     await this.ctx.storage.setAlarm(Date.now() + 90000);
   }
@@ -1024,8 +1031,7 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/remote" && method === "POST") return this.answerRemote(req);
     if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
-    if (p === "/api/screen/frame" && method === "POST") return this.screenFrame(req);
-    if (p === "/api/screen/input" && method === "POST") return this.screenInput(req);
+    if (p === "/api/screen/live") return this.screenLive(req, url);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
@@ -1271,6 +1277,7 @@ export class ChatgqlHub extends DurableObject {
     const r = await this.askAgent({ type: "computer", values }, "awake" in values ? 200000 : 10000, "computer");
     if (!r) return json({ error: "awake" in values ? "Your computer didn't answer in time. On a Mac, its password has to be typed on the Mac itself." : "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
     if (r.error) return json({ error: String(r.error).slice(0, 200), computer: cleanComputer(r.values) }, 400);
+    if ("screen" in values) this.screenSync();
     return json({ computer: cleanComputer(r.values) });
   }
 
@@ -1300,44 +1307,105 @@ export class ChatgqlHub extends DurableObject {
     return json({ result, reason: typeof r.reason === "string" ? r.reason.slice(0, 40) : "", resetsLeft: Number.isFinite(r.resetsLeft) ? r.resetsLeft : null, cleared: Array.isArray(r.cleared) ? r.cleared.filter(c => typeof c === "string").slice(0, 8).map(c => c.slice(0, 40)) : [] });
   }
 
-  // Remote: the computer's screen, one picture at a time as the page asks for it, and what's done over it. The computer only
-  // answers while Remote is turned on there.
-  screenAgent() {
-    const ws = this.agent();
-    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
-    if (!(this.agentInfo(ws).caps || []).includes("screen")) return json({ error: `Update ${this.siteName()} on your computer to use Remote.`, code: "agent_old" }, 409);
-    return null;
+  // ---- Remote, live. The page keeps one WebSocket open here (only from this site's own pages: a page on another site can't
+  // open it with your sign-in). The computer's pictures come in as binary messages and go straight out to the pages that are
+  // looking; each page says when it has one (passed on, so the computer sends no faster than it's taken), and sends what's
+  // done over the picture. The computer streams only while someone is looking.
+  screenLive(req, url) {
+    if ((req.headers.get("upgrade") || "").toLowerCase() !== "websocket") return json({ error: "Expected a WebSocket" }, 426);
+    const origin = req.headers.get("origin");
+    if (origin && origin !== url.origin) return json({ error: "Forbidden" }, 403);
+    const pair = new WebSocketPair();
+    this.ctx.acceptWebSocket(pair[1], ["viewer"]);
+    pair[1].serializeAttachment({ viewer: true, w: 1600, tag: "" });
+    return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  screenFailed(r) {
-    if (!r) return json({ error: "Your computer didn't answer in time.", code: "slow" }, 504);
-    return json({ error: String(r.error || "That didn't work.").slice(0, 300), code: typeof r.code === "string" && /^[a-z_]{1,20}$/.test(r.code) ? r.code : "failed", os: typeof r.os === "string" ? r.os.slice(0, 10) : "" }, 409);
+  viewers(gone) {
+    if (gone && this.unseen) this.unseen.delete(gone);
+    return this.ctx.getWebSockets("viewer").filter(v => v !== gone);
   }
 
-  async screenFrame(req) {
-    const b = (await req.json().catch(() => null)) || {};
-    const not = this.screenAgent();
-    if (not) return not;
-    const num = (v, lo, hi, d) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
-    const r = await this.askAgent({ type: "screen_frame", w: num(b.w, 320, 2560, 1280), q: num(b.q, 20, 90, 60), tag: screenTag(b.tag) }, 20000, "screen");
-    if (!r || !r.ok) return this.screenFailed(r);
-    let bytes = null;
+  // what's in the way, or what went wrong, to every page that's looking
+  screenSay(o, gone) {
+    const s = JSON.stringify({ t: "status", ...o });
+    for (const v of this.viewers(gone)) {
+      try {
+        v.send(s);
+      } catch {}
+    }
+  }
+
+  // A page gets a picture while fewer than two it hasn't had yet are on their way to it. One that's slower than another
+  // watching at the same time misses some, and gets the newest when it's ready, so it's never behind.
+  screenOut(picture) {
+    this.unseen ||= new Map();
+    for (const v of this.viewers()) {
+      const u = this.unseen.get(v) || { n: 0, held: null };
+      this.unseen.set(v, u);
+      if (u.n >= 2) {
+        u.held = picture;
+        continue;
+      }
+      try {
+        v.send(picture);
+        u.n++;
+      } catch {}
+    }
+  }
+
+  screenSeen(v) {
+    const u = this.unseen && this.unseen.get(v);
+    if (!u) return;
+    u.n = Math.max(0, u.n - 1);
+    if (!u.held) return;
+    const picture = u.held;
+    u.held = null;
     try {
-      bytes = Uint8Array.from(atob(String(r.jpeg || "")), c => c.charCodeAt(0));
+      v.send(picture);
+      u.n++;
     } catch {}
-    if (!bytes || bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return json({ error: "The picture of the screen came out unreadable.", code: "capture" }, 502);
-    return new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "no-store", "x-screen-os": typeof r.os === "string" ? r.os.slice(0, 10) : "" } });
   }
 
-  async screenInput(req) {
-    const b = await req.json().catch(() => null);
-    const events = b && Array.isArray(b.events) ? b.events.slice(0, 200) : [];
-    if (!events.length) return json({ error: "Nothing to do." }, 400);
-    const not = this.screenAgent();
-    if (not) return not;
-    const r = await this.askAgent({ type: "screen_input", events, tag: screenTag(b.tag) }, 15000, "screen");
-    if (!r || !r.ok) return this.screenFailed(r);
-    return json({ ok: true });
+  // The computer streams while at least one page is looking, as wide as the widest of them, and stops when none is.
+  screenSync(gone, offline) {
+    const viewers = this.viewers(gone);
+    const ws = offline ? null : this.agent();
+    const tell = msg => {
+      try {
+        if (ws) this.sendAgent(ws, msg);
+      } catch {}
+    };
+    if (!viewers.length) return tell({ type: "screen_stop" });
+    if (!ws) return this.screenSay({ code: "offline", error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.` }, gone);
+    if (!(this.agentInfo(ws).caps || []).includes("screenlive")) return this.screenSay({ code: "agent_old", error: `Update ${this.siteName()} on your computer to use Remote.` }, gone);
+    const w = Math.max(...viewers.map(v => Number(this.agentInfo(v).w) || 1600));
+    tell({ type: "screen_start", w, tags: [...new Set(viewers.map(v => this.agentInfo(v).tag).filter(Boolean))] });
+  }
+
+  viewerMessage(ws, raw) {
+    if (typeof raw !== "string" || raw.length > 100000) return;
+    let m;
+    try {
+      m = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!m || typeof m !== "object") return;
+    if (m.t === "hello" || m.t === "size") {
+      const w = Number(m.w);
+      ws.serializeAttachment({ ...this.agentInfo(ws), w: Number.isFinite(w) ? Math.max(320, Math.min(2560, Math.round(w))) : 1600, tag: screenTag(m.tag) || this.agentInfo(ws).tag || "" });
+      return this.screenSync();
+    }
+    const agent = this.agent();
+    if (!agent) return;
+    try {
+      if (m.t === "ack") {
+        this.screenSeen(ws);
+        this.sendAgent(agent, { type: "screen_ack" });
+      }
+      else if (m.t === "input" && Array.isArray(m.events) && m.events.length) this.sendAgent(agent, { type: "screen_input", events: m.events.slice(0, 200), tags: [...new Set(this.viewers().map(v => this.agentInfo(v).tag).filter(Boolean))] });
+    } catch {}
   }
 
   async prefs() {

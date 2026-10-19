@@ -11,7 +11,8 @@
 //
 // CLAUDECONNECT_SCREEN=fake:<file.jpg> shows that picture instead, and writes what's done to screen-input.jsonl (for tests).
 import { spawn as nodeSpawn } from "node:child_process";
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, unlinkSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, unlinkSync, rmSync, existsSync, renameSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import os from "node:os";
 
@@ -371,7 +372,7 @@ function lineHelper(spawn, cmd, args, { env, onEnd } = {}) {
         });
         // ASCII only, so a character is never split between two reads
         try {
-          child.stdin.write(JSON.stringify({ ...msg, id }).replace(/[\u007f-￿]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "\n");
+          child.stdin.write(JSON.stringify({ ...msg, id }).replace(/[\u007f-\uffff]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "\n");
         } catch {}
       });
     },
@@ -386,6 +387,204 @@ function lineHelper(spawn, cmd, args, { env, onEnd } = {}) {
   };
 }
 
+// ---- live pictures
+
+// A Mac's screen as a stream, through ScreenCaptureKit (macOS 12.3 and newer): a small Swift program, built on the Mac the
+// first time Remote is used there if Apple's command line tools are installed (they come with git). It writes each new
+// picture as 4 bytes of length and the JPEG, only when something on the screen changed, scaled to the width it's given.
+export const MAC_STREAM = String.raw`
+import Foundation
+import ScreenCaptureKit
+import CoreGraphics
+import CoreImage
+import CoreMedia
+import CoreVideo
+import ImageIO
+
+let args = CommandLine.arguments
+let maxWidth = args.count > 1 ? (Int(args[1]) ?? 1600) : 1600
+let quality = args.count > 2 ? (Double(args[2]) ?? 0.6) : 0.6
+let fps = args.count > 3 ? (Int32(args[3]) ?? 20) : 20
+let out = FileHandle.standardOutput
+let context = CIContext()
+let space = CGColorSpace(name: CGColorSpace.sRGB)!
+var running: SCStream?
+
+func fail(_ text: String, _ code: Int32) -> Never {
+  FileHandle.standardError.write((text + "\n").data(using: .utf8)!)
+  exit(code)
+}
+
+final class Sink: NSObject, SCStreamOutput, SCStreamDelegate {
+  func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer, of type: SCStreamOutputType) {
+    guard type == .screen, let pixels = CMSampleBufferGetImageBuffer(buffer) else { return }
+    // only whole new pictures: an idle one repeats the last
+    guard let infos = CMSampleBufferGetSampleAttachmentsArray(buffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+          let info = infos.first, let raw = info[SCStreamFrameInfo.status] as? Int,
+          let status = SCFrameStatus(rawValue: raw), status == .complete else { return }
+    let image = CIImage(cvPixelBuffer: pixels)
+    guard let jpeg = context.jpegRepresentation(of: image, colorSpace: space, options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: quality]) else { return }
+    var size = UInt32(jpeg.count).bigEndian
+    out.write(Data(bytes: &size, count: 4) + jpeg)
+  }
+  func stream(_ stream: SCStream, didStopWithError error: Error) {
+    fail("stopped: \(error.localizedDescription)", 2)
+  }
+}
+
+let sink = Sink()
+Task {
+  do {
+    let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? content.displays.first else { fail("no display", 3) }
+    let config = SCStreamConfiguration()
+    let width = min(maxWidth, display.width * 2)
+    config.width = width
+    config.height = max(1, width * display.height / max(1, display.width))
+    config.minimumFrameInterval = CMTime(value: 1, timescale: fps)
+    config.showsCursor = true
+    config.queueDepth = 3
+    config.pixelFormat = kCVPixelFormatType_32BGRA
+    let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: sink)
+    try stream.addStreamOutput(sink, type: .screen, sampleHandlerQueue: DispatchQueue(label: "frames"))
+    try await stream.startCapture()
+    running = stream
+  } catch {
+    fail("failed: \(error.localizedDescription)", 4)
+  }
+}
+// it ends with the program that started it, when that end of its input closes
+DispatchQueue.global().async {
+  _ = FileHandle.standardInput.readDataToEndOfFile()
+  exit(0)
+}
+RunLoop.main.run()
+`;
+
+// A stream of JPEGs one after another (ffmpeg's mjpeg), cut into pictures: each runs from its start marker to its end
+// marker, which can't occur inside one.
+export function splitJpegs(onFrame) {
+  let buf = Buffer.alloc(0);
+  return chunk => {
+    buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
+    for (;;) {
+      const s = buf.indexOf(JPEG_START);
+      if (s < 0) {
+        buf = Buffer.alloc(0);
+        return;
+      }
+      const e = buf.indexOf(JPEG_END, s + 2);
+      if (e < 0) {
+        if (s > 0) buf = buf.subarray(s);
+        return;
+      }
+      onFrame(Buffer.from(buf.subarray(s, e + 2)));
+      buf = buf.subarray(e + 2);
+    }
+  };
+}
+const JPEG_START = Buffer.from([0xff, 0xd8]);
+const JPEG_END = Buffer.from([0xff, 0xd9]);
+
+// The Mac helper's pictures: 4 bytes of length, then that many bytes.
+export function splitSized(onFrame) {
+  let buf = Buffer.alloc(0);
+  return chunk => {
+    buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
+    while (buf.length >= 4) {
+      const n = buf.readUInt32BE(0);
+      if (buf.length < 4 + n) return;
+      onFrame(Buffer.from(buf.subarray(4, 4 + n)));
+      buf = buf.subarray(4 + n);
+    }
+  };
+}
+
+// A program that keeps sending pictures: the newest one waits to be taken, older ones are dropped. `first` settles with the
+// first picture, or with why there won't be one.
+function pushSource(spawn, cmd, args, { env, split, name }) {
+  let latest = null;
+  let seq = 0;
+  let given = 0;
+  let error = null;
+  let waiters = [];
+  let firstOk;
+  let firstNo;
+  const first = new Promise((ok, no) => {
+    firstOk = ok;
+    firstNo = no;
+  });
+  first.catch(() => {});
+  const wake = () => waiters.splice(0).forEach(w => w());
+  let child;
+  let err = "";
+  try {
+    child = spawn(cmd, args, { env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  } catch (e) {
+    error = e;
+    firstNo(e);
+    return { first, next: () => Promise.reject(e), stop() {} };
+  }
+  const feed = split(f => {
+    latest = f;
+    seq++;
+    firstOk(true);
+    wake();
+  });
+  child.stdout.on("data", feed);
+  child.stderr.on("data", d => (err = (err + d).slice(-2000)));
+  const end = e => {
+    error = error || e;
+    firstNo(error);
+    wake();
+  };
+  child.on("error", e => end(e));
+  child.on("close", code => end(Object.assign(new Error(`${name} stopped${err.trim() ? ": " + err.trim().split("\n").pop() : ` (${code})`}`), { code: "EXIT" })));
+  return {
+    first,
+    // waits for a picture newer than the last one taken: a screen that doesn't change sends none (the Mac helper), and
+    // that's no reason to stop waiting
+    async next() {
+      while (seq === given && !error) await new Promise(r => waiters.push(r));
+      if (seq !== given) {
+        given = seq;
+        return latest;
+      }
+      throw error;
+    },
+    stop() {
+      error = error || new Error("stopped");
+      wake();
+      try {
+        child.stdin.end();
+      } catch {}
+      try {
+        child.kill();
+      } catch {}
+    }
+  };
+}
+
+// One picture at a time, the next one already being taken while the last is on its way (a picture taken more than a moment
+// ago is thrown away rather than shown late).
+function pullSource(take) {
+  let ahead = null;
+  let at = 0;
+  return {
+    first: Promise.resolve(true),
+    next() {
+      const p = ahead && Date.now() - at < 500 ? ahead : take();
+      ahead = take();
+      at = Date.now();
+      ahead.catch(() => {});
+      return p;
+    },
+    stop() {
+      ahead = null;
+    }
+  };
+}
+
 export function makeScreen({ platform = process.platform, env = process.env, spawn = nodeSpawn, dir = os.tmpdir(), log = () => {} } = {}) {
   const fake = /^fake:(.+)$/.exec(env.CLAUDECONNECT_SCREEN || "");
   const tmp = join(os.tmpdir(), `claudeconnect-screen-${process.pid}`);
@@ -394,6 +593,8 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
   let idle = null;
   let awakeAt = 0;
   let xSize = null;
+  let shots = 0;
+  let building = null;
 
   // the helper starts when Remote is used, and stops after a minute without it
   function touch() {
@@ -454,11 +655,11 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
     width = Math.max(320, Math.min(2560, Math.round(width) || 1280));
     quality = Math.max(20, Math.min(90, Math.round(quality) || 60));
     let jpeg;
-    if (fake) jpeg = readFileSync(fake[1]);
+    if (fake) jpeg = readFileSync(fake[1].split(",")[0]);
     else if (platform === "darwin") {
       keepDisplayOn();
       mkdirSync(tmp, { recursive: true });
-      const shot = join(tmp, `shot-${Date.now()}.jpg`);
+      const shot = join(tmp, `shot-${Date.now()}-${++shots}.jpg`);
       const small = shot.replace(/\.jpg$/, "-s.jpg");
       try {
         try {
@@ -547,6 +748,101 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
     }
   }
 
+  // ---- Live: pictures one after another for as long as Remote is open, the newest each time it's asked (`next()`), until
+  // `stop()`. Where the screen can be streamed it is: ScreenCaptureKit through the Mac helper (built here once), or ffmpeg
+  // grabbing the screen (Linux, or a Mac that has it). Anything that doesn't start, or stops, gives way to taking one picture
+  // at a time, the next already being taken while the last is on its way.
+  const macHelperBin = join(dir, `screen-mac-${createHash("sha256").update(MAC_STREAM).digest("hex").slice(0, 12)}`);
+  // Builds the Mac helper with Apple's command line tools, if they're there (never asking to install them), once; meanwhile
+  // pictures are taken the slower way. A failed build isn't tried again for this version of it.
+  function buildMacHelper() {
+    if (platform !== "darwin" || fake || building || existsSync(macHelperBin) || existsSync(macHelperBin + ".failed")) return building;
+    building = (async () => {
+      try {
+        await run(spawn, "xcode-select", ["-p"], { env, timeout: 5000 });
+      } catch {
+        return false;
+      }
+      const src = macHelperBin + ".swift";
+      try {
+        writeFileSync(src, MAC_STREAM);
+        // ScreenCaptureKit is macOS 12.3 and later; on an older Mac the helper doesn't start and the slower way is used
+        const target = `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos12.3`;
+        await run(spawn, "xcrun", ["swiftc", "-O", "-target", target, "-o", macHelperBin + ".tmp", src], { env, timeout: 300000 });
+        renameSync(macHelperBin + ".tmp", macHelperBin);
+        log("Remote: built the helper that streams this Mac's screen.");
+        return true;
+      } catch (e) {
+        try {
+          writeFileSync(macHelperBin + ".failed", String((e && e.message) || e).slice(0, 2000));
+        } catch {}
+        log("Remote: couldn't build the screen streaming helper, so pictures are taken one at a time:", String((e && e.message) || e).slice(0, 300));
+        return false;
+      } finally {
+        try {
+          unlinkSync(src);
+        } catch {}
+      }
+    })();
+    return building;
+  }
+
+  function stream({ width = 1600, quality = 60, fps = 30 } = {}) {
+    width = Math.max(320, Math.min(2560, Math.round(width) || 1600));
+    quality = Math.max(20, Math.min(90, Math.round(quality) || 60));
+    const qv = String(Math.round(2 + ((100 - quality) / 100) * 20));
+    const pull = () => pullSource(() => frame({ width, quality }).then(f => f.jpeg));
+    if (fake) {
+      // the stand-in: its pictures in turn, a few dozen a second
+      const files = fake[1].split(",");
+      let i = 0;
+      return { first: Promise.resolve(true), next: () => new Promise(r => setTimeout(() => r(readFileSync(files[i++ % files.length])), 15)), stop() {} };
+    }
+    const tries = [];
+    if (platform === "darwin") {
+      buildMacHelper();
+      if (existsSync(macHelperBin)) tries.push(() => pushSource(spawn, macHelperBin, [String(width), String(quality / 100), String(fps)], { env, split: splitSized, name: "The screen helper" }));
+      tries.push(() => pushSource(spawn, "ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "avfoundation", "-capture_cursor", "1", "-framerate", String(fps), "-i", "Capture screen 0", "-vf", `scale='min(${width},iw)':-2`, "-q:v", qv, "-f", "mjpeg", "-"], { env, split: splitJpegs, name: "ffmpeg" }));
+    } else if (platform !== "win32" && env.DISPLAY) {
+      tries.push(() => pushSource(spawn, "ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "x11grab", "-draw_mouse", "1", "-framerate", String(fps), "-i", env.DISPLAY, "-vf", `scale='min(${width},iw)':-2`, "-q:v", qv, "-f", "mjpeg", "-"], { env, split: splitJpegs, name: "ffmpeg" }));
+    }
+    let src = null;
+    let stopped = false;
+    // the first way that gives a picture within a few seconds, else one at a time
+    const picking = (async () => {
+      for (const make of tries) {
+        const s = make();
+        let t;
+        const ok = await Promise.race([s.first.then(() => true, () => false), new Promise(r => (t = setTimeout(() => r(false), 6000)))]);
+        clearTimeout(t);
+        if (ok && !stopped) return s;
+        s.stop();
+      }
+      return Object.assign(pull(), { pulling: true });
+    })();
+    return {
+      async next() {
+        if (stopped) throw new ScreenError("stopped", "Stopped.");
+        if (!src) src = await picking;
+        keepDisplayOn();
+        try {
+          return await src.next();
+        } catch (e) {
+          // a stream that stopped: one at a time from here on
+          if (stopped || e instanceof ScreenError || src.pulling) throw e;
+          src.stop();
+          src = Object.assign(pull(), { pulling: true });
+          return src.next();
+        }
+      },
+      stop() {
+        stopped = true;
+        picking.then(s => s.stop(), () => {});
+        if (src) src.stop();
+      }
+    };
+  }
+
   // Whether a window on this computer has `tag` (the page's invisible mark) in its title: the site open here, showing Remote.
   // Null when it can't be told.
   async function showing(tag) {
@@ -570,13 +866,15 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
     }
   }
 
-  // Turning Remote on: a Mac asks, on its own screen, to allow Screen Recording and Accessibility. Gives back what's allowed.
+  // Turning Remote on: a Mac asks, on its own screen, to allow Screen Recording and Accessibility, and starts building its
+  // streaming helper. Gives back what's allowed.
   async function ask() {
     if (fake || platform !== "darwin") return { view: true, control: true };
+    buildMacHelper();
     const h = await getHelper();
     const r = await h.ask({ t: "ask" }, 30000);
     return { view: r.view !== false, control: r.control !== false };
   }
 
-  return { frame, input, ask, showing, close, get platform() { return fake ? "fake" : platform; } };
+  return { frame, stream, input, ask, showing, close, buildMacHelper, get platform() { return fake ? "fake" : platform; } };
 }

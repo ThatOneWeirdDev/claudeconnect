@@ -1,5 +1,5 @@
-// Remote: the computer's screen on the site, and its mouse and keyboard from there. The real agent runs with a stand-in
-// screen (CLAUDECONNECT_SCREEN=fake:…): a fixed picture, and what's done over it written to screen-input.jsonl.
+// Remote: the computer's screen on the site, live, and its mouse and keyboard from there. The real agent runs with a stand-in
+// screen (CLAUDECONNECT_SCREEN=fake:…): its pictures in turn, and what's done over it written to screen-input.jsonl.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
@@ -11,6 +11,7 @@ import { openPage, findChromium } from "../helpers/browser.mjs";
 
 const CHROME = await findChromium();
 const PICTURE = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen.jpg");
+const OTHER = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen2.jpg");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, what, ms = 30000) {
   const end = Date.now() + ms;
@@ -22,11 +23,11 @@ async function until(fn, what, ms = 30000) {
   throw new Error("timed out waiting for " + what);
 }
 
-async function boot(t) {
+async function boot(t, pictures = [PICTURE]) {
   const site = await startSite();
   await site.claim();
   const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9" });
-  pc.env.CLAUDECONNECT_SCREEN = "fake:" + PICTURE;
+  pc.env.CLAUDECONNECT_SCREEN = "fake:" + pictures.join(",");
   const agent = pc.startAgent();
   t.after(async () => {
     agent.kill("SIGKILL");
@@ -37,29 +38,57 @@ async function boot(t) {
   const done = () => (existsSync(join(pc.dir, "screen-input.jsonl")) ? readFileSync(join(pc.dir, "screen-input.jsonl"), "utf8").trim().split("\n").filter(Boolean).map(l => JSON.parse(l)) : []);
   return { site, pc, done };
 }
-const frame = site => site.asOwner("/api/screen/frame", { method: "POST", body: JSON.stringify({ w: 1280 }) });
+// A page looking at Remote, played by the test: the live connection as the page opens it, with its own invisible mark. It
+// says it has each picture as it comes, unless told not to.
+const mark = () => Array.from({ length: 12 }, () => "\u200b\u200c\u200d\u2060"[Math.floor(Math.random() * 4)]).join("");
+async function viewer(t, site, { origin = site.origin, w = 1280, tag = mark(), ack = true } = {}) {
+  const res = await site.mf.dispatchFetch(site.origin + "/api/screen/live", { headers: { upgrade: "websocket", origin } });
+  if (!res.webSocket) return { status: res.status };
+  const ws = res.webSocket;
+  ws.accept();
+  const v = { status: 101, pictures: [], said: [], ack, send: o => ws.send(JSON.stringify(o)), close: () => ws.close() };
+  ws.addEventListener("message", e => {
+    if (typeof e.data === "string") return v.said.push(JSON.parse(e.data));
+    v.pictures.push(Buffer.from(e.data));
+    if (v.ack) ws.send('{"t":"ack"}');
+  });
+  t.after(() => { try { ws.close(); } catch {} });
+  v.send({ t: "hello", w, tag });
+  return v;
+}
 
-test("the screen is only shown once Remote is turned on, and what's done over it reaches the computer, cleaned up", async t => {
+test("the screen is only shown once Remote is turned on, live to the page looking, and what's done over it reaches the computer, cleaned up", async t => {
   const { site, done } = await boot(t);
   const state = (await site.api("/api/state")).body;
   assert.equal(state.agent.screen, true, "this computer can do it");
   assert.equal(state.agent.computer.screen, false, "off until it's turned on");
-  let r = await frame(site);
-  assert.equal(r.status, 409);
-  assert.deepEqual(await r.json(), { error: "Remote is off on this computer.", code: "off", os: process.platform });
-  assert.equal((await site.post("/api/screen/input", { events: [{ t: "move", x: 0.5, y: 0.5 }] })).status, 409);
+  // only from the site's own pages
+  assert.equal((await viewer(t, site, { origin: "https://evil.example" })).status, 403);
+  assert.equal((await site.api("/api/screen/live")).status, 426);
+  const v = await viewer(t, site);
+  assert.equal(v.status, 101);
+  await until(async () => v.said.some(m => m.code === "off"), "Remote is off");
+  assert.deepEqual(v.said.find(m => m.code === "off"), { t: "status", code: "off", error: "Remote is off on this computer.", os: process.platform });
+  v.send({ t: "input", events: [{ t: "move", x: 0.5, y: 0.5 }] });
+  await sleep(300);
+  assert.deepEqual(v.pictures, []);
   assert.deepEqual(done(), [], "nothing was done while it was off");
 
   const on = await site.post("/api/computer", { screen: true });
   assert.equal(on.status, 200, on.text);
   assert.equal(on.body.computer.screen, true);
-  r = await frame(site);
-  assert.equal(r.status, 200);
-  assert.equal(r.headers.get("content-type"), "image/jpeg");
-  assert.equal(r.headers.get("cache-control"), "no-store");
-  assert.deepEqual(Buffer.from(await r.arrayBuffer()), readFileSync(PICTURE));
+  await until(async () => v.pictures.length, "the screen");
+  assert.deepEqual(v.pictures[0], readFileSync(PICTURE));
+  await sleep(300);
+  assert.equal(v.pictures.length, 1, "a screen that doesn't change is sent once");
+  // someone else starting to look gets the picture there is, though nothing changed
+  const second = await viewer(t, site);
+  await until(async () => second.pictures.length, "the picture, for a second page");
+  assert.deepEqual(second.pictures[0], readFileSync(PICTURE));
+  second.close();
 
-  const sent = await site.post("/api/screen/input", {
+  v.send({
+    t: "input",
     events: [
       { t: "move", x: 0.25, y: 0.5 },
       { t: "down", x: 2, y: -1, b: 0, n: 2 },
@@ -72,7 +101,7 @@ test("the screen is only shown once Remote is turned on, and what's done over it
       { t: "scroll", x: 0.5, y: 0.5, dy: 0, dx: 0 }
     ]
   });
-  assert.equal(sent.status, 200, sent.text);
+  await until(async () => done().length, "what was done");
   assert.deepEqual(done(), [
     { t: "move", x: 0.25, y: 0.5 },
     { t: "down", x: 1, y: 0, b: 0, n: 2 },
@@ -81,17 +110,42 @@ test("the screen is only shown once Remote is turned on, and what's done over it
     { t: "text", s: "héllo\nthere" },
     { t: "key", k: "c", mods: ["ctrl"] }
   ]);
-  assert.equal((await site.post("/api/screen/input", { events: [] })).status, 400);
-  // and another site can't drive it through the owner's browser
-  assert.equal((await site.asOwner("/api/screen/input", { method: "POST", headers: { origin: "https://evil.example" }, body: JSON.stringify({ events: [{ t: "text", s: "x" }] }) })).status, 403);
 
-  // turned off again, nothing more is shown
+  // turned off again, nothing more is shown, and the page is told
+  v.said.length = 0;
   assert.equal((await site.post("/api/computer", { screen: false })).body.computer.screen, false);
-  assert.equal((await frame(site)).status, 409);
+  await until(async () => v.said.some(m => m.code === "off"), "Remote is off again");
 });
 
-test("Remote in the sidebar: turned on from there, the screen shows, and clicks, keys and the wheel go over", { skip: !CHROME && "needs a Chromium" }, async t => {
-  const { site, pc, done } = await boot(t);
+test("pictures come one after another as fast as the page takes them, never more than two on their way", async t => {
+  const { site } = await boot(t, [PICTURE, OTHER]);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  // a page that keeps up gets a changing screen live: many pictures a second, each one as the computer took it
+  const v = await viewer(t, site);
+  await until(async () => v.pictures.length, "the first");
+  let from = v.pictures.length;
+  await sleep(2000);
+  const rate = (v.pictures.length - from) / 2;
+  assert.ok(rate >= 10, `${rate} pictures a second`);
+  for (const p of v.pictures.slice(0, 4)) assert.ok(p.equals(readFileSync(PICTURE)) || p.equals(readFileSync(OTHER)));
+  // a slow page looking at the same time: two, then nothing until it says it has them, and the other one doesn't wait for it
+  const slow = await viewer(t, site, { ack: false });
+  await until(async () => slow.pictures.length >= 2, "the first two");
+  from = v.pictures.length;
+  await sleep(1000);
+  assert.equal(slow.pictures.length, 2);
+  assert.ok(v.pictures.length - from >= 10, `the other one had ${v.pictures.length - from}`);
+  // once it has them, the newest one comes straight away
+  slow.send({ t: "ack" });
+  await until(async () => slow.pictures.length === 3, "the newest");
+  slow.ack = true;
+  slow.send({ t: "ack" });
+  v.close();
+  await until(async () => slow.pictures.length >= 15, "more, once it took them");
+});
+
+test("Remote in the sidebar: turned on from there, the screen shows live, and clicks, keys and the wheel go over", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const { site, pc, done } = await boot(t, [PICTURE, OTHER]);
   const page = await openPage(site.origin + "/", { width: 1280, height: 800 });
   t.after(() => page.close());
   await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
@@ -104,12 +158,26 @@ test("Remote in the sidebar: turned on from there, the screen shows, and clicks,
   await page.until(`document.querySelector('#scMsg [data-sc="on"]')`, "the Turn on button");
   assert.match(await page.evaluate(`document.getElementById("scMsg").innerText`), /Use your computer from here[\s\S]*Screen Recording and Accessibility/);
   await page.evaluate(`document.querySelector('#scMsg [data-sc="on"]').click()`);
-  await page.until(`(() => { const i = document.getElementById("scImg"); return !i.hidden && i.naturalWidth === 640; })()`, "the screen");
+  await page.until(`(() => { const c = document.getElementById("scView"); return !c.hidden && c.width === 640; })()`, "the screen");
   await page.until(`/Live/.test(document.getElementById("scStatus").textContent)`, "Live");
   assert.equal((await site.api("/api/state")).body.agent.computer.screen, true);
+  assert.equal(await page.evaluate(`document.getElementById("scHelpBtn")`), null, "no help button");
+  // the screen keeps changing (two pictures in turn), and the page keeps drawing it
+  const changes = await page.evaluate(`new Promise(done => {
+    const c = document.getElementById("scView").getContext("2d");
+    let last = "", n = 0;
+    const end = Date.now() + 1500;
+    (function look() {
+      const px = c.getImageData(100, 100, 1, 1).data.join();
+      if (px !== last) { n++; last = px; }
+      if (Date.now() < end) setTimeout(look, 4);
+      else done(n);
+    })();
+  })`);
+  assert.ok(changes >= 10, `the picture changed ${changes} times in 1.5s`);
 
   // a click in the middle of the picture, where the picture is
-  const box = await page.evaluate(`(() => { const r = document.getElementById("scImg").getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
+  const box = await page.evaluate(`(() => { const r = document.getElementById("scView").getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })()`);
   const at = (fx, fy) => ({ x: box.x + box.w * fx, y: box.y + box.h * fy });
   const mouse = async (type, p, button = "left", clickCount = 1) => page.send("Input.dispatchMouseEvent", { type, x: p.x, y: p.y, button, clickCount, buttons: type === "mousePressed" ? 1 : 0 });
   rmSync(join(pc.dir, "screen-input.jsonl"), { force: true });
@@ -148,20 +216,21 @@ test("on the computer Remote would show, it says so and shows nothing: the page'
   const { site, pc, done } = await boot(t);
   assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
   const tag = "​‌‍⁠​‌‍⁠";
-  const ask = extra => site.asOwner("/api/screen/frame", { method: "POST", body: JSON.stringify({ w: 1280, tag, ...extra }) });
-  assert.equal((await ask()).status, 200, "no window here has it");
+  const other = await viewer(t, site, { tag: "​".repeat(8) });
+  await until(async () => other.pictures.length, "the screen, where no window has the mark");
+  other.close();
   writeFileSync(join(pc.dir, "screen-windows.txt"), `Remote${tag} · Test Site - Google Chrome\nTerminal\n`);
-  // looked for on every picture for the first few seconds of a mark
-  const r = await ask();
-  assert.equal(r.status, 409);
-  const j = await r.json();
-  assert.equal(j.code, "same_computer");
-  assert.match(j.error, /This is the computer Test Site runs on/);
-  assert.equal((await site.post("/api/screen/input", { events: [{ t: "move", x: 0.5, y: 0.5 }], tag })).body.code, "same_computer");
+  const v = await viewer(t, site, { tag });
+  v.send({ t: "input", events: [{ t: "move", x: 0.5, y: 0.5 }] });
+  await until(async () => v.said.some(m => m.code === "same_computer"), "the refusal");
+  assert.match(v.said.find(m => m.code === "same_computer").error, /This is the computer Test Site runs on/);
+  await sleep(300);
+  assert.deepEqual(v.pictures, [], "nothing was shown");
   assert.deepEqual(done(), [], "nothing was done to this computer");
-  // a mark that isn't one is ignored, and another device's mark isn't in a title here
-  assert.equal((await ask({ tag: "<script>" })).status, 200);
-  assert.equal((await ask({ tag: "​".repeat(8) })).status, 200);
+  v.close();
+  // a mark that isn't one is ignored
+  const odd = await viewer(t, site, { tag: "<script>" });
+  await until(async () => odd.pictures.length, "the screen, for a mark that isn't one");
 });
 
 test("in a browser on the same computer, Remote explains why it won't show the screen", { skip: !CHROME && "needs a Chromium" }, async t => {
@@ -176,7 +245,7 @@ test("in a browser on the same computer, Remote explains why it won't show the s
   const title = await page.until(`/^Remote[\\u200b\\u200c\\u200d\\u2060]{12} · /.test(document.title) && document.title`, "the marked title");
   // this computer's window list now has that title in it, as the browser's window would
   writeFileSync(join(pc.dir, "screen-windows.txt"), `${title} - Chromium\n`);
-  await page.until(`/This is the computer Test Site runs on/.test(document.getElementById("scMsg").innerText) && document.getElementById("scImg").hidden`, "the explanation");
+  await page.until(`/This is the computer Test Site runs on/.test(document.getElementById("scMsg").innerText) && document.getElementById("scView").hidden`, "the explanation", 30000);
   await page.evaluate(`document.getElementById("scClose").click()`);
   assert.doesNotMatch(await page.evaluate(`document.title`), /[​‌‍⁠]/, "the mark goes with Remote");
 });
@@ -194,10 +263,10 @@ test("on a phone, Remote asks to be turned sideways, then fills the whole screen
   await page.evaluate(`document.getElementById("screenNav").click()`);
   await page.until(`!document.getElementById("scTurn").hidden`, "the turn-your-phone prompt");
   assert.match(await page.evaluate(`document.getElementById("scTurn").innerText`), /Turn your phone sideways/);
-  assert.equal(await page.evaluate(`document.getElementById("scImg").hidden`), true, "no screen while it's upright");
+  assert.equal(await page.evaluate(`document.getElementById("scView").hidden`), true, "no screen while it's upright");
   await page.send("Emulation.setDeviceMetricsOverride", { width: 844, height: 390, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: "landscapePrimary", angle: 90 } });
-  await page.until(`document.getElementById("screen").classList.contains("phone-full") && !document.getElementById("scImg").hidden`, "the screen, sideways");
-  const fill = await page.evaluate(`(() => { const s = document.getElementById("screen").getBoundingClientRect(); const i = document.getElementById("scImg").getBoundingClientRect(); return { sw: s.width, sh: s.height, iw: i.width, ih: i.height, vw: innerWidth, vh: innerHeight, head: getComputedStyle(document.querySelector(".sc-head")).display }; })()`);
+  await page.until(`document.getElementById("screen").classList.contains("phone-full") && !document.getElementById("scView").hidden`, "the screen, sideways");
+  const fill = await page.evaluate(`(() => { const s = document.getElementById("screen").getBoundingClientRect(); const i = document.getElementById("scView").getBoundingClientRect(); return { sw: s.width, sh: s.height, iw: i.width, ih: i.height, vw: innerWidth, vh: innerHeight, head: getComputedStyle(document.querySelector(".sc-head")).display }; })()`);
   assert.deepEqual([fill.sw, fill.sh], [fill.vw, fill.vh], "the whole screen");
   assert.ok(Math.abs(fill.ih - fill.vh) <= 1 || Math.abs(fill.iw - fill.vw) <= 1, JSON.stringify(fill));
   assert.equal(fill.head, "none", "no header taking room");

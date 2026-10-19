@@ -2,12 +2,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeScreen, cleanEvents, jpegSize } from "../../agent/screen.mjs";
+import { createHash } from "node:crypto";
+import os from "node:os";
+import { makeScreen, cleanEvents, jpegSize, splitJpegs, splitSized, MAC_STREAM } from "../../agent/screen.mjs";
 
 const PICTURE = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen.jpg"));
+const OTHER = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen2.jpg"));
+// a picture as the Mac helper sends it: its length, then it
+const sized = f => Buffer.concat([Buffer.from([f.length >>> 24, (f.length >>> 16) & 255, (f.length >>> 8) & 255, f.length & 255]), f]);
 
 // A stand-in for child_process.spawn: `answer(cmd, args, input)` says what each program prints, or for a helper that
 // stays running, `helper(msg)` answers each line it's sent.
@@ -101,7 +106,7 @@ test("on Linux, the picture comes from ImageMagick (or ffmpeg), and one xdotool 
   await assert.rejects(makeScreen({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" }, spawn }).frame(), { code: "unsupported", message: /Wayland/ });
 });
 
-test("on a Mac, screencapture and sips make the picture, and the helper is sent what was done", async () => {
+test("on a Mac, screencapture and sips make the picture, and the helper is sent what was done", async t => {
   const { spawn, calls } = fakeSpawn({
     // sips writes the smaller picture where it's told: the stand-in puts the fixture there
     answer: (cmd, args) => {
@@ -110,7 +115,9 @@ test("on a Mac, screencapture and sips make the picture, and the helper is sent 
     },
     helper: m => (m.t === "ask" ? { view: false, control: true } : { ok: true })
   });
-  const s = makeScreen({ platform: "darwin", env: {}, spawn });
+  const dir = mkdtempSync(join(os.tmpdir(), "cc-screen-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const s = makeScreen({ platform: "darwin", env: {}, spawn, dir });
   assert.deepEqual((await s.frame({ width: 1440, quality: 70 })).w, 640);
   const shot = calls.find(c => c.cmd === "screencapture");
   assert.deepEqual(shot.args.slice(0, 5), ["-x", "-m", "-C", "-t", "jpg"]);
@@ -122,6 +129,8 @@ test("on a Mac, screencapture and sips make the picture, and the helper is sent 
   assert.deepEqual(helper.lines.at(-1).events, [{ t: "key", k: "Enter", mods: [] }, { t: "move", x: 0.5, y: 0.5 }]);
   assert.deepEqual(await s.ask(), { view: false, control: true });
   s.close();
+  // the streaming helper isn't built without Apple's command line tools, and asking for them isn't how it finds out
+
   // a screen that can't be taken, with the lid closed
   const off = fakeSpawn({ answer: cmd => { if (cmd === "screencapture") throw new Error("could not create image from display"); return ""; } });
   await assert.rejects(makeScreen({ platform: "darwin", env: {}, spawn: off.spawn }).frame(), { code: "no_display", message: /lid closed/ });
@@ -174,4 +183,89 @@ test("the page's mark is looked for in this computer's window titles: xdotool on
   const asked = fakeSpawn();
   assert.equal(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: asked.spawn }).showing("Remote · Site"), false);
   assert.equal(asked.calls.length, 0);
+});
+
+test("live pictures are cut from what ffmpeg and the Mac helper send, however it's split up", () => {
+  const got = [];
+  const feed = splitJpegs(f => got.push(f));
+  const both = Buffer.concat([Buffer.from("junk"), PICTURE, OTHER]);
+  for (let i = 0; i < both.length; i += 1000) feed(both.subarray(i, i + 1000));
+  assert.deepEqual(got, [PICTURE, OTHER]);
+  const cut = [];
+  const feed2 = splitSized(f => cut.push(f));
+  const framed = Buffer.concat([sized(PICTURE), sized(OTHER)]);
+  feed2(framed.subarray(0, 3));
+  feed2(framed.subarray(3, PICTURE.length + 6));
+  assert.deepEqual(cut, [PICTURE]);
+  feed2(framed.subarray(PICTURE.length + 6));
+  assert.deepEqual(cut, [PICTURE, OTHER]);
+});
+
+test("live on Linux: ffmpeg streams the screen, the newest picture each time; without it, or once it stops, one picture at a time", async () => {
+  const { spawn, calls } = fakeSpawn({ answer: cmd => (cmd === "ffmpeg" ? Buffer.concat([PICTURE, OTHER]) : cmd === "import" ? PICTURE : "") });
+  const live = makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn }).stream({ width: 1280, quality: 60 });
+  assert.deepEqual(await live.next(), OTHER, "the newest of what came");
+  const ff = calls.find(c => c.cmd === "ffmpeg");
+  assert.deepEqual(ff.args.slice(ff.args.indexOf("-f"), ff.args.indexOf("-f") + 8), ["-f", "x11grab", "-draw_mouse", "1", "-framerate", "30", "-i", ":0"]);
+  assert.ok(ff.args.includes("scale='min(1280,iw)':-2") && ff.args.at(-1) === "-", ff.args.join(" "));
+  // ffmpeg ended: the next one is taken by itself
+  assert.deepEqual(await live.next(), PICTURE);
+  assert.equal(calls.at(-1).cmd, "import");
+  live.stop();
+  await assert.rejects(live.next(), { code: "stopped" });
+  // no ffmpeg at all
+  const none = fakeSpawn({ answer: cmd => (cmd === "ffmpeg" ? null : cmd === "import" ? OTHER : "") });
+  assert.deepEqual(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: none.spawn }).stream().next(), OTHER);
+  // a screen that can't be taken says why, as one picture would
+  const wayland = makeScreen({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" }, spawn }).stream();
+  await assert.rejects(wayland.next(), { code: "unsupported" });
+});
+
+test("live on a Mac: the helper is built once with Apple's tools, if they're there, and a still screen is waited on, not given up on", async t => {
+  const dir = mkdtempSync(join(os.tmpdir(), "cc-screen-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, `screen-mac-${createHash("sha256").update(MAC_STREAM).digest("hex").slice(0, 12)}`);
+  // no command line tools: xcode-select says so, and nothing that would offer to install them is run
+  const bare = fakeSpawn({ answer: cmd => { if (cmd === "xcode-select") throw new Error("unable to get active developer directory"); return ""; } });
+  assert.equal(await makeScreen({ platform: "darwin", env: {}, spawn: bare.spawn, dir }).buildMacHelper(), false);
+  assert.deepEqual(bare.calls.map(c => c.cmd), ["xcode-select"]);
+  // with them: swiftc builds it for macOS 12.3 and later, once
+  const tools = fakeSpawn({ answer: (cmd, args) => { if (cmd === "xcrun") writeFileSync(args[args.indexOf("-o") + 1], "built"); return ""; } });
+  const s = makeScreen({ platform: "darwin", env: {}, spawn: tools.spawn, dir });
+  assert.equal(await s.buildMacHelper(), true);
+  const xc = tools.calls.find(c => c.cmd === "xcrun");
+  assert.deepEqual(xc.args.slice(0, 4), ["swiftc", "-O", "-target", `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos12.3`]);
+  assert.ok(existsSync(bin) && !existsSync(bin + ".swift"));
+  await makeScreen({ platform: "darwin", env: {}, spawn: tools.spawn, dir }).buildMacHelper();
+  assert.equal(tools.calls.filter(c => c.cmd === "xcrun").length, 1, "already built");
+
+  // the helper: sized pictures, only when the screen changes; it runs until its input closes
+  let helper = null;
+  const spawn = (cmd, args) => {
+    const c = new EventEmitter();
+    c.stdout = new EventEmitter();
+    c.stderr = new EventEmitter();
+    c.kill = () => {};
+    if (cmd !== bin) {
+      c.stdin = { write() {}, end() {} };
+      setImmediate(() => c.emit("close", 0));
+      return c;
+    }
+    helper = { args, ended: false, send: f => c.stdout.emit("data", sized(f)) };
+    c.stdin = { write() {}, end: () => (helper.ended = true) };
+    setImmediate(() => helper.send(PICTURE));
+    return c;
+  };
+  const live = makeScreen({ platform: "darwin", env: {}, spawn, dir }).stream({ width: 1600, quality: 60, fps: 20 });
+  assert.deepEqual(await live.next(), PICTURE);
+  assert.deepEqual(helper.args, ["1600", "0.6", "20"]);
+  let next = null;
+  const waiting = live.next().then(f => (next = f));
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(next, null, "nothing changed, nothing sent, still waiting");
+  helper.send(OTHER);
+  await waiting;
+  assert.deepEqual(next, OTHER);
+  live.stop();
+  assert.equal(helper.ended, true);
 });
