@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, fork } from "node:child_process";
 import { createInterface } from "node:readline";
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, statSync, unlinkSync, renameSync, openSync, closeSync, chmodSync, readdirSync } from "node:fs";
 import { join, basename, dirname, extname, relative, resolve as resolvePath, isAbsolute } from "node:path";
@@ -10,6 +10,8 @@ import { toolLabel, listSessions, findSession, sessionCwd, readSession, UUID } f
 import { resetsFrom } from "./limits.mjs";
 import { list as listFiles, info as fileInfo, readPart, trash as trashFile, write as writeFile, places, FilesError } from "./files.mjs";
 import { awakeOn, setAwake, holdAwake } from "./awake.mjs";
+import { keepRunning, CANT_RUN } from "./keepalive.mjs";
+import { makeScreen, ScreenError } from "./screen.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -119,6 +121,32 @@ function xml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// The login item for macOS: launchd starts it at login, and again if the watcher itself ever ends without being asked to.
+function launchdPlist(label, me) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>${xml(label)}</string>
+<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(me)}</string><string>run</string></array>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(process.env.PATH || "")}</string></dict>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+<key>StandardOutPath</key><string>${xml(join(HERE, "launchd.log"))}</string>
+<key>StandardErrorPath</key><string>${xml(join(HERE, "launchd.log"))}</string>
+</dict></plist>
+`;
+}
+
+// A login item written by an older version is brought up to date (it takes effect at the next login).
+function refreshStartup() {
+  if (process.platform !== "darwin") return;
+  const { file, label } = startupPaths();
+  try {
+    if (!existsSync(file)) return;
+    if (!readFileSync(file, "utf8").includes("<key>KeepAlive</key>")) writeFileSync(file, launchdPlist(label, fileURLToPath(import.meta.url)));
+  } catch {}
+}
+
 function autostart(on) {
   const { file, label } = startupPaths();
   const me = fileURLToPath(import.meta.url);
@@ -135,17 +163,7 @@ function autostart(on) {
     const q = s => '""' + s + '""';
     writeFileSync(file, `CreateObject("WScript.Shell").Run "${q(process.execPath)} ${q(me)} run", 0, False\r\n`);
   } else if (process.platform === "darwin") {
-    writeFileSync(file, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key><string>${xml(label)}</string>
-<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(me)}</string><string>run</string></array>
-<key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(process.env.PATH || "")}</string></dict>
-<key>RunAtLoad</key><true/>
-<key>StandardOutPath</key><string>${xml(join(HERE, "launchd.log"))}</string>
-<key>StandardErrorPath</key><string>${xml(join(HERE, "launchd.log"))}</string>
-</dict></plist>
-`);
+    writeFileSync(file, launchdPlist(label, me));
     spawnSync("launchctl", ["load", "-w", file], { stdio: "ignore" });
   } else {
     writeFileSync(file, `[Desktop Entry]\nType=Application\nName=${NAME}\nExec="${process.execPath}" "${me}" run\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n`);
@@ -310,12 +328,38 @@ if (cmd !== "start" && cmd !== "run") {
   process.exit(1);
 }
 
-const other = runningPid();
-if (other) {
-  console.log(`${NAME} is already running in the background (process ${other}). Run "${COMMAND} stop" first if you want it in this window.`);
-  process.exit(0);
+// `run` and `start` are a watcher (keepalive.mjs): it holds the pid file and runs this same file again as the program itself,
+// which does everything below, and starts it again if it crashes or hangs.
+const CHILD = process.env.CLAUDECONNECT_CHILD === "1" && typeof process.send === "function";
+if (!CHILD) {
+  const other = runningPid();
+  if (other) {
+    console.log(`${NAME} is already running in the background (process ${other}). Run "${COMMAND} stop" first if you want it in this window.`);
+    process.exit(0);
+  }
+  writeFileSync(PID_PATH, String(process.pid));
+  refreshStartup();
+  const watcher = keepRunning({
+    name: NAME,
+    log,
+    start: () => fork(fileURLToPath(import.meta.url), process.argv.slice(2), { env: { ...process.env, CLAUDECONNECT_CHILD: "1" } }),
+    // ended on purpose, or it can't run here: either way not something to be started again for
+    end: () => process.exit(0)
+  });
+  process.on("exit", () => {
+    const c = watcher.child;
+    if (c) {
+      try {
+        c.kill("SIGKILL");
+      } catch {}
+    }
+    try {
+      if (readFileSync(PID_PATH, "utf8").trim() === String(process.pid)) unlinkSync(PID_PATH);
+    } catch {}
+  });
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => watcher.stop());
+  await new Promise(() => {});
 }
-writeFileSync(PID_PATH, String(process.pid));
 // awake with the lid closed (awake.mjs): what it is now, and on Windows and Linux held for as long as this runs
 let AWAKE = await awakeOn({ cfg }).catch(() => false);
 let awakeHold = null;
@@ -335,12 +379,44 @@ const cleanup = () => {
   } catch {}
 };
 process.on("exit", cleanup);
+const endRuns = () => {
+  try {
+    for (const p of procs.values()) killTree(p.child);
+  } catch {}
+};
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(sig, () => {
-    for (const p of procs.values()) killTree(p.child);
+    endRuns();
     process.exit(0);
   });
 }
+// The watcher hears from this every few seconds, so it can tell a hang from a long reply; and if the watcher itself is gone
+// (ended outright), this goes with it.
+setInterval(() => {
+  try {
+    process.send("alive");
+  } catch {}
+}, 10000).unref();
+process.on("disconnect", () => {
+  endRuns();
+  process.exit(0);
+});
+// A mistake in this program goes in the log, with where it happened, and the program ends so the watcher starts it afresh.
+// A step left running in the background that fails is only logged: one failed request is no reason to stop.
+process.on("uncaughtException", e => {
+  log("Something went wrong, so this is restarting:", String((e && e.stack) || e).slice(0, 3000));
+  endRuns();
+  process.exit(1);
+});
+process.on("unhandledRejection", e => log("A background step failed:", String((e && e.stack) || e).slice(0, 2000)));
+// A jump in this clock means the computer was asleep. It's said in the log, so a gap there is explained; the connection
+// notices it's gone on its own and comes back.
+let lastTick = Date.now();
+setInterval(() => {
+  const gap = Date.now() - lastTick;
+  lastTick = Date.now();
+  if (gap > 90000) log(`This computer was asleep for about ${Math.round(gap / 60000)} minute${Math.round(gap / 60000) === 1 ? "" : "s"}.`);
+}, 15000).unref();
 
 try {
   if (existsSync(LOG_PATH) && statSync(LOG_PATH).size > 2000000) renameSync(LOG_PATH, LOG_PATH + ".old");
@@ -357,7 +433,7 @@ if (!WS) {
     WS = (await import("ws")).default;
   } catch {
     console.error("This needs Node.js 22 or newer. Update Node, or run the setup script again.");
-    process.exit(1);
+    process.exit(CANT_RUN);
   }
 }
 
@@ -967,7 +1043,7 @@ function creditsOn() {
 // `credits` and `history` are what they always are now; they're still said for a site from before.)
 // Answers to an update's new questions arrive the same way, once the new version is running.
 function computerSettings() {
-  return { autostart: existsSync(startupPaths().file), awake: AWAKE, workspace: WORKSPACE, plan: "paid", subscription: subscription(), credits: creditsOn(), history: HISTORY };
+  return { autostart: existsSync(startupPaths().file), awake: AWAKE, screen: cfg.screen === true, workspace: WORKSPACE, plan: "paid", subscription: subscription(), credits: creditsOn(), history: HISTORY };
 }
 
 async function setComputer(m) {
@@ -987,6 +1063,15 @@ async function setComputer(m) {
       holdIfAwake();
       log(AWAKE ? "Staying awake with the lid closed." : "Sleeping again when the lid is closed.");
     }
+  }
+  // Remote: the site showing this computer's screen and using its mouse and keyboard. Turned on, a Mac asks on its own
+  // screen to allow that (Screen Recording and Accessibility), which is answered there, so this doesn't wait for it.
+  if (typeof v.screen === "boolean" && v.screen !== (cfg.screen === true)) {
+    cfg.screen = v.screen;
+    saveConfig();
+    log(v.screen ? "Remote is on: the site can show this computer's screen and use its mouse and keyboard." : "Remote is off.");
+    if (v.screen) SCREEN.ask().catch(() => {});
+    else SCREEN.close();
   }
   // the folder Claude Code works in; it's made if it isn't there
   if (typeof v.workspace === "string" && v.workspace.trim() && v.workspace.trim() !== WORKSPACE) {
@@ -1646,6 +1731,7 @@ function onMessage(raw) {
   else if (m.type === "site") saveSite(m);
   else if (m.type === "fs_list" || m.type === "fs_read" || m.type === "fs_trash" || m.type === "fs_write") handleFiles(m);
   else if (m.type === "release_check") checkRelease(m.req);
+  else if (m.type === "screen_frame" || m.type === "screen_input") handleScreen(m);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
 
@@ -1695,6 +1781,27 @@ function handleFiles(m) {
   }
 }
 
+// ---- Remote (screen.mjs): one picture of the screen, or what was done over it, and only while Remote is on. Someone starting
+// to look is written in the log.
+const SCREEN = makeScreen({ dir: HERE });
+let screenSeen = 0;
+async function handleScreen(m) {
+  const reply = o => send({ type: "screen_result", req: m.req, os: process.platform, ...o });
+  if (cfg.screen !== true) return reply({ ok: false, code: "off", error: "Remote is off on this computer." });
+  if (Date.now() - screenSeen > 120000) log("Remote: this computer's screen is being shown on the site.");
+  screenSeen = Date.now();
+  try {
+    if (m.type === "screen_frame") {
+      const f = await SCREEN.frame({ width: m.w, quality: m.q });
+      return reply({ ok: true, jpeg: f.jpeg.toString("base64"), w: f.w, h: f.h });
+    }
+    await SCREEN.input(m.events);
+    reply({ ok: true });
+  } catch (e) {
+    reply({ ok: false, code: e instanceof ScreenError ? e.code : "failed", error: String((e && e.message) || e).slice(0, 300) });
+  }
+}
+
 // Ultracode (Extra high with multi-agent workflows) needs workflows, which can be turned off in Claude Code's settings or
 // by an environment variable; then it isn't offered on the site.
 function workflowsOn() {
@@ -1710,7 +1817,7 @@ function workflowsOn() {
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `files` the file browser.
 function helloMessage() {
   // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
-  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
+  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "screen", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()], command: COMMAND, site: siteName() };
 }
 

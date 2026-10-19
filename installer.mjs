@@ -1524,6 +1524,8 @@ const shim = join(binDir, IS_WIN ? `${command}.cmd` : command);
 const cfg = { name: slug, displayName, command, accountId, kvId, site, secret, workspace, permissionMode: prior.permissionMode || "auto", shim, version: payload.version, repo: REPO, ref: REF };
 if (tabTitle) cfg.tabTitle = tabTitle;
 if (same && prior.id) cfg.id = prior.id;
+// Remote stays as it was for the same site
+if (same && prior.screen === true) cfg.screen = true;
 if (same && prior.site === site && prior.token) {
   cfg.token = prior.token;
   cfg.tokenExp = prior.tokenExp;
