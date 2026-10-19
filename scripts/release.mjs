@@ -44,6 +44,9 @@ export function problems(manifest, pkg) {
     else if (!FILES.includes("site/" + m[1])) out.push(`site/worker.js imports ${m[1]}, which isn't in the release file list`);
   }
   if (!Array.isArray(manifest.notes) || !manifest.notes.length) out.push("manifest.json needs at least one line in notes");
+  // Whether it can install by itself: [] when it can; a { since, why } for a version that needs something from the person.
+  if (!Array.isArray(manifest.manual)) out.push('manifest.json needs "manual": [] (or the versions that can\'t install by themselves)');
+  else for (const m of manifest.manual) if (!m || !parseVersion(m.since) || typeof m.why !== "string" || !m.why.trim()) out.push(`manifest.json manual entries need "since" (x.y.z) and "why": ${JSON.stringify(m)}`);
   return out;
 }
 
@@ -63,6 +66,8 @@ function main() {
   }
   if (!check) {
     manifest.files = hashes();
+    // always there, so a release says whether it can install by itself (see `manual` in site/version.js)
+    if (!Array.isArray(manifest.manual)) manifest.manual = [];
     writeFileSync(join(ROOT, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
     writeFileSync(join(ROOT, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
     console.log(`manifest.json is now ${manifest.version} with ${FILES.length} files.`);

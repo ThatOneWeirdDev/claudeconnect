@@ -1562,7 +1562,14 @@ document.addEventListener("keydown", e => {
 });
 
 
-function updating() { return !!(UP.data && UP.data.run && UP.data.run.state === "running"); }
+// An update someone started from here pauses messages while it runs; one that started by itself doesn't change anything on
+// the page: it waits for replies to finish on its own, and says when there's a new version to reload into.
+function updating() { return !!(UP.data && UP.data.run && UP.data.run.state === "running" && !UP.data.run.auto); }
+// whether the version the site is on (or is moving to) installed by itself: then this page never reloads on its own
+function autoUpdated() {
+  const run = UP.data && UP.data.run;
+  return !!((run && run.auto && (run.kind || "update") === "update") || (UP.data && UP.data.whatsNew && UP.data.whatsNew.auto && UP.data.whatsNew.version === UP.data.current));
+}
 function renderChrome() {
   const st = S.state;
   const h = $("heroSub");
@@ -3876,11 +3883,13 @@ function closeSettings() { $("setDlg").close(); }
 $("setDlg").addEventListener("close", () => { SET.justUpdated = false; });
 
 function renderSettings() {
+  // an update that started by itself doesn't take Settings over: it shows in Updates
   const run = upRun();
-  $("setDlg").classList.toggle("compact", !!(run || UP.gone));
+  const job = run && !(run.auto && (run.kind || "update") === "update") ? run : null;
+  $("setDlg").classList.toggle("compact", !!(job || UP.gone));
   // never a trap: whatever is running keeps going if this is closed, and the pill in the top bar opens it again
   $("setClose").style.display = "";
-  if (run || UP.gone) return renderJob();
+  if (job || UP.gone) return renderJob();
   const u = UP.data;
   $("setTitle").textContent = "Settings";
   $("setSub").textContent = location.host;
@@ -3950,16 +3959,49 @@ function paneHtml() {
   return `${blockedNote()}<div class="danger-zone"><h3>Delete this site</h3><p>This removes the site from Cloudflare and deletes every chat in it. It can't be undone.</p><ul class="warn-list"><li>The site and all its chats are deleted.</li><li><code>${esc(CFG.command)}</code> stops running on your computer and its setup is removed.</li><li>Your files in the working folder are kept.</li></ul><div class="field"><label for="fDel">Type <b>${esc(CFG.name)}</b> to confirm</label><input class="input" id="fDel" value="${esc(SET.confirm)}" autocomplete="off" spellcheck="false">${SET.err ? `<div class="err-text">${esc(SET.err)}</div>` : ""}</div><button class="btn danger" type="button" data-act="delete"${ok && !(UP.data && UP.data.blockedAdmin) ? "" : " disabled"}>Delete this site</button></div>`;
 }
 
+// Whether new versions install by themselves, kept on the site. And for one that doesn't: why it waits for you.
+function autoHtml(u) {
+  const on = u.auto !== false;
+  return `<div class="sec"><div class="switch"><div class="t"><span>Update automatically</span><small>New versions install by themselves while nothing is being written. Replies aren't interrupted, and the page tells you when there's a new version to reload into. Updates that need something from you, like a permission on your computer, wait here for you.</small></div><button type="button" class="toggle" role="switch" data-auto-up aria-checked="${on}" aria-label="Update automatically"${SET.savingAuto ? " disabled" : ""}></button></div></div>`;
+}
+function whyManual(u) {
+  if (u.manual && u.manual.length) return `<div class="note soft"><b>This update needs you, so it doesn't install by itself:</b> ${u.manual.map(esc).join(" ")}</div>`;
+  if (u.questions && u.questions.length) return '<div class="note soft">This update asks you something first (below), so it doesn\'t install by itself.</div>';
+  if (u.auto !== false && u.manual) return `<div class="note soft">It installs by itself the next time nothing is being written. Or update now.</div>`;
+  return "";
+}
+async function setAutoUpdate(on) {
+  SET.savingAuto = true;
+  renderSettings();
+  try {
+    const p = await apiJson("/api/prefs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ autoUpdate: on }) });
+    if (S.state) S.state.prefs = p;
+    if (UP.data) UP.data.auto = p.autoUpdate !== false;
+  } catch (e) {
+    if (e.message !== "Signed out") toast(e.message);
+  }
+  SET.savingAuto = false;
+  renderSettings();
+}
+// An update that started by itself, in Updates: how it's going, then that it's ready to reload into, or why it stopped.
+function autoRunHtml(run) {
+  if (run.state === "running") return `<div class="sec"><h3>Installing v${esc(run.to)} by itself</h3>${progressHtml(run)}<p class="fine">Keep chatting: it waits for replies to finish, and nothing on this page changes until you reload.</p></div>`;
+  if (run.state === "done") return `<div class="sec"><h3>Updated to v${esc(run.to)}</h3>${runNotes(run)}<p class="fine">Reload when you like to see what's new.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload"${liveAt(run.to) ? "" : " disabled"}>${liveAt(run.to) ? "Reload now" : "Almost ready…"}</button></div></div>`;
+  return `<div class="sec"><h3>The update to v${esc(run.to)} didn't finish</h3><div class="note soft">${esc(run.message || "Something went wrong.")}</div><p class="fine">It isn't tried again by itself for a few hours. Your chats are safe.</p></div>`;
+}
 function updatesHtml() {
   const u = UP.data;
   const v = x => "v" + x;
   if (!u) return '<p class="fine">Loading…</p>';
+  const run = upRun();
+  if (run && run.auto && run.state !== "error") return autoRunHtml(run) + autoHtml(u);
+  const failed = run && run.auto && run.state === "error" ? autoRunHtml(run) : "";
   if (pageIsStale()) return `<div class="sec"><h3>Updated to ${esc(v(u.current))}</h3>${whatsNewHtml(u, "Patch notes")}<p class="fine">Switching this page to ${esc(v(u.current))}.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div></div>`;
   if (updateAvailable(u)) {
-    return `<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}${questionsHtml(u)}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and you can close this while it runs.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>`;
+    return `${failed}<div class="sec"><div class="vrow"><b>${esc(v(u.current))}</b>${I.arrow}<b>${esc(v(u.latest))}</b></div>${u.released ? `<p>Released ${esc(u.released)}</p>` : ""}${u.notes.length ? `<h3>What's new</h3><ul class="notes">${u.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}${whyManual(u)}${questionsHtml(u)}<div class="what"><div>${I.check}<span>${esc(CFG.name)} stays online, and you can close this while it runs.</span></div><div>${I.check}<span>Your chats and settings are kept.</span></div><div>${I.check}<span><code>${esc(CFG.command)}</code> on your computer restarts for a moment at the end.</span></div></div>${u.blocked ? `<div class="note soft">${esc(u.blocked.message)}</div>` : ""}${SET.err ? `<div class="note err">${esc(SET.err)}</div>` : ""}<div class="dlg-actions"><button class="btn primary" type="button" data-act="update"${u.blocked || SET.busy ? " disabled" : ""}>${SET.busy ? "Starting…" : "Update now"}</button></div><p class="fine">From ${esc(u.source)}. Checked ${u.checkedAt ? new Date(u.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "just now"}.</p></div>${autoHtml(u)}`;
   }
   const earlier = (u.history || []).length ? `<details class="earlier" data-k="history"${UP.open.history ? " open" : ""}><summary>Earlier updates</summary>${u.history.map(h => `<div class="rel"><h3>${esc(v(h.version))}${h.released ? ` · ${esc(h.released)}` : ""}</h3>${notesList(h.notes)}</div>`).join("")}</details>` : "";
-  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(newerThan(CFG.version, u.current) ? CFG.version : u.current))}${updateAvailable(u) || u.error ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>`;
+  return `<div class="sec"><h3>${SET.justUpdated ? `Updated to ${esc(v(u.current))}` : `${esc(v(newerThan(CFG.version, u.current) ? CFG.version : u.current))}${updateAvailable(u) || u.error ? "" : " is the newest version"}`}</h3>${u.error ? `<div class="note soft">Couldn't check for updates: ${esc(u.error)}</div>` : ""}${whatsNewHtml(u, "What's new")}${earlier}<div class="dlg-actions"><button class="btn ghost" type="button" data-act="check"${UP.checking ? " disabled" : ""}>${UP.checking ? "Checking…" : "Check again"}</button></div><p class="fine">From ${esc(u.source)}. ${esc(CFG.name)} looks for new versions every minute.</p></div>${autoHtml(u)}`;
 }
 // What a new version asks, answered here before it's installed. The answers are kept by the site and given to the new version
 // once it's running on the computer.
@@ -4212,7 +4254,7 @@ const UP_ICON = {
 function progressHtml(run) {
   const plan = run.plan || [];
   const done = plan.filter(({ key }) => stepState(run, key) === "done").length;
-  const cur = plan.find(({ key }) => stepState(run, key) === "active") || plan[Math.min(done, plan.length - 1)];
+  const cur = run.waiting ? { label: "Waiting for a reply to finish" } : plan.find(({ key }) => stepState(run, key) === "active") || plan[Math.min(done, plan.length - 1)];
   const pct = plan.length ? Math.max(4, Math.round(((done + 0.5) / plan.length) * 100)) : 50;
   return `<div class="prog"><div class="mt-bar"><i style="width:${pct}%"></i></div><div class="prog-step"><span class="spin"></span><span>${esc(cur ? cur.label : "Working")}</span><small>${Math.min(done + 1, plan.length)} of ${plan.length}</small></div></div><details class="earlier" data-k="steps"${UP.open.steps ? " open" : ""}><summary>All steps</summary>${stepsHtml(run)}</details>`;
 }
@@ -4280,7 +4322,7 @@ function renderJob() {
     if (kind === "move" && run.step === "access") {
       html += info.site ? `<div class="sec" style="margin-top:14px"><h3>Turn on Cloudflare Access for the new address</h3><p>Nobody can open the new site until you do. This one stays online meanwhile.</p><ol class="howto"><li>Open the <a href="${esc(info.dash || "https://dash.cloudflare.com/")}" target="_blank" rel="noopener noreferrer">Cloudflare dashboard</a>: <b>Workers &amp; Pages</b> &rarr; <b>${esc(info.name || "")}</b> &rarr; <b>Settings</b> &rarr; <b>Domains &amp; Routes</b>.</li><li>On the <b>workers.dev</b> row choose <b>Enable Cloudflare Access</b>, then <b>Manage Cloudflare Access</b> and allow only <b>your own email address</b>.</li><li>Open your <a href="${esc(info.claim || info.site)}" target="_blank" rel="noopener noreferrer">claim link</a> and sign in with that email. That makes the new site yours.</li></ol><div class="wait"><span class="spin"></span><span>Waiting for you to open the new site. This page updates by itself.</span></div><div class="dlg-actions"><a class="btn primary" href="${esc(info.claim || info.site)}" target="_blank" rel="noopener noreferrer">Open the claim link</a><button class="btn ghost" type="button" data-act="cancel">Cancel the move</button></div></div>` : "";
     } else {
-      html += `<p class="fine">You can close this: it carries on by itself, and the button in the top bar shows how far it's got.${UP.failing > 1 ? " Reconnecting to the site…" : ""}</p><div class="dlg-actions"><button class="btn ghost" type="button" data-act="hide">Hide</button></div>`;
+      html += `<p class="fine">${run.auto ? "This started by itself. Keep chatting: it waits for replies to finish, and nothing on this page changes until you reload." : "You can close this: it carries on by itself, and the button in the top bar shows how far it's got."}${UP.failing > 1 ? " Reconnecting to the site…" : ""}</p><div class="dlg-actions"><button class="btn ghost" type="button" data-act="hide">Hide</button></div>`;
     }
   } else if (run.state === "done") {
     if (kind === "settings") {
@@ -4297,7 +4339,7 @@ function renderJob() {
       } else {
         title.textContent = `Updated to v${to}`;
         sub.textContent = "Your chats are all still here.";
-        html = stepsHtml(run) + runNotes(run) + `<p class="fine">Switching this page to the new version.</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div>`;
+        html = stepsHtml(run) + runNotes(run) + `<p class="fine">${run.auto ? "Reload when you like to see what's new." : "Switching this page to the new version."}</p><div class="dlg-actions"><button class="btn primary" type="button" data-act="reload">Reload now</button></div>`;
       }
     }
   } else {
@@ -4309,6 +4351,10 @@ function renderJob() {
   $("setFoot").hidden = true;
 }
 
+$("setBody").addEventListener("click", e => {
+  const t = e.target.closest("[data-auto-up]");
+  if (t && !t.disabled) setAutoUpdate(t.getAttribute("aria-checked") !== "true");
+});
 // What's opened in the update panel stays open, whatever it's redrawn as next.
 $("setBody").addEventListener("toggle", e => {
   if (e.target.matches && e.target.matches("details[data-k]")) UP.open[e.target.dataset.k] = e.target.open;
@@ -4322,7 +4368,11 @@ function renderPill() {
   const u = UP.data;
   let text = "", short = "", cls = "pill";
   if (UP.gone) { b.hidden = true; return; }
-  if (run && run.state === "running") {
+  // started by itself: a quiet "coming", then "Updated · Reload" once it's live; one that didn't finish is just "Update"
+  if (run && run.auto && run.state === "running") { text = "Update coming"; short = "Update"; }
+  else if (run && run.auto && run.state === "done" && !liveAt(run.to)) { text = "Update coming"; short = "Update"; }
+  else if (run && run.auto && run.state === "error") { if (updateAvailable(u)) { text = "Update"; short = ""; cls += " up"; } }
+  else if (run && run.state === "running") {
     const total = (run.plan || []).length;
     const done = (run.plan || []).filter(({ key }) => stepState(run, key) === "done").length;
     const at = Math.min(done + 1, total); // the step it's on, as the update screen counts it
@@ -4337,7 +4387,7 @@ function renderPill() {
   b.hidden = !text;
   b.className = cls + (short ? "" : " solo");
   // and beside you at the bottom of the sidebar, where ChatGPT has Upgrade
-  $("sideUp").hidden = !(updateAvailable(u) && !run && !pageIsStale());
+  $("sideUp").hidden = !(updateAvailable(u) && (!run || (run.auto && run.state === "error")) && !pageIsStale());
   b.title = text;
   b.setAttribute("aria-label", text);
   $("pillText").textContent = text;
@@ -4347,8 +4397,8 @@ function renderPill() {
 $("sideUp").onclick = () => openSettings("updates");
 $("updatePill").onclick = () => {
   const run = upRun();
-  if (run ? run.state === "done" : pageIsStale()) return reloadNow();
-  openSettings(run ? "general" : "updates");
+  if (run ? run.state === "done" && (!run.auto || liveAt(run.to)) : pageIsStale()) return reloadNow();
+  openSettings(run && !run.auto ? "general" : "updates");
 };
 
 // Reloading for a version is remembered in this browser. If the page that comes back is still the old one (for a few seconds
@@ -4365,6 +4415,7 @@ function reloadAsked() { return pageIsStale() && store.get("reloadFor", "") === 
 function reloadedTo() { try { return sessionStorage.getItem("gql.reloadedTo") || ""; } catch { return ""; } }
 function maybeReload(wait) {
   clearTimeout(UP.reloadTimer);
+  if (autoUpdated()) return;
   const run = upRun();
   const [ver, n] = reloadedTo().split("#");
   const tries = ver === UP.data.current ? Number(n) || 1 : 0;
@@ -4383,6 +4434,8 @@ function announceVersion() {
   store.set("seenVersion", CFG.version);
   const w = UP.data && UP.data.whatsNew;
   if (seen === CFG.version || upRun() || !w || !w.updated || w.version !== CFG.version) return;
+  // installed by itself: a word about it, rather than a panel opening over what you came back to
+  if (w.auto) return toast(`Updated to v${CFG.version}. What's new is in Settings → Updates.`, 7000);
   SET.justUpdated = true;
   openSettings("updates");
 }
@@ -4447,8 +4500,9 @@ function applyUpdate(u) {
   const run = upRun();
   if (run) UP.lastRun = run;
   // Seen running here: the pill shows how it's going. The panel only opens if it was started here (it's open already then).
+  if (run && run.auto && run.state === "running" && UP.seen !== run.id) toast(`Version ${run.to} is installing in the background. Keep going: replies aren't interrupted, and you can reload once it's done to see what's new.`, 8000);
   if (run && run.state === "running" && UP.seen !== run.id) UP.seen = run.id;
-  if (prev && prev.state === "running" && run && run.state === "done" && !$("setDlg").open) toast(run.kind === "settings" ? "Your changes are live. Reload to see them." : `Updated to v${run.to}. Switching to it…`, 8000);
+  if (prev && prev.state === "running" && run && run.state === "done" && !$("setDlg").open) toast(run.kind === "settings" ? "Your changes are live. Reload to see them." : run.auto ? `Updated to v${run.to}. Reload when you like to see what's new.` : `Updated to v${run.to}. Switching to it…`, 8000);
   // A finished update or change that this page didn't watch is already in it: the page was loaded (or reloaded) after it was
   // done. So there's nothing to say about it anymore, here or on any other device, and it's cleared until the next one. Only
   // a page that watched it, or is still on the old version, says "Updated · Reload", and only until it reloads once.

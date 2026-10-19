@@ -52,7 +52,7 @@ Open your site, click your account at the bottom of the sidebar, and choose **Se
 | **General** | The site's name. Under **This computer**: **Start when you log in**, which makes it a startup item (a Login Item on macOS, the Startup folder on Windows) so it's online whenever you are; and the **Working folder**. **Keep running with the lid closed** (see below).|
 | **Appearance** | A **template**: **ChatGPT** gives the site ChatGPT's name and tab icon in one go, after asking, and says **In use** while the site still looks that way. The tab icon (PNG, JPEG, GIF, WebP, ICO or SVG, up to 512 KB), which is also the picture at the top of the sidebar when it's folded away (the page has no separate logo); the **tab title**, the text next to the tab icon in the browser, which is the site's name unless you give it its own; and light, dark or system theme. The theme is kept on the site, so it's the same on every device. |
 | **Address** | The name in the `workers.dev` address. A new address is a new Worker, so the **new site is created first** and this one keeps working. The page shows how to turn on Cloudflare Access for the new address and gives you its claim link. Once the new site is claimed and your computer has connected to it, the **old site is deleted** and you get the new link. Chats stay with the old site, so they go with it. You can cancel at any point before then and nothing changes. |
-| **Updates** | Shows when a new version is out and installs it in place. The program on your computer looks for one every minute, from its own connection, and tells the site (GitHub often turns away Cloudflare's servers, where the site runs); it reads the release at the newest commit, so GitHub's five-minute cache can't hold it back. **Check again** asks your computer too. |
+| **Updates** | Shows when a new version is out and installs it in place. The program on your computer looks for one every minute, from its own connection, and tells the site (GitHub often turns away Cloudflare's servers, where the site runs); it reads the release at the newest commit, so GitHub's five-minute cache can't hold it back. **Check again** asks your computer too. **Update automatically** (on unless you turn it off) installs new versions by themselves: see [Updating by itself](#updating-by-itself). |
 | **Delete site** | Deletes the site and every chat in it, then removes the setup from your computer. The working folder is kept. You type the site's name to confirm. |
 
 Anything that can't be undone (deleting a chat or the site, moving the site, moving a file to the Trash, dropping unsaved edits) is asked first, in the site's own dialog. Nothing destructive happens before its replacement works: a move only deletes the old site after the new one is claimed and your computer is connected to it, and a failed step puts everything back.
@@ -156,6 +156,17 @@ The program on your computer runs under a small watcher that starts it again whe
 A restart takes a second, and longer while it keeps failing straight away (up to 30 seconds). It reconnects on its own, and a reply that was running when it stopped is marked as stopped. `<command> stop` ends both the program and the watcher.
 
 On a Mac, the login item (**Start when you log in**) also has macOS start the watcher again if it ever ends unexpectedly; a login item made by an older version picks this up at the next login. When the computer has been asleep, the log says for how long, so a gap in the replies can be told from a crash.
+
+### Updating by itself
+
+New versions install by themselves, with no one pressing **Update**, unless **Update automatically** is turned off in **Settings → Updates**. It's meant to go unnoticed:
+- **Only at quiet moments.** An update starts only while no reply is being written. It then waits again before replacing the site and before restarting the program on your computer, if a reply has started meanwhile. A reply is never cut short.
+- **Nothing on the page changes.** Messages aren't paused and the page doesn't reload by itself. The top bar says **Update coming**, then **Updated · Reload**, and a short note says the same. Reload whenever you like to see what's new (it's in **Settings → Updates**, which also shows how it's going).
+- **A message sent while the computer restarts** (a few seconds, at the end) waits for the new program instead of failing.
+- **Updates that need you wait for you.** A release that needs something from you, like a permission on your computer, a password or an answer, says so and doesn't install by itself. **Settings → Updates** shows why, with **Update now**. A release that doesn't say either way (an older copy of the release, for example) waits too.
+- **A try that doesn't finish** isn't repeated for the same version for six hours; a newer version is tried as soon as it's out.
+
+For whoever publishes a release: anything that needs the person goes in `manual` in `manifest.json`, as `{ "since": "<the version>", "why": "<what it needs, in plain words>" }`. `[]` means it can install by itself. The `since` matters for anyone skipping versions: an update to any later version waits too, if it would pass a version that needs them.
 
 ### If the site is locked
 

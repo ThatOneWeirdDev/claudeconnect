@@ -473,7 +473,7 @@ test("the Updates panel gets the installed version's patch notes, and the update
   t.after(() => s.stop());
   // not installed by an update (a fresh install): the release that is running says what's in it
   let u = (await s.api("/api/update")).body;
-  assert.deepEqual(u.whatsNew, { version: "1.2.0", released: "2026-10-08", notes: RELEASE.notes, updated: false });
+  assert.deepEqual(u.whatsNew, { version: "1.2.0", released: "2026-10-08", notes: RELEASE.notes, updated: false, auto: false });
   assert.deepEqual(u.history, []);
 
   await s.putStorage("updateLog", [
@@ -483,7 +483,7 @@ test("the Updates panel gets the installed version's patch notes, and the update
     { version: "1.3.0", released: "2027-01-01", notes: ["From the future"], at: 4 }
   ]);
   u = (await s.api("/api/update")).body;
-  assert.deepEqual(u.whatsNew, { version: "1.2.0", released: "2026-10-08", notes: ["Usage chart", "Update from the site"], updated: true });
+  assert.deepEqual(u.whatsNew, { version: "1.2.0", released: "2026-10-08", notes: ["Usage chart", "Update from the site"], updated: true, auto: false });
   assert.deepEqual(u.history.map(h => h.version), ["1.1.0", "1.0.0"], "newest first, only what came before this version");
   assert.deepEqual(u.history[0], { version: "1.1.0", released: "2026-09-01", notes: ["Older things"] });
   assert.deepEqual((await s.api("/api/state")).body.update.history.length, 2, "the page gets it with every state");

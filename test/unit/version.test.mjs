@@ -35,8 +35,12 @@ test("repo and ref values can't smuggle anything into a URL", () => {
 
 test("a manifest from the internet is trimmed down to what the site shows", () => {
   const m = cleanManifest({ version: "v1.3.0", released: "2026-11-01", notes: ["  One  ", "", 5, "x".repeat(500)], files: { evil: 1 }, extra: "<script>" });
-  assert.deepEqual(Object.keys(m).sort(), ["notes", "questions", "released", "version"]);
+  assert.deepEqual(Object.keys(m).sort(), ["manual", "notes", "questions", "released", "version"]);
   assert.deepEqual(m.questions, []);
+  assert.equal(m.manual, null, "a release that doesn't say whether it can install by itself can't");
+  // what a release needs from the person, from the version it came in
+  assert.deepEqual(cleanManifest({ version: "1.3.0", notes: ["x"], manual: [] }).manual, []);
+  assert.deepEqual(cleanManifest({ version: "1.3.0", notes: ["x"], manual: [{ since: "1.3.0", why: "  Needs your Mac's password.  " }, { since: "nope", why: "x" }, { since: "1.2.0" }, "junk"] }).manual, [{ since: "1.3.0", why: "Needs your Mac's password." }]);
   assert.equal(m.version, "1.3.0");
   assert.equal(m.notes[0], "One");
   assert.equal(m.notes.length, 2);

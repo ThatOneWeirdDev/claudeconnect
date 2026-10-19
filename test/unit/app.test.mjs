@@ -198,7 +198,7 @@ test("the top bar has ChatGPT's switch (Chat | Files), the update button and the
   assert.match(script, /document\.querySelector\('\.top \[data-view="files"\]'\)\.onclick = showFiles;/);
   // an update waiting is blue text at the top and a pill beside you, like ChatGPT's two Upgrades
   assert.match(lift("renderPill"), /else if \(updateAvailable\(u\)\) \{ text = "Update"; short = ""; cls \+= " up"; \}/);
-  assert.match(lift("renderPill"), /\$\("sideUp"\)\.hidden = !\(updateAvailable\(u\) && !run && !pageIsStale\(\)\);/);
+  assert.match(lift("renderPill"), /\$\("sideUp"\)\.hidden = !\(updateAvailable\(u\) && \(!run \|\| \(run\.auto && run\.state === "error"\)\) && !pageIsStale\(\)\);/);
   assert.match(html, /\.pill\.up\{color:var\(--blue\);/);
   // the sidebar: the site's name as a wordmark, search and close beside it, New chat lit on a new chat, Files, then Recents
   const side = /<aside class="side"[\s\S]*?<\/aside>/.exec(html)[0];
@@ -296,6 +296,7 @@ function reloader(over = {}) {
     run: null,
     isDirty: () => false,
     upRun: () => ctx.run,
+    autoUpdated: () => !!(ctx.run && ctx.run.auto),
     pageIsStale: () => ctx.UP.data.current !== "1.5.0",
     $: () => ({ value: "" }),
     sessionStorage: { getItem: k => log.stored[k] || null, setItem: (k, v) => (log.stored[k] = v) },
@@ -334,6 +335,11 @@ test("the page reloads itself into the new version once the update is over, and 
   assert.equal(r.log.reloads, 3);
   r.ctx.maybeReload(0);
   assert.equal(r.log.timers.length, 0, "not a fourth time, so a page that stays old can't loop");
+  // an update that installed by itself never reloads the page: the page says there's a new version, and you reload
+  r = reloader({ run: { state: "done", auto: true, kind: "update", to: "1.6.0" } });
+  r.ctx.maybeReload(0);
+  assert.equal(r.log.timers.length, 0);
+  assert.equal(r.log.reloads, 0);
 
   // nothing is lost: a message being typed, a file attached, a reply on its way, unsaved settings
   for (const [what, over] of [
@@ -618,7 +624,7 @@ test("only a newer site makes the page out of date, and once Reload was pressed 
   assert.equal(ctx.reloadAsked(), false, "the next update is a new notice");
   // the pill hides it, and one click on it reloads
   assert.match(lift("renderPill"), /else if \(pageIsStale\(\) && !reloadAsked\(\)\)/);
-  assert.match(script, /if \(run \? run\.state === "done" : pageIsStale\(\)\) return reloadNow\(\);/);
+  assert.match(script, /if \(run \? run\.state === "done" && \(!run\.auto \|\| liveAt\(run\.to\)\) : pageIsStale\(\)\) return reloadNow\(\);/);
 });
 
 test("a reply shows its thinking, text and tools in the order they happened", () => {
