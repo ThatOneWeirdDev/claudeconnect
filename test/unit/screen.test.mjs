@@ -156,3 +156,22 @@ test("the stand-in screen shows the picture it's given and writes down what was 
   assert.equal(s.platform, "fake");
   await assert.rejects(s.input([{ t: "move", x: 0, y: 0 }]), /ENOENT/);
 });
+
+test("the page's mark is looked for in this computer's window titles: xdotool on Linux, the helper on a Mac", async () => {
+  const tag = "​‌‍⁠​‌";
+  const found = fakeSpawn({ answer: (cmd, args) => (cmd === "xdotool" && args[0] === "search" && args[2] === tag ? "41943047\n" : "") });
+  assert.equal(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: found.spawn }).showing(tag), true);
+  assert.deepEqual(found.calls[0].args, ["search", "--name", tag]);
+  const none = fakeSpawn({ answer: () => { throw new Error(""); } });
+  assert.equal(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: none.spawn }).showing(tag), false, "xdotool found no window");
+  const missing = fakeSpawn({ answer: () => null });
+  assert.equal(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: missing.spawn }).showing(tag), null, "no xdotool: can't tell");
+  const mac = fakeSpawn({ helper: m => (m.t === "windows" ? { found: m.tag === tag } : { ok: true }) });
+  const s = makeScreen({ platform: "darwin", env: {}, spawn: mac.spawn });
+  assert.equal(await s.showing(tag), true);
+  s.close();
+  // anything that isn't a mark isn't looked for at all
+  const asked = fakeSpawn();
+  assert.equal(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: asked.spawn }).showing("Remote · Site"), false);
+  assert.equal(asked.calls.length, 0);
+});

@@ -1,18 +1,19 @@
 {
   "name": "claudeconnect",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "released": "2026-10-19",
   "notes": [
-    "Remote, in the sidebar: see your computer's screen on the site and use its mouse and keyboard from any device, including a phone (tap to click, hold to right-click, slide to scroll). Turn it on from the Remote page or in Settings → This computer. On a Mac, the Mac asks once to allow Screen Recording and Accessibility for node.",
-    "It now keeps running by itself: if the program on your computer crashes, is ended by the computer, or stops answering, it starts again within seconds and reconnects. Before, one unexpected error could take it offline until you started it again.",
-    "On a Mac, the login item now also restarts it if it ever ends unexpectedly. What went wrong, and when the computer was asleep, now goes in the log (`<command> logs`)."
+    "Search in Files: the magnifier (or Ctrl+F, ⌘F on a Mac) searches the open folder and every folder in it by name, as you type, with filters for the kind of file, when it last changed and its size. A result opens in the preview, and its folder button shows where it is. Your computer reads the folder once and keeps the names for a moment, so each letter after the first is answered straight away.",
+    "Remote on a phone: turn it sideways and Remote fills the whole screen, with small keyboard and close buttons on top.",
+    "Remote can no longer be opened in a browser on the computer it shows, where it would show itself inside itself and move the mouse out from under you. It says to use another device instead.",
+    "Remote on Windows now shows the mouse pointer in the picture, and its helper is checked in PowerShell on every change."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
     "installer.mjs": "39677dd0016c896ec75e90e4e9f1f582d3f89212d0da68366ffbc06086a06582",
     "setup.mjs": "5074e245069469b21b0c5c59239d20498c34ae2d75ec7472bd4166593fd69f37",
     "setup.html": "7c5f0baac504379267c18b4d75e7848daf13a41fee4e1185459556dd1b654812",
-    "agent/agent.mjs": "8f04ad930b41044f679c0f2502c9a31f84b4b61967a014bb474fbb0051b8e0cb",
+    "agent/agent.mjs": "38cc4f03f220fe0c803ece3f3d78a072b6944c50f72ccbb34c49d2caa1eecb6e",
     "agent/sessions.mjs": "501ff207add7b3a3c4a652dd9d42a68426a936adfe05b26c6fc50ae5812853e5",
     "agent/limits.mjs": "41068cc30ea662fd2e28c704649d584a86132bc20e831a0cacbc67fbd0df6463",
     "agent/files.mjs": "194511f52b72d5b8bc64fadd8990449585b14c70fe2ff77ac4e30cf88e30be53",
@@ -20,9 +21,10 @@
     "agent/permit.mjs": "d6607a5da852305283dd8216b891f0d7925a1bc114c49dcf5226f59dfaebc1d6",
     "agent/awake.mjs": "79a9ac208985ff024ae6e4158dd6985917ce4ade39adcac5f1fcc68ca4844fce",
     "agent/keepalive.mjs": "9545644ddb7950c4a71a28d00e8c1be5752ead293667f3c3b94e71353eee66fd",
-    "agent/screen.mjs": "ce195ef07bc6763e599feb1d610f5a81c2c1d4540a7c3e8ff4bcb1f9e86d4fbc",
-    "site/worker.js": "6afe3e4f56abc79d0bd228c98857b3ec81b59993e32614a31270584f7e4c8ce1",
-    "site/app.html": "040ddaf3b842360ceda801c888d88e9b14202f856b7816bfe65e024db9b869c3",
+    "agent/screen.mjs": "5f477180f0800a7479b15d8152703490d5e58506afdffcc2e96f40d6ec3cf8af",
+    "agent/search.mjs": "b9962d86ef159e18b4e6a2bc649d67172951a72410d7782fec9d78d855ee9b7f",
+    "site/worker.js": "46c77779f0495ec83921833f45abd2ffd7bb8bdd268096795c0d0b499920bf0d",
+    "site/app.html": "aba84e6dc600ff0bf1bdb48f373f5b3bb25166260c40e65f226c3479c6aa06f9",
     "site/version.js": "2c56b3032c090182dd54d5dd93151a7b401350b5bdf5aa67ed783ab8fcedee69",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559",

@@ -103,6 +103,20 @@ function mouse(type, x, y, button, clicks) {
   if (clicks) $.CGEventSetIntegerValueField(e, 1, clicks);
   $.CGEventPost(0, e);
 }
+// Whether a window on this Mac has the tag in its title: from CoreGraphics' window list (titles need Screen Recording, which
+// Remote has), or else from System Events (which needs Accessibility). Null when neither can tell.
+function showing(tag) {
+  try {
+    const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1, 0))) || [];
+    if (list.some(w => String(w.kCGWindowName || "").indexOf(tag) >= 0)) return true;
+    if (list.some(w => w.kCGWindowName && w.kCGWindowOwnerPID !== $.NSProcessInfo.processInfo.processIdentifier)) return false;
+  } catch (e) {}
+  try {
+    return String(Application("System Events").processes.whose({ backgroundOnly: false }).windows.name()).indexOf(tag) >= 0;
+  } catch (e) {
+    return null;
+  }
+}
 const DOWN = { 0: 1, 1: 25, 2: 3 }, UP = { 0: 2, 1: 26, 2: 4 }, DRAG = { 0: 6, 1: 27, 2: 7 }, BUTTON = { 0: 0, 1: 2, 2: 1 };
 function using(mods) {
   const u = [];
@@ -163,6 +177,7 @@ function run() {
         m = JSON.parse(line);
         if (m.t === "ask") say({ id: m.id, view: canRecord(true), control: trusted(true) });
         else if (m.t === "check") say({ id: m.id, view: canRecord(false), control: trusted(false) });
+        else if (m.t === "windows") say({ id: m.id, found: showing(m.tag) });
         else {
           for (const ev of m.events) apply(ev, se);
           say({ id: m.id, ok: true });
@@ -189,6 +204,21 @@ public static class CCScreen {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, int data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+  public static bool Showing(string tag) {
+    bool found = false;
+    EnumWindows(delegate (IntPtr h, IntPtr l) {
+      if (!IsWindowVisible(h)) return true;
+      var t = new System.Text.StringBuilder(1024);
+      GetWindowText(h, t, 1024);
+      if (t.ToString().Contains(tag)) { found = true; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
 }
 "@
 [CCScreen]::SetProcessDPIAware() | Out-Null
@@ -208,6 +238,7 @@ while ($true) {
       $shot = New-Object System.Drawing.Bitmap $b.Width, $b.Height
       $g = [System.Drawing.Graphics]::FromImage($shot)
       $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $shot.Size)
+      try { $p = [System.Windows.Forms.Cursor]::Position; [System.Windows.Forms.Cursors]::Default.Draw($g, (New-Object System.Drawing.Rectangle ($p.X - $b.Left), ($p.Y - $b.Top), 32, 32)) } catch {}
       $w = [Math]::Min([int]$m.w, $b.Width)
       $h = [int][Math]::Round($b.Height * $w / $b.Width)
       $small = New-Object System.Drawing.Bitmap $w, $h
@@ -220,6 +251,8 @@ while ($true) {
       $small.Save($ms, $codec, $ep)
       $g.Dispose(); $g2.Dispose(); $shot.Dispose(); $small.Dispose()
       Say ('{"id":' + $m.id + ',"jpeg":"' + [Convert]::ToBase64String($ms.ToArray()) + '"}')
+    } elseif ($m.t -eq "windows") {
+      Say ('{"id":' + $m.id + ',"found":' + ([CCScreen]::Showing([string]$m.tag)).ToString().ToLower() + '}')
     } else {
       foreach ($e in $m.events) {
         $x = [int]($b.Left + $e.x * ($b.Width - 1)); $y = [int]($b.Top + $e.y * ($b.Height - 1))
@@ -514,6 +547,29 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
     }
   }
 
+  // Whether a window on this computer has `tag` (the page's invisible mark) in its title: the site open here, showing Remote.
+  // Null when it can't be told.
+  async function showing(tag) {
+    if (!/^[\u200b\u200c\u200d\u2060]{6,32}$/.test(String(tag || ""))) return false;
+    if (fake) {
+      try {
+        return readFileSync(join(dir, "screen-windows.txt"), "utf8").includes(tag);
+      } catch {
+        return false;
+      }
+    }
+    if (platform === "darwin" || platform === "win32") {
+      const r = await (await getHelper()).ask({ t: "windows", tag }, 10000);
+      return typeof r.found === "boolean" ? r.found : null;
+    }
+    if (!env.DISPLAY) return null;
+    try {
+      return String(await run(spawn, "xdotool", ["search", "--name", tag], { env: { ...env, LC_ALL: "C.UTF-8" } })).trim().length > 0;
+    } catch (e) {
+      return e.code === "EXIT" ? false : null;
+    }
+  }
+
   // Turning Remote on: a Mac asks, on its own screen, to allow Screen Recording and Accessibility. Gives back what's allowed.
   async function ask() {
     if (fake || platform !== "darwin") return { view: true, control: true };
@@ -522,5 +578,5 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
     return { view: r.view !== false, control: r.control !== false };
   }
 
-  return { frame, input, ask, close, get platform() { return fake ? "fake" : platform; } };
+  return { frame, input, ask, showing, close, get platform() { return fake ? "fake" : platform; } };
 }

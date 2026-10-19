@@ -12,6 +12,7 @@ import { list as listFiles, info as fileInfo, readPart, trash as trashFile, writ
 import { awakeOn, setAwake, holdAwake } from "./awake.mjs";
 import { keepRunning, CANT_RUN } from "./keepalive.mjs";
 import { makeScreen, ScreenError } from "./screen.mjs";
+import { search as searchFiles, forget as forgetSearch } from "./search.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = (() => {
@@ -1732,6 +1733,7 @@ function onMessage(raw) {
   else if (m.type === "fs_list" || m.type === "fs_read" || m.type === "fs_trash" || m.type === "fs_write") handleFiles(m);
   else if (m.type === "release_check") checkRelease(m.req);
   else if (m.type === "screen_frame" || m.type === "screen_input") handleScreen(m);
+  else if (m.type === "fs_search") findFiles(m);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
 
@@ -1767,6 +1769,8 @@ function handleFiles(m) {
       const length = Math.min(FS_PIECE, Math.max(0, Math.floor(Number(m.length)) || 0), Math.max(0, f.size - offset));
       return reply({ ok: true, ...f, offset, data: length ? readPart(base, m.path, offset, length).toString("base64") : "" });
     }
+    // a change made from here makes what the search read out of date
+    forgetSearch();
     if (m.type === "fs_write") {
       const f = writeFile(base, m.path, m.text, { mtime: typeof m.mtime === "number" ? m.mtime : NaN, force: !!m.force });
       log(`Saved ${shownPath(join(base, m.path))}, edited on the site.`);
@@ -1781,20 +1785,54 @@ function handleFiles(m) {
   }
 }
 
+// Searching a place from a folder in it, by name, with filters (search.mjs). A big folder gives what it has so far, and the
+// page asks again for the rest.
+async function findFiles(m) {
+  const reply = body => send({ type: "fs_result", req: m.req, ...body });
+  try {
+    const place = placeList().find(p => p.id === (m.root || "ws"));
+    if (!place) throw new FilesError("missing", "That place isn't on this computer any more.");
+    reply({ ok: true, ...(await searchFiles(place.path, m.path, { q: m.q, kind: m.kind, mod: m.mod, size: m.size, hidden: m.hidden === true })) });
+  } catch (e) {
+    if (e instanceof FilesError) return reply({ ok: false, code: e.code, error: e.message });
+    reply({ ok: false, code: "failed", error: `The search failed: ${e.code === "EACCES" || e.code === "EPERM" ? "the computer doesn't allow it" : e.message || e}.` });
+  }
+}
+
 // ---- Remote (screen.mjs): one picture of the screen, or what was done over it, and only while Remote is on. Someone starting
 // to look is written in the log.
 const SCREEN = makeScreen({ dir: HERE });
 let screenSeen = 0;
+// Remote in a browser on this very computer would show the screen inside itself, over and over, and move the mouse out from
+// under you. While Remote is open the page puts a mark no one can see in its title; a window here with that mark in its title
+// is the site, open here, so Remote says no. Looked for on every picture for the first few seconds (a title takes a moment
+// to change), then every ten.
+const marks = new Map();
+async function sameComputer(tag) {
+  if (typeof tag !== "string" || !tag) return false;
+  const now = Date.now();
+  let here = marks.get(tag);
+  if (!here) {
+    // one for each page watching; the oldest goes when there are more than a few
+    if (marks.size >= 8) marks.delete(marks.keys().next().value);
+    marks.set(tag, (here = { first: now, at: 0, same: false }));
+  }
+  if (now - here.at >= (now - here.first < 5000 ? 0 : 10000)) {
+    here.at = now;
+    const found = await SCREEN.showing(tag).catch(() => null);
+    if (found !== null) here.same = found;
+  }
+  return here.same;
+}
 async function handleScreen(m) {
   const reply = o => send({ type: "screen_result", req: m.req, os: process.platform, ...o });
   if (cfg.screen !== true) return reply({ ok: false, code: "off", error: "Remote is off on this computer." });
-  if (Date.now() - screenSeen > 120000) log("Remote: this computer's screen is being shown on the site.");
-  screenSeen = Date.now();
   try {
-    if (m.type === "screen_frame") {
-      const f = await SCREEN.frame({ width: m.w, quality: m.q });
-      return reply({ ok: true, jpeg: f.jpeg.toString("base64"), w: f.w, h: f.h });
-    }
+    const [same, f] = await Promise.all([sameComputer(m.tag), m.type === "screen_frame" ? SCREEN.frame({ width: m.w, quality: m.q }) : null]);
+    if (same) return reply({ ok: false, code: "same_computer", error: `This is the computer ${siteName()} runs on, so Remote would show itself inside itself. Use Remote from another device, like your phone.` });
+    if (Date.now() - screenSeen > 120000) log("Remote: this computer's screen is being shown on the site.");
+    screenSeen = Date.now();
+    if (f) return reply({ ok: true, jpeg: f.jpeg.toString("base64"), w: f.w, h: f.h });
     await SCREEN.input(m.events);
     reply({ ok: true });
   } catch (e) {
@@ -1817,7 +1855,7 @@ function workflowsOn() {
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `files` the file browser.
 function helloMessage() {
   // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
-  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "screen", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
+  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "screen", "search", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()], command: COMMAND, site: siteName() };
 }
 

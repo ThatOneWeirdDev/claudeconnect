@@ -2,7 +2,7 @@
 // screen (CLAUDECONNECT_SCREEN=fake:…): a fixed picture, and what's done over it written to screen-input.jsonl.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startSite } from "../helpers/site.mjs";
@@ -143,3 +143,70 @@ test("Remote in the sidebar: turned on from there, the screen shows, and clicks,
   assert.equal(await page.evaluate(`document.getElementById("screen").hidden && !document.getElementById("main").classList.contains("screen-open")`), true);
 });
 
+
+test("on the computer Remote would show, it says so and shows nothing: the page's invisible mark is in a window title there", async t => {
+  const { site, pc, done } = await boot(t);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const tag = "​‌‍⁠​‌‍⁠";
+  const ask = extra => site.asOwner("/api/screen/frame", { method: "POST", body: JSON.stringify({ w: 1280, tag, ...extra }) });
+  assert.equal((await ask()).status, 200, "no window here has it");
+  writeFileSync(join(pc.dir, "screen-windows.txt"), `Remote${tag} · Test Site - Google Chrome\nTerminal\n`);
+  // looked for on every picture for the first few seconds of a mark
+  const r = await ask();
+  assert.equal(r.status, 409);
+  const j = await r.json();
+  assert.equal(j.code, "same_computer");
+  assert.match(j.error, /This is the computer Test Site runs on/);
+  assert.equal((await site.post("/api/screen/input", { events: [{ t: "move", x: 0.5, y: 0.5 }], tag })).body.code, "same_computer");
+  assert.deepEqual(done(), [], "nothing was done to this computer");
+  // a mark that isn't one is ignored, and another device's mark isn't in a title here
+  assert.equal((await ask({ tag: "<script>" })).status, 200);
+  assert.equal((await ask({ tag: "​".repeat(8) })).status, 200);
+});
+
+test("in a browser on the same computer, Remote explains why it won't show the screen", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const { site, pc } = await boot(t);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const page = await openPage(site.origin + "/", { width: 1280, height: 800 });
+  t.after(() => page.close());
+  await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
+  await page.evaluate(`location.reload()`);
+  await page.until(`document.getElementById("screenNav")`, "the sidebar");
+  await page.evaluate(`document.getElementById("screenNav").click()`);
+  const title = await page.until(`/^Remote[\\u200b\\u200c\\u200d\\u2060]{12} · /.test(document.title) && document.title`, "the marked title");
+  // this computer's window list now has that title in it, as the browser's window would
+  writeFileSync(join(pc.dir, "screen-windows.txt"), `${title} - Chromium\n`);
+  await page.until(`/This is the computer Test Site runs on/.test(document.getElementById("scMsg").innerText) && document.getElementById("scImg").hidden`, "the explanation");
+  await page.evaluate(`document.getElementById("scClose").click()`);
+  assert.doesNotMatch(await page.evaluate(`document.title`), /[​‌‍⁠]/, "the mark goes with Remote");
+});
+
+test("on a phone, Remote asks to be turned sideways, then fills the whole screen", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const { site } = await boot(t);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const page = await openPage(site.origin + "/", { width: 390, height: 844 });
+  t.after(() => page.close());
+  await page.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
+  await page.evaluate(`location.reload()`);
+  await page.until(`document.getElementById("screenNav") && matchMedia("(pointer: coarse)").matches`, "the page, on a phone");
+  await page.evaluate(`document.getElementById("screenNav").click()`);
+  await page.until(`!document.getElementById("scTurn").hidden`, "the turn-your-phone prompt");
+  assert.match(await page.evaluate(`document.getElementById("scTurn").innerText`), /Turn your phone sideways/);
+  assert.equal(await page.evaluate(`document.getElementById("scImg").hidden`), true, "no screen while it's upright");
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 844, height: 390, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: "landscapePrimary", angle: 90 } });
+  await page.until(`document.getElementById("screen").classList.contains("phone-full") && !document.getElementById("scImg").hidden`, "the screen, sideways");
+  const fill = await page.evaluate(`(() => { const s = document.getElementById("screen").getBoundingClientRect(); const i = document.getElementById("scImg").getBoundingClientRect(); return { sw: s.width, sh: s.height, iw: i.width, ih: i.height, vw: innerWidth, vh: innerHeight, head: getComputedStyle(document.querySelector(".sc-head")).display }; })()`);
+  assert.deepEqual([fill.sw, fill.sh], [fill.vw, fill.vh], "the whole screen");
+  assert.ok(Math.abs(fill.ih - fill.vh) <= 1 || Math.abs(fill.iw - fill.vw) <= 1, JSON.stringify(fill));
+  assert.equal(fill.head, "none", "no header taking room");
+  assert.equal(await page.evaluate(`getComputedStyle(document.getElementById("scFloat")).display`), "flex", "the keyboard and close buttons float on top");
+  // turned upright again, it asks again; and the close button goes back to the chat
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: "portraitPrimary", angle: 0 } });
+  await page.until(`!document.getElementById("screen").classList.contains("phone-full") && !document.getElementById("scTurn").hidden`, "the prompt again");
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 844, height: 390, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: "landscapePrimary", angle: 90 } });
+  await page.until(`document.getElementById("screen").classList.contains("phone-full")`, "sideways again");
+  await page.evaluate(`document.querySelector('#scFloat [data-scf="close"]').click()`);
+  assert.equal(await page.evaluate(`document.getElementById("screen").hidden && !document.getElementById("screen").classList.contains("phone-full")`), true);
+});
