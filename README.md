@@ -80,16 +80,17 @@ The **Chat | Files** switch at the top of the page opens the **file browser** in
   - Click, double-click, right-click, drag and scroll over the picture as you would on the computer.
   - Once you've clicked it (it gets a blue outline), the keys you press go to the computer. Your shortcuts carry over: ⌘ on a Mac works as Ctrl on Windows and Linux, and the other way round.
   - On a phone, turn it sideways: Remote asks for that, then fills the whole screen, with small keyboard and close buttons on top. Tap to click, hold to right-click, slide a finger to scroll, and the keyboard button to type.
-  - The full-screen button gives the screen the whole page, and **?** says all this on the page.
+  - The full-screen button gives the screen the whole page.
 - **Not on the computer it shows:** in a browser on that same computer, Remote would show itself inside itself, over and over, and move the mouse out from under you, so it says to use another device instead. While Remote is open, the page puts a mark no one can see (zero-width characters) in its tab's title. The computer looks for that mark in its own window titles and refuses when it finds it. It uses CoreGraphics or System Events on a Mac, the window list on Windows, and xdotool on Linux.
-- **How it works:** the page asks for one picture of the screen at a time (a JPEG sized to fit), as soon as the last one has arrived, so it's a few pictures a second rather than video. What you do over it is sent in order, with positions as fractions of the picture. It all goes through your own site, only to you, and only while the Remote page is open. Your computer notes in its log when its screen starts being shown.
+- **How it works:** while the Remote page is open, the page keeps one connection (a WebSocket) to your site, and your computer streams its screen down it, up to 30 pictures a second (JPEGs sized to fit the page). The page says when it has each picture, and no more than two are ever on their way, so a slow connection gets fewer pictures but never late ones. A screen that isn't changing sends nothing. What you do over it goes back on the same connection, in order, with positions as fractions of the picture. It all goes through your own site, only to you, and only while the Remote page is open and on screen. Your computer notes in its log when its screen starts being shown.
 - **Mac:**
   - The first time, the Mac asks to allow **Screen Recording** and **Accessibility** for `node` (the program that runs your site there). That has to be answered on the Mac itself.
   - Seeing only the desktop picture means Screen Recording isn't allowed yet. Clicks doing nothing means Accessibility isn't. Turn on `node` for both in **System Settings → Privacy & Security**.
   - A Mac with its **lid closed** has no screen to show unless another display is connected.
   - A locked screen can be seen, but macOS doesn't let anything type the password into it from elsewhere.
-- **Windows:** works as it is, with no extra permissions. One PowerShell helper takes the pictures (with the mouse pointer drawn in) and moves the mouse and types. Windows' locked screen and administrator prompts can't be shown.
-- **Linux:** an X11 desktop, with ImageMagick (or ffmpeg) to show the screen and `xdotool` to use it. Wayland isn't supported.
+  - The screen is streamed with ScreenCaptureKit (macOS 12.3 and later), through a small helper your Mac builds the first time Remote is turned on. That needs Apple's command line tools (`xcode-select --install`), which are never installed or asked for by themselves. Without them it uses ffmpeg if that's installed, and otherwise takes one picture at a time with `screencapture`, which is slower.
+- **Windows:** works as it is, with no extra permissions. One PowerShell helper takes the pictures (with the mouse pointer drawn in), the next one already being taken while the last is on its way, and moves the mouse and types. Windows' locked screen and administrator prompts can't be shown.
+- **Linux:** an X11 desktop, with ffmpeg to stream the screen (or ImageMagick, one picture at a time) and `xdotool` to use it. Wayland isn't supported.
 
 ### Under the message box
 
@@ -207,7 +208,7 @@ An older version kept the command it was set up with through renames. Updating r
 | `agent/trash.mjs` | Moves a file or folder to the system's Trash: `~/.Trash` on macOS, the Recycle Bin on Windows, and the freedesktop.org Trash (with the note that lets a file manager put it back) on Linux. |
 | `agent/limits.mjs` | Reads the limit resets on your Claude account. |
 | `agent/keepalive.mjs` | The watcher that starts the program again after a crash or a hang. |
-| `agent/screen.mjs` | Remote: pictures of the screen, and the mouse and keyboard, on macOS, Windows and Linux. |
+| `agent/screen.mjs` | Remote: the screen, streamed live where it can be, and the mouse and keyboard, on macOS, Windows and Linux. |
 | `agent/search.mjs` | Searching the file browser by name, with filters. |
 | `agent/permit.mjs` | The small MCP server Claude Code asks through for **Ask first**, which passes each question to the site. |
 | `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
