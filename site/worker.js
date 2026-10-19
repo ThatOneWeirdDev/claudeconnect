@@ -34,10 +34,10 @@ const PLANS = {
 };
 const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
 const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
-// The settings that live on the computer, which the site can show and change: starting at login and the folder Claude Code
-// works in. The computer also says which Claude plan it's signed in with, and an older one says what it reads (credits,
+// The settings that live on the computer, which the site can show and change: starting at login, staying awake with the lid
+// closed, Remote (its screen on the site) and the folder Claude Code works in. The computer also says which Claude plan it's signed in with, and an older one says what it reads (credits,
 // history), which nobody can change anymore.
-const COMPUTER_KEYS = ["autostart", "awake", "credits"];
+const COMPUTER_KEYS = ["autostart", "awake", "screen", "credits"];
 const HISTORY_SCOPES = ["all", "workspace", "off"];
 
 function cleanComputer(v) {
@@ -881,7 +881,7 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "credits") return this.setCredits(m.credits);
     if (m.type === "sessions") return this.saveSessions(m.sessions);
     if (m.type === "commands") return this.saveCommands(m.commands);
-    if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result") return this.gotTranscript(m);
+    if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result" || m.type === "screen_result") return this.gotTranscript(m);
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
       return this.gotTranscript(m);
@@ -1016,6 +1016,8 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/remote" && method === "POST") return this.answerRemote(req);
     if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
+    if (p === "/api/screen/frame" && method === "POST") return this.screenFrame(req);
+    if (p === "/api/screen/input" && method === "POST") return this.screenInput(req);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
@@ -1090,6 +1092,8 @@ export class ChatgqlHub extends DurableObject {
             credits: info.computer && typeof info.computer.credits === "boolean" ? info.computer.credits : caps.includes("credits"),
             // the file browser: what's in the working folder
             files: caps.includes("files"),
+            // Remote: the computer's screen on the site
+            screen: caps.includes("screen"),
             subscription: (info.computer && info.computer.subscription) || "",
             computer: info.computer || null
           }
@@ -1281,6 +1285,46 @@ export class ChatgqlHub extends DurableObject {
     if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
     const result = ["reset", "already_used", "not_limited", "cooldown", "ineligible", "unavailable", "error"].includes(r.result) ? r.result : "error";
     return json({ result, reason: typeof r.reason === "string" ? r.reason.slice(0, 40) : "", resetsLeft: Number.isFinite(r.resetsLeft) ? r.resetsLeft : null, cleared: Array.isArray(r.cleared) ? r.cleared.filter(c => typeof c === "string").slice(0, 8).map(c => c.slice(0, 40)) : [] });
+  }
+
+  // Remote: the computer's screen, one picture at a time as the page asks for it, and what's done over it. The computer only
+  // answers while Remote is turned on there.
+  screenAgent() {
+    const ws = this.agent();
+    if (!ws) return json({ error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.`, code: "offline" }, 503);
+    if (!(this.agentInfo(ws).caps || []).includes("screen")) return json({ error: `Update ${this.siteName()} on your computer to use Remote.`, code: "agent_old" }, 409);
+    return null;
+  }
+
+  screenFailed(r) {
+    if (!r) return json({ error: "Your computer didn't answer in time.", code: "slow" }, 504);
+    return json({ error: String(r.error || "That didn't work.").slice(0, 300), code: typeof r.code === "string" && /^[a-z_]{1,20}$/.test(r.code) ? r.code : "failed", os: typeof r.os === "string" ? r.os.slice(0, 10) : "" }, 409);
+  }
+
+  async screenFrame(req) {
+    const b = (await req.json().catch(() => null)) || {};
+    const not = this.screenAgent();
+    if (not) return not;
+    const num = (v, lo, hi, d) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
+    const r = await this.askAgent({ type: "screen_frame", w: num(b.w, 320, 2560, 1280), q: num(b.q, 20, 90, 60) }, 20000, "screen");
+    if (!r || !r.ok) return this.screenFailed(r);
+    let bytes = null;
+    try {
+      bytes = Uint8Array.from(atob(String(r.jpeg || "")), c => c.charCodeAt(0));
+    } catch {}
+    if (!bytes || bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return json({ error: "The picture of the screen came out unreadable.", code: "capture" }, 502);
+    return new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "no-store", "x-screen-os": typeof r.os === "string" ? r.os.slice(0, 10) : "" } });
+  }
+
+  async screenInput(req) {
+    const b = await req.json().catch(() => null);
+    const events = b && Array.isArray(b.events) ? b.events.slice(0, 200) : [];
+    if (!events.length) return json({ error: "Nothing to do." }, 400);
+    const not = this.screenAgent();
+    if (not) return not;
+    const r = await this.askAgent({ type: "screen_input", events }, 15000, "screen");
+    if (!r || !r.ok) return this.screenFailed(r);
+    return json({ ok: true });
   }
 
   async prefs() {

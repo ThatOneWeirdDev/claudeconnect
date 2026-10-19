@@ -522,6 +522,30 @@ svg{display:block;flex:none}
 /* the file browser takes the place of the chat under the top bar, so the sidebar and the Chat | Files switch stay where they are */
 .files{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);color:var(--text)}
 .main.files-open .thread,.main.files-open .dock,.main.files-open #chatMore{display:none!important}
+/* ---- Remote: the computer's screen, in place of the chat like the file browser. The picture fits the space; what you do
+   over it goes to the computer. */
+.screen{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);color:var(--text)}
+.main.screen-open .thread,.main.screen-open .dock,.main.screen-open #chatMore{display:none!important}
+.sc-head{flex:none;display:flex;align-items:center;gap:2px;height:48px;padding:0 8px 0 16px;border-top:1px solid var(--border-0);border-bottom:1px solid var(--border-0)}
+.sc-head h2{margin:0 10px 0 0;font-size:18px;line-height:28px;font-weight:600}
+.sc-status{flex:1;min-width:0;color:var(--text-2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-status b{color:var(--ok);font-weight:500}
+.sc-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px;background:var(--surface-3);overflow:hidden}
+.sc-stage img{display:block;flex:none;border-radius:6px;box-shadow:var(--shadow-s);user-select:none;-webkit-user-select:none;-webkit-user-drag:none;touch-action:none;cursor:default}
+.sc-stage.keys img{outline:2px solid var(--focus);outline-offset:2px}
+.sc-msg{max-width:460px;text-align:center;color:var(--text-2);font-size:14px;line-height:20px}
+.sc-msg h3{margin:0 0 8px;color:var(--text);font-size:18px;line-height:26px;font-weight:600}
+.sc-msg p{margin:0 0 12px}
+.sc-msg .fine{font-size:13px;color:var(--text-3)}
+.sc-err{position:absolute;top:20px;left:50%;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));padding:8px 14px;border-radius:12px;background:var(--elevated);box-shadow:var(--shadow);color:var(--danger-text);font-size:13px;line-height:18px}
+.sc-help{position:absolute;top:12px;right:12px;width:min(380px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;padding:16px 18px;border-radius:16px;background:var(--elevated);box-shadow:var(--shadow);font-size:13px;line-height:19px}
+.sc-help h3{margin:0 0 6px;font-size:15px;font-weight:600}
+.sc-help ul{margin:0;padding-left:18px}
+.sc-help li{margin:4px 0}
+.sc-type{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;resize:none;pointer-events:none;font-size:16px}
+.screen:fullscreen .sc-stage{padding:0;background:#000}
+@media (max-width: 640px){.sc-stage{padding:4px}.sc-head{padding-left:12px}.sc-head h2{margin-right:8px}}
+.screen:fullscreen .sc-stage img{border-radius:0;box-shadow:none}
 .fb-head{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;height:48px;padding:0 8px 0 12px;border-top:1px solid var(--border-0);border-bottom:1px solid var(--border-0)}
 .fb-title{min-width:0;display:flex;align-items:center;gap:8px}
 .fb-tools{display:flex;align-items:center;justify-content:flex-end;gap:2px}
@@ -831,6 +855,7 @@ svg{display:block;flex:none}
       <button class="nav-item" id="newChat" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.67 3.91C16.89 2.69 18.86 2.69 20.08 3.91C21.30 5.13 21.30 7.10 20.08 8.32L14.14 14.26C13.38 15.02 12.39 15.52 11.32 15.67L9.14 15.98C8.82 16.03 8.51 15.92 8.29 15.70C8.07 15.48 7.96 15.17 8.01 14.85L8.32 12.67C8.47 11.60 8.97 10.61 9.73 9.85L15.67 3.91ZM18.67 5.32C18.23 4.88 17.52 4.88 17.08 5.32L11.14 11.26C10.69 11.72 10.39 12.31 10.30 12.96L10.17 13.82L11.03 13.69C11.68 13.60 12.27 13.30 12.73 12.85L18.67 6.91C19.11 6.47 19.11 5.76 18.67 5.32ZM11 3.99C11.00 4.55 10.55 4.99 10.00 5.00C9.00 5.00 8.29 5.00 7.74 5.06C7.20 5.11 6.88 5.20 6.63 5.32C6.07 5.61 5.61 6.07 5.32 6.63C5.19 6.90 5.10 7.24 5.05 7.85C5.00 8.47 5 9.26 5 10.4V13.6C5 14.73 5.00 15.52 5.05 16.14C5.10 16.75 5.19 17.09 5.32 17.36C5.61 17.92 6.07 18.38 6.63 18.67C6.90 18.80 7.24 18.89 7.85 18.94C8.47 18.99 9.26 19 10.4 19H13.6C14.73 19 15.52 18.99 16.14 18.94C16.75 18.89 17.09 18.80 17.36 18.67C17.92 18.38 18.38 17.92 18.67 17.36C18.79 17.11 18.88 16.79 18.93 16.25C18.99 15.70 18.99 14.99 18.99 13.99C19.00 13.44 19.44 12.99 20.00 13C20.55 13.00 21.00 13.44 20.99 14.00C20.99 14.97 20.99 15.78 20.93 16.44C20.86 17.11 20.73 17.71 20.45 18.26C19.97 19.21 19.21 19.97 18.27 20.45C17.67 20.75 17.03 20.88 16.30 20.94C15.60 21 14.72 21 13.64 21H10.35C9.27 21 8.39 21 7.69 20.94C6.96 20.88 6.32 20.75 5.73 20.45C4.78 19.97 4.02 19.21 3.54 18.26C3.24 17.67 3.11 17.03 3.05 16.30C2.99 15.60 2.99 14.72 3 13.64V10.35C2.99 9.27 2.99 8.39 3.05 7.69C3.11 6.96 3.24 6.32 3.54 5.73C4.02 4.78 4.78 4.02 5.73 3.54C6.28 3.26 6.88 3.13 7.55 3.06C8.21 3.00 9.02 3.00 9.99 3.00C10.55 2.99 10.99 3.44 11 3.99Z" fill="currentColor"/></svg><span>New chat</span><kbd data-keys="shift+o" aria-hidden="true">Ctrl Shift O</kbd></button>
       <label class="nav-item" id="searchRow"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"><kbd data-keys="k" aria-hidden="true">Ctrl K</kbd></label>
       <a class="nav-item" id="imagesNav" href="https://chatgpt.com/images" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7.5" y="3.5" width="13" height="13" rx="3"/><path d="M16.5 20.5H7a3.5 3.5 0 0 1-3.5-3.5V7.5"/><path d="m8.5 14 3.2-3.2a1.5 1.5 0 0 1 2.1 0L19.5 16"/><circle cx="16" cy="7.5" r="1.3"/></svg><span>Images</span></a>
+      <button class="nav-item" id="screenNav" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12.5" rx="2.5"/><path d="M8.5 20.5h7M12 16.5v4"/></svg><span>Remote</span></button>
     </div>
     <div class="history-label">Recents</div>
     <nav class="history" id="history"></nav>
@@ -861,6 +886,23 @@ svg{display:block;flex:none}
         <nav class="fb-places" id="fbPlaces" aria-label="Places"></nav>
         <div class="fb-side"><div class="fb-list" id="fbList" role="list" aria-label="Files"></div><div class="fb-foot" id="fbFoot"></div></div>
         <section class="fb-view" id="fbView" aria-label="Preview"><div class="fb-vhead" id="fbVHead"></div><div class="fb-vbody" id="fbVBody"></div></section>
+      </div>
+    </div>
+    <div class="screen" id="screen" hidden role="region" aria-labelledby="scTitle">
+      <div class="sc-head">
+        <h2 id="scTitle">Remote</h2>
+        <span class="sc-status" id="scStatus" aria-live="polite"></span>
+        <button class="icon-btn" id="scHelpBtn" type="button" title="How Remote works" aria-label="How Remote works" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.85.85c0 1.65-2.45 2.2-2.45 3.6M12 17h.01"/></svg></button>
+        <button class="icon-btn" id="scKeys" type="button" title="Keyboard" aria-label="Type on your computer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg></button>
+        <button class="icon-btn" id="scFull" type="button" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg></button>
+        <button class="icon-btn" id="scClose" type="button" title="Back to the chat" aria-label="Close Remote"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
+      </div>
+      <div class="sc-stage" id="scStage">
+        <img id="scImg" alt="Your computer's screen" draggable="false" hidden>
+        <div class="sc-msg" id="scMsg"></div>
+        <div class="sc-err" id="scErr" hidden></div>
+        <div class="sc-help" id="scHelp" hidden></div>
+        <textarea class="sc-type" id="scType" aria-label="Keys you press go to your computer" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
       </div>
     </div>
     <section class="thread" id="thread"><div class="thread-inner" id="threadInner"></div></section>
@@ -1905,6 +1947,7 @@ async function openChat(id, push) {
   stopPolling();
   if (S.live && S.busy) return toast("Wait for this reply to finish, or stop it first.");
   closeFiles(false);
+  closeScreen();
   const switching = S.chatId !== id;
   if (switching) saveDraft();
   let j;
@@ -1973,6 +2016,7 @@ function newChat(push) {
   stopPolling();
   if (S.busy) return toast("Wait for this reply to finish, or stop it first.");
   closeFiles(false);
+  closeScreen();
   const switching = S.chatId !== null;
   if (switching) saveDraft();
   S.chatId = null;
@@ -2609,6 +2653,8 @@ function placeOf(id) { return F.places.find(p => p.id === id) || null; }
 // The Chat | Files switch at the top: one switch for both, so it never moves.
 function setView(v) {
   $("main").classList.toggle("files-open", v === "files");
+  $("main").classList.toggle("screen-open", v === "screen");
+  $("screenNav").classList.toggle("on", v === "screen");
   for (const b of document.querySelectorAll(".top [data-view]")) {
     b.classList.toggle("on", b.dataset.view === v);
     b.setAttribute("aria-selected", b.dataset.view === v);
@@ -2616,6 +2662,7 @@ function setView(v) {
 }
 
 function openFiles(path, pick, from, root) {
+  closeScreen();
   if (!F.open) F.back = document.activeElement;
   F.open = true;
   F.from = from || "";
@@ -2973,13 +3020,293 @@ $("search").addEventListener("blur", () => { if (!$("search").value) $("side").c
 // the file browser, from the sidebar and from the switch at the top: where it was left
 function showFiles() { $("app").classList.remove("side-open"); if (!F.open) openFiles(F.path, undefined, "", F.root); }
 document.querySelector('.top [data-view="files"]').onclick = showFiles;
-document.querySelector('.top [data-view="chat"]').onclick = () => closeFiles(false);
+document.querySelector('.top [data-view="chat"]').onclick = () => { closeScreen(); closeFiles(false); };
 if (store.get("collapsed", false)) $("app").classList.add("side-collapsed");
 
 document.title = tabName();
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadState(); loadChats(); } });
 setInterval(() => { if (!document.hidden) loadState(); }, 20000);
+
+/* ---------- Remote: the computer's screen, and its mouse and keyboard from here ----------
+   One picture of the screen at a time, asked for as soon as the last one is in, while Remote is open and the page is seen.
+   What you do over it is queued and sent in order, one request at a time; positions are fractions of the picture. */
+const D = { open: false, seq: 0, url: "", note: null, os: "", times: [], queue: [], sending: false, err: "", inputErr: "", kick: null, drag: -1, moveAt: 0, wheel: 0, touch: null, tap: null, help: false };
+function screenWait(ms) { return new Promise(r => { const t = setTimeout(r, ms); D.kick = () => { clearTimeout(t); r(); }; }); }
+async function openScreen() {
+  if (D.open || (F.open && !(await closeFiles(false)))) return;
+  D.open = true;
+  D.err = "";
+  $("screen").hidden = false;
+  setView("screen");
+  $("app").classList.remove("side-open");
+  renderScreen();
+  screenLoop();
+}
+function closeScreen() {
+  if (!D.open) return;
+  D.open = false;
+  D.seq++;
+  if (document.fullscreenElement === $("screen")) document.exitFullscreen().catch(() => {});
+  $("screen").hidden = true;
+  $("scImg").hidden = true;
+  if (D.url) URL.revokeObjectURL(D.url);
+  D.url = "";
+  D.queue = [];
+  setView("chat");
+}
+// what the view says when there's no picture: why not, and what to do about it
+function screenNote() {
+  const a = S.state && S.state.agent;
+  if (!a || !a.online) return `<h3>${esc(CFG.name)} is offline</h3><p>Start it on your computer to see its screen here.</p>`;
+  if (!a.screen) return `<h3>Update ${esc(CFG.name)} first</h3><p>The program on your computer is from before Remote. Update it, then come back here.</p>`;
+  if (!(a.computer && a.computer.screen)) return `<h3>Use your computer from here</h3><p>Remote shows your computer's screen on this page, and lets you use its mouse and keyboard from any device you're signed in on.</p><p class="fine">On a Mac, the Mac asks once to allow Screen Recording and Accessibility for node. Answer on the Mac itself, then come back here.</p><button class="btn primary" type="button" data-sc="on"${PC.busy === "screen" ? " disabled" : ""}>${PC.busy === "screen" ? "Turning on…" : "Turn on Remote"}</button>`;
+  if (D.err) return `<h3>The screen can't be shown</h3><p>${esc(D.err)}</p>`;
+  return `<div class="wait" style="margin:0;justify-content:center"><span class="spin"></span><span>Connecting to your computer…</span></div>`;
+}
+function renderScreen() {
+  if (!D.open) return;
+  const shown = !$("scImg").hidden;
+  const now = Date.now();
+  D.times = D.times.filter(t => now - t < 3000);
+  const fps = D.times.length / 3;
+  const focus = document.activeElement === $("scType");
+  $("scStatus").innerHTML = shown ? `<b>Live</b>${fps < 0.5 ? " · slow connection" : ""} · ${focus ? "keys go to your computer" : "click the screen to type on it"}` : "";
+  // only when it changes, so a button in it isn't replaced under the pointer
+  const note = shown ? "" : screenNote();
+  if (note !== D.note) $("scMsg").innerHTML = D.note = note;
+  $("scMsg").hidden = shown;
+  $("scErr").hidden = !D.inputErr;
+  $("scErr").textContent = D.inputErr;
+  $("scStage").classList.toggle("keys", focus);
+  $("scFull").hidden = !document.fullscreenEnabled;
+}
+async function screenLoop() {
+  const seq = ++D.seq;
+  while (D.open && seq === D.seq) {
+    const a = S.state && S.state.agent;
+    if (document.hidden || !a || !a.online || !a.screen || !(a.computer && a.computer.screen)) {
+      $("scImg").hidden = true;
+      renderScreen();
+      await screenWait(1000);
+      continue;
+    }
+    const started = Date.now();
+    try {
+      const w = Math.max(640, Math.min(2560, Math.round($("scStage").clientWidth * (devicePixelRatio || 1))));
+      const res = await api("/api/screen/frame", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ w, q: 60 }) });
+      if (seq !== D.seq) return;
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        D.err = j.error || `Something went wrong (${res.status}).`;
+        if (j.code === "off" && a.computer) a.computer.screen = false;
+        $("scImg").hidden = true;
+        renderScreen();
+        await screenWait(j.code === "off" ? 500 : 3000);
+        continue;
+      }
+      D.os = res.headers.get("x-screen-os") || D.os;
+      const url = URL.createObjectURL(await res.blob());
+      const img = $("scImg");
+      await new Promise(r => { img.onload = img.onerror = r; img.src = url; });
+      if (D.url) URL.revokeObjectURL(D.url);
+      D.url = url;
+      if (seq !== D.seq) return;
+      D.err = "";
+      img.hidden = false;
+      fitScreen();
+      D.times.push(Date.now());
+      renderScreen();
+    } catch (e) {
+      if (e.message === "Signed out") return;
+      D.err = e.message;
+      renderScreen();
+      await screenWait(3000);
+      continue;
+    }
+    // at most about six a second
+    const spent = Date.now() - started;
+    if (spent < 160) await screenWait(160 - spent);
+  }
+}
+
+// the picture as large as the space allows, larger or smaller than it came, keeping its shape
+function fitScreen() {
+  const img = $("scImg");
+  const st = $("scStage");
+  if (img.hidden || !img.naturalWidth) return;
+  const cs = getComputedStyle(st);
+  const k = Math.min((st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) / img.naturalWidth, (st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)) / img.naturalHeight);
+  if (!(k > 0)) return;
+  img.style.width = Math.floor(img.naturalWidth * k) + "px";
+  img.style.height = Math.floor(img.naturalHeight * k) + "px";
+}
+new ResizeObserver(fitScreen).observe($("scStage"));
+
+// ---- what's done over the picture
+function scAt(e) {
+  const r = $("scImg").getBoundingClientRect();
+  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+}
+// Cmd on a Mac is Ctrl elsewhere: the shortcut you'd press here does the same over there
+function scMods(e) {
+  const mine = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const theirs = D.os === "darwin";
+  const out = [];
+  if (e.ctrlKey) out.push(!mine && theirs ? "meta" : "ctrl");
+  if (e.metaKey) out.push(mine && !theirs ? "ctrl" : "meta");
+  if (e.altKey) out.push("alt");
+  if (e.shiftKey) out.push("shift");
+  return [...new Set(out)];
+}
+function scSend(ev) {
+  const q = D.queue;
+  const last = q[q.length - 1];
+  if (ev.t === "move" && last && last.t === "move") q[q.length - 1] = ev;
+  else if (ev.t === "text" && last && last.t === "text" && !D.sending) last.s += ev.s;
+  else if (ev.t === "scroll" && last && last.t === "scroll") { last.dy += ev.dy; last.dx += ev.dx; }
+  else q.push(ev);
+  if (q.length > 400) q.splice(0, q.length - 400);
+  scFlush();
+}
+async function scFlush() {
+  if (D.sending || !D.queue.length || !D.open) return;
+  D.sending = true;
+  const events = D.queue.splice(0, 200);
+  try {
+    await apiJson("/api/screen/input", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ events }) });
+    if (D.inputErr) { D.inputErr = ""; renderScreen(); }
+  } catch (e) {
+    if (e.message !== "Signed out") { D.inputErr = e.message; renderScreen(); }
+  }
+  D.sending = false;
+  // the next picture sooner, so what was done shows
+  if (D.kick) D.kick();
+  if (D.queue.length) scFlush();
+}
+const SC_KEYS = { Enter: "Enter", Tab: "Tab", Backspace: "Backspace", Escape: "Escape", Delete: "Delete", Home: "Home", End: "End", PageUp: "PageUp", PageDown: "PageDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", Insert: "Insert", F1: "F1", F2: "F2", F3: "F3", F4: "F4", F5: "F5", F6: "F6", F7: "F7", F8: "F8", F9: "F9", F10: "F10", F11: "F11", F12: "F12" };
+const scImg = $("scImg");
+scImg.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  if (e.pointerType === "touch") {
+    // a tap clicks, a long press right-clicks, and a finger moved scrolls
+    const at = scAt(e);
+    D.touch = { id: e.pointerId, x: e.clientX, y: e.clientY, at, moved: false, long: false };
+    D.touch.timer = setTimeout(() => {
+      if (!D.touch || D.touch.moved) return;
+      D.touch.long = true;
+      scSend({ t: "down", ...at, b: 2, n: 1 });
+      scSend({ t: "up", ...at, b: 2, n: 1 });
+    }, 550);
+    return;
+  }
+  $("scType").focus({ preventScroll: true });
+  try { scImg.setPointerCapture(e.pointerId); } catch {}
+  D.drag = e.button;
+  scSend({ t: "down", ...scAt(e), b: e.button, n: Math.max(1, e.detail || 1) });
+});
+scImg.addEventListener("pointermove", e => {
+  if (e.pointerType === "touch") {
+    const t = D.touch;
+    if (!t || t.id !== e.pointerId) return;
+    const dy = e.clientY - t.y;
+    const dx = e.clientX - t.x;
+    if (!t.moved && Math.hypot(dx, dy) < 10) return;
+    t.moved = true;
+    clearTimeout(t.timer);
+    const lines = { dy: Math.trunc(-dy / 24), dx: Math.trunc(-dx / 24) };
+    if (lines.dy || lines.dx) {
+      scSend({ t: "scroll", ...t.at, ...lines });
+      t.y -= -lines.dy * 24;
+      t.x -= -lines.dx * 24;
+    }
+    return;
+  }
+  const now = Date.now();
+  if (now - D.moveAt < (D.drag >= 0 ? 30 : 70)) return;
+  D.moveAt = now;
+  scSend({ t: "move", ...scAt(e) });
+});
+scImg.addEventListener("pointerup", e => {
+  if (e.pointerType === "touch") {
+    const t = D.touch;
+    D.touch = null;
+    if (!t || t.id !== e.pointerId) return;
+    clearTimeout(t.timer);
+    if (t.moved || t.long) return;
+    // two taps close together are a double click
+    const now = Date.now();
+    const n = D.tap && now - D.tap.at < 400 && Math.hypot(t.x - D.tap.x, t.y - D.tap.y) < 30 ? 2 : 1;
+    D.tap = n === 1 ? { at: now, x: t.x, y: t.y } : null;
+    scSend({ t: "down", ...t.at, b: 0, n });
+    scSend({ t: "up", ...t.at, b: 0, n });
+    return;
+  }
+  D.drag = -1;
+  scSend({ t: "up", ...scAt(e), b: e.button, n: Math.max(1, e.detail || 1) });
+});
+scImg.addEventListener("pointercancel", () => { if (D.touch) clearTimeout(D.touch.timer); D.touch = null; });
+scImg.addEventListener("contextmenu", e => e.preventDefault());
+$("scStage").addEventListener("wheel", e => {
+  if ($("scImg").hidden) return;
+  e.preventDefault();
+  D.wheel += e.deltaMode === 1 ? e.deltaY : e.deltaY / 40;
+  D.wheelX = (D.wheelX || 0) + (e.deltaMode === 1 ? e.deltaX : e.deltaX / 40);
+  const dy = Math.trunc(D.wheel);
+  const dx = Math.trunc(D.wheelX);
+  if (!dy && !dx) return;
+  D.wheel -= dy;
+  D.wheelX -= dx;
+  scSend({ t: "scroll", ...scAt(e), dy, dx });
+}, { passive: false });
+// The keys: a hidden box that has the focus while you use the screen. Keys with a meaning (Enter, arrows, shortcuts) go as
+// keys; letters as text. A phone's keyboard types into the box, and that text goes over.
+const scType = $("scType");
+scType.addEventListener("keydown", e => {
+  e.stopPropagation();
+  if (e.isComposing || e.keyCode === 229) return;
+  const mods = scMods(e);
+  const named = SC_KEYS[e.key] || (e.key === " " && mods.some(m => m !== "shift") ? "Space" : "");
+  if (named) {
+    e.preventDefault();
+    return scSend({ t: "key", k: named, mods });
+  }
+  if (e.key.length !== 1) return;
+  e.preventDefault();
+  if (mods.some(m => m === "ctrl" || m === "meta")) {
+    const base = (/^Key([A-Z])$/.exec(e.code) || [])[1] || (/^Digit(\d)$/.exec(e.code) || [])[1] || e.key;
+    scSend({ t: "key", k: base.toLowerCase(), mods });
+  } else scSend({ t: "text", s: e.key });
+});
+scType.addEventListener("beforeinput", e => {
+  if (e.inputType === "deleteContentBackward") { e.preventDefault(); scSend({ t: "key", k: "Backspace", mods: [] }); }
+  else if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") { e.preventDefault(); scSend({ t: "key", k: "Enter", mods: [] }); }
+});
+const scTyped = () => { if (scType.value) { scSend({ t: "text", s: scType.value }); scType.value = ""; } };
+scType.addEventListener("input", e => { if (!e.isComposing) scTyped(); });
+scType.addEventListener("compositionend", scTyped);
+scType.addEventListener("focus", renderScreen);
+scType.addEventListener("blur", renderScreen);
+$("screenNav").onclick = openScreen;
+$("scClose").onclick = closeScreen;
+$("scKeys").onclick = () => scType.focus();
+$("scFull").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : $("screen").requestFullscreen()).catch(() => {});
+$("scHelpBtn").onclick = () => {
+  D.help = !D.help;
+  $("scHelpBtn").setAttribute("aria-expanded", D.help);
+  $("scHelp").hidden = !D.help;
+  $("scHelp").innerHTML = `<h3>Using Remote</h3><ul><li>Click, double-click, right-click, drag and scroll over the picture as you would on the computer.</li><li>Once you've clicked the picture, the keys you press go to the computer (it has a blue outline). On a phone: tap to click, hold to right-click, slide to scroll, and the keyboard button to type.</li><li>Your shortcuts carry over: ${/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl"} works as Ctrl on Windows and Linux, and as ⌘ on a Mac.</li><li>On a Mac, seeing only the desktop picture means Screen Recording isn't allowed yet, and clicks doing nothing means Accessibility isn't: on the Mac, System Settings → Privacy &amp; Security, and turn on node in both.</li><li>A Mac with its lid closed has no screen to show unless another display is connected. A locked screen can be seen, but it can't be unlocked from here.</li><li>Remote can be turned off in Settings → General → This computer.</li></ul>`;
+};
+$("scMsg").addEventListener("click", async e => {
+  if (!e.target.closest('[data-sc="on"]')) return;
+  const turning = setComputer("screen", true);
+  renderScreen();
+  await turning;
+  if (PC.err) toast(PC.err);
+  D.err = "";
+  renderScreen();
+  if (D.kick) D.kick();
+});
 
 /* ---------- account menu and theme ---------- */
 const THEMES = [["system", "System", I.monitor], ["light", "Light", I.sun], ["dark", "Dark", I.moon]];
@@ -3463,8 +3790,9 @@ function computerHtml() {
   const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
   // only from a program that knows it (2.10.0 and newer); a Mac asks for its password on its own screen to change it
   const awake = c && typeof c.awake === "boolean" ? `<div class="switch"><div class="t"><span>Keep running with the lid closed</span><small>Your computer stays awake, even with its lid closed, so ${esc(CFG.name)} keeps answering. It uses more battery. A Mac asks for its password on its own screen to change this.${PC.busy === "awake" ? ' <b class="ok-text">Waiting for your computer…</b>' : ""}</small></div><button type="button" class="toggle" role="switch" data-pc="awake" aria-checked="${!!c.awake}" aria-label="Keep running with the lid closed"${off}${PC.busy === "awake" ? " disabled" : ""}></button></div>` : "";
+  const screen = c && typeof c.screen === "boolean" ? `<div class="switch"><div class="t"><span>Remote</span><small>Shows this computer's screen in Remote, in the sidebar, and lets you use its mouse and keyboard from there.</small></div><button type="button" class="toggle" role="switch" data-pc="screen" aria-checked="${!!c.screen}" aria-label="Remote"${off}${PC.busy === "screen" ? " disabled" : ""}></button></div>` : "";
   const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>Where ${esc(CFG.name)} works and where files you attach go. Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
-  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${awake}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
+  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${awake}${screen}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
 }
 // The switch moves at once; if the computer says no, it moves back and says why.
 async function setComputer(key, value) {

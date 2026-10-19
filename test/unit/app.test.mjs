@@ -102,7 +102,7 @@ test("the message box is one row like ChatGPT's: + on the left, the model and pe
   assert.match(html, /\.msg \.think\{/);
   // everything runs as Claude Code: there's nothing to switch between
   assert.doesNotMatch(html, /data-mode=|id="modes"|MODE_NAME|modeNow|Plain chat with Claude/);
-  assert.doesNotMatch(html, /record|dictat|microphone|id="mic/i);
+  assert.doesNotMatch(html, /(?<!Screen )record|dictat|microphone|id="mic/i);
   // what is sent says which permission mode it is, and no mode
   assert.match(script, /JSON\.stringify\(\{ chatId: S\.chatId, text, model, effort, perm: permNow\(\), files:/);
   // the permission modes are ones Claude Code can run on its own, and "Ask first", which asks on this page

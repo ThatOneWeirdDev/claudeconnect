@@ -65,6 +65,24 @@ The **Chat | Files** switch at the top of the page opens the **file browser** in
 
 **Images**, under **New chat** in the sidebar, opens ChatGPT's Images page (chatgpt.com/images) in a new tab.
 
+### Remote
+
+**Remote**, in the sidebar, shows your computer's screen in place of the chat, and lets you use its mouse and keyboard from wherever you've opened the site, a phone included. It's off until you turn it on: there's a **Turn on Remote** button on the Remote page, and a **Remote** switch in **Settings → General → This computer**.
+
+- **Using it:**
+  - Click, double-click, right-click, drag and scroll over the picture as you would on the computer.
+  - Once you've clicked it (it gets a blue outline), the keys you press go to the computer. Your shortcuts carry over: ⌘ on a Mac works as Ctrl on Windows and Linux, and the other way round.
+  - On a phone: tap to click, hold to right-click, slide a finger to scroll, and the keyboard button to type.
+  - The full-screen button gives the screen the whole page, and **?** says all this on the page.
+- **How it works:** the page asks for one picture of the screen at a time (a JPEG sized to fit), as soon as the last one has arrived, so it's a few pictures a second rather than video. What you do over it is sent in order, with positions as fractions of the picture. It all goes through your own site, only to you, and only while the Remote page is open. Your computer notes in its log when its screen starts being shown.
+- **Mac:**
+  - The first time, the Mac asks to allow **Screen Recording** and **Accessibility** for `node` (the program that runs your site there). That has to be answered on the Mac itself.
+  - Seeing only the desktop picture means Screen Recording isn't allowed yet. Clicks doing nothing means Accessibility isn't. Turn on `node` for both in **System Settings → Privacy & Security**.
+  - A Mac with its **lid closed** has no screen to show unless another display is connected.
+  - A locked screen can be seen, but macOS doesn't let anything type the password into it from elsewhere.
+- **Windows:** works as it is. Windows' locked screen and administrator prompts can't be shown.
+- **Linux:** an X11 desktop, with ImageMagick (or ffmpeg) to show the screen and `xdotool` to use it. Wayland isn't supported.
+
 ### Under the message box
 
 | Control | What it does |
@@ -120,6 +138,17 @@ Your site answers through Claude Code on your computer, so it only works while t
 
 From the site, the switch waits for your computer to answer: on a Mac, the password has to be typed on the Mac itself.
 
+### Staying up
+
+The program on your computer runs under a small watcher that starts it again whenever it stops without being asked to:
+- **A crash:** what went wrong goes in the log (`<command> logs`).
+- **The computer ending it** (out of memory, say).
+- **No sign of life** for three minutes while the computer was awake.
+
+A restart takes a second, and longer while it keeps failing straight away (up to 30 seconds). It reconnects on its own, and a reply that was running when it stopped is marked as stopped. `<command> stop` ends both the program and the watcher.
+
+On a Mac, the login item (**Start when you log in**) also has macOS start the watcher again if it ever ends unexpectedly; a login item made by an older version picks this up at the next login. When the computer has been asleep, the log says for how long, so a gap in the replies can be told from a crash.
+
 ### If the site is locked
 
 A site that isn't behind Cloudflare Access is closed to **everyone**, including you. The locked page has an **I'm the owner** button that shows what to do: in the Cloudflare dashboard open your Worker, then **Settings** → **Domains & Routes** → **workers.dev** → **Enable Cloudflare Access**, and allow only your own email. A visitor from any other account can sign in to Access and still not get in: the site stays closed unless the sign-in is the one that claimed it.
@@ -158,6 +187,8 @@ An older version kept the command it was set up with through renames. Updating r
 | `agent/files.mjs` | The file browser on your computer: lists the working folder, reads a file a piece at a time, and refuses anything outside the working folder. |
 | `agent/trash.mjs` | Moves a file or folder to the system's Trash: `~/.Trash` on macOS, the Recycle Bin on Windows, and the freedesktop.org Trash (with the note that lets a file manager put it back) on Linux. |
 | `agent/limits.mjs` | Reads the limit resets on your Claude account. |
+| `agent/keepalive.mjs` | The watcher that starts the program again after a crash or a hang. |
+| `agent/screen.mjs` | Remote: pictures of the screen, and the mouse and keyboard, on macOS, Windows and Linux. |
 | `agent/permit.mjs` | The small MCP server Claude Code asks through for **Ask first**, which passes each question to the site. |
 | `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
 | `site/app.html` | The web app. Its layout and colours follow ChatGPT's page as it is now: black (or white) for the page and the sidebar, the site's name as a wordmark, **Recents**, the **Chat \| Files** switch at the top, a `#1b1b1b` message box with ChatGPT's blue button, and a teal avatar. |

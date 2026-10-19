@@ -1,0 +1,526 @@
+// Remote: this computer's screen on the site, and its mouse and keyboard from there. The page asks for one picture of the
+// screen at a time (a JPEG, scaled down), and sends what you do over it: where the mouse goes, its buttons, the wheel, keys
+// and typed text, with positions as fractions of the picture (0 to 1) so they fit whatever size it's shown at.
+//
+// - macOS: `screencapture` takes the picture and `sips` scales it; the mouse is driven with CoreGraphics events and the
+//   keyboard through System Events, both from one small JavaScript-for-Automation helper that stays running while Remote is
+//   in use. macOS asks once to allow Screen Recording and Accessibility (for node, the program running this). A Mac with its
+//   lid closed and no other display has no screen to show.
+// - Windows: one PowerShell helper takes the pictures and moves the mouse and types (System.Drawing and user32).
+// - Linux: X11 only. ImageMagick's `import` (or ffmpeg) takes the pictures, and xdotool, when it's installed, does the rest.
+//
+// CLAUDECONNECT_SCREEN=fake:<file.jpg> shows that picture instead, and writes what's done to screen-input.jsonl (for tests).
+import { spawn as nodeSpawn } from "node:child_process";
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, unlinkSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import os from "node:os";
+
+export class ScreenError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// The width and height a JPEG says it is, from its frame header.
+export function jpegSize(b) {
+  if (!b || b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 8 < b.length) {
+    if (b[i] !== 0xff) return null;
+    const m = b[i + 1];
+    if (m === 0xff) {
+      i++;
+      continue;
+    }
+    if (m === 0x01 || (m >= 0xd0 && m <= 0xd7)) {
+      i += 2;
+      continue;
+    }
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
+// What the page sends, checked and cleaned: anything else is dropped.
+const KEYS = new Set(["Enter", "Tab", "Backspace", "Escape", "Delete", "Home", "End", "PageUp", "PageDown", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Insert", ...Array.from({ length: 12 }, (_, i) => "F" + (i + 1))]);
+const MODS = ["ctrl", "alt", "shift", "meta"];
+export function cleanEvents(list) {
+  const out = [];
+  const frac = v => (typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null);
+  for (const e of Array.isArray(list) ? list.slice(0, 200) : []) {
+    if (!e || typeof e !== "object") continue;
+    const mods = Array.isArray(e.mods) ? MODS.filter(m => e.mods.includes(m)) : [];
+    if (e.t === "move" || e.t === "down" || e.t === "up") {
+      const x = frac(e.x);
+      const y = frac(e.y);
+      if (x === null || y === null) continue;
+      const ev = { t: e.t, x, y };
+      if (e.t !== "move") {
+        ev.b = e.b === 2 ? 2 : e.b === 1 ? 1 : 0;
+        ev.n = Math.min(3, Math.max(1, Math.round(Number(e.n)) || 1));
+      }
+      out.push(ev);
+    } else if (e.t === "scroll") {
+      const x = frac(e.x);
+      const y = frac(e.y);
+      const dy = Math.max(-50, Math.min(50, Math.round(Number(e.dy)) || 0));
+      const dx = Math.max(-50, Math.min(50, Math.round(Number(e.dx)) || 0));
+      if (x === null || y === null || (!dy && !dx)) continue;
+      out.push({ t: "scroll", x, y, dy, dx });
+    } else if (e.t === "text" && typeof e.s === "string" && e.s) {
+      out.push({ t: "text", s: e.s.replace(/\r\n?/g, "\n").slice(0, 2000) });
+    } else if (e.t === "key" && typeof e.k === "string" && (KEYS.has(e.k) || /^[a-z0-9]$/i.test(e.k) || /^[-=[\];',./`\\]$/.test(e.k))) {
+      out.push({ t: "key", k: e.k.length === 1 ? e.k.toLowerCase() : e.k, mods });
+    }
+  }
+  return out;
+}
+
+// ---- macOS
+const MAC_KEYCODES = { Enter: 36, Tab: 48, Space: 49, Backspace: 51, Escape: 53, Delete: 117, Home: 115, End: 119, PageUp: 116, PageDown: 121, ArrowLeft: 123, ArrowRight: 124, ArrowDown: 125, ArrowUp: 126, Insert: 114, F1: 122, F2: 120, F3: 99, F4: 118, F5: 96, F6: 97, F7: 98, F8: 100, F9: 101, F10: 109, F11: 103, F12: 111 };
+// The helper: reads one JSON message a line from its input (ASCII only: the program escapes the rest), and answers each
+// with a line of JSON. Mouse positions come in as fractions and are placed on the main display, in points.
+const MAC_HELPER = String.raw`
+ObjC.import("Cocoa");
+ObjC.import("CoreGraphics");
+try { ObjC.import("ApplicationServices"); } catch (e) {}
+const KEYCODES = __KEYCODES__;
+const out = $.NSFileHandle.fileHandleWithStandardOutput;
+function say(o) { out.writeData($(JSON.stringify(o) + "\n").dataUsingEncoding($.NSUTF8StringEncoding)); }
+// the display with the menu bar, which is the one screencapture -m takes
+function size() { const f = $.NSScreen.screens.objectAtIndex(0).frame; return { w: f.size.width, h: f.size.height }; }
+function trusted(prompt) {
+  try { return prompt ? !!$.AXIsProcessTrustedWithOptions($({ AXTrustedCheckOptionPrompt: true })) : !!$.AXIsProcessTrusted(); } catch (e) { return null; }
+}
+function canRecord(prompt) {
+  try { return prompt ? !!$.CGRequestScreenCaptureAccess() : !!$.CGPreflightScreenCaptureAccess(); } catch (e) { return null; }
+}
+const held = { 0: false, 1: false, 2: false };
+function mouse(type, x, y, button, clicks) {
+  const e = $.CGEventCreateMouseEvent(null, type, $.CGPointMake(x, y), button);
+  if (clicks) $.CGEventSetIntegerValueField(e, 1, clicks);
+  $.CGEventPost(0, e);
+}
+const DOWN = { 0: 1, 1: 25, 2: 3 }, UP = { 0: 2, 1: 26, 2: 4 }, DRAG = { 0: 6, 1: 27, 2: 7 }, BUTTON = { 0: 0, 1: 2, 2: 1 };
+function using(mods) {
+  const u = [];
+  for (const [m, w] of [["meta", "command down"], ["ctrl", "control down"], ["alt", "option down"], ["shift", "shift down"]]) if (mods.indexOf(m) >= 0) u.push(w);
+  return u;
+}
+function apply(ev, se) {
+  const s = size();
+  const x = ev.x * s.w, y = ev.y * s.h;
+  if (ev.t === "move") {
+    const b = held[0] ? 0 : held[2] ? 2 : held[1] ? 1 : -1;
+    mouse(b < 0 ? 5 : DRAG[b], x, y, b < 0 ? 0 : BUTTON[b], 0);
+  } else if (ev.t === "down") {
+    held[ev.b] = true;
+    mouse(DOWN[ev.b], x, y, BUTTON[ev.b], ev.n);
+  } else if (ev.t === "up") {
+    held[ev.b] = false;
+    mouse(UP[ev.b], x, y, BUTTON[ev.b], ev.n);
+  } else if (ev.t === "scroll") {
+    mouse(5, x, y, 0, 0);
+    let e;
+    if (typeof $.CGEventCreateScrollWheelEvent2 === "function") e = $.CGEventCreateScrollWheelEvent2(null, 1, 2, -ev.dy, -ev.dx, 0);
+    else {
+      e = $.CGEventCreate(null);
+      $.CGEventSetType(e, 22);
+      $.CGEventSetIntegerValueField(e, 11, -ev.dy);
+      $.CGEventSetIntegerValueField(e, 12, -ev.dx);
+    }
+    $.CGEventPost(0, e);
+  } else if (ev.t === "text") {
+    const parts = ev.s.split("\n");
+    parts.forEach((p, i) => {
+      if (p) se.keystroke(p);
+      if (i < parts.length - 1) se.keyCode(36);
+    });
+  } else if (ev.t === "key") {
+    const code = KEYCODES[ev.k];
+    const opts = { using: using(ev.mods) };
+    if (code !== undefined) se.keyCode(code, opts);
+    else se.keystroke(ev.k, opts);
+  }
+}
+function run() {
+  const se = Application("System Events");
+  say({ ready: true, view: canRecord(false), control: trusted(false) });
+  const input = $.NSFileHandle.fileHandleWithStandardInput;
+  let buf = "";
+  for (;;) {
+    const data = input.availableData;
+    if (data.length === 0) break;
+    buf += $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i);
+      buf = buf.slice(i + 1);
+      let m = null;
+      try {
+        m = JSON.parse(line);
+        if (m.t === "ask") say({ id: m.id, view: canRecord(true), control: trusted(true) });
+        else if (m.t === "check") say({ id: m.id, view: canRecord(false), control: trusted(false) });
+        else {
+          for (const ev of m.events) apply(ev, se);
+          say({ id: m.id, ok: true });
+        }
+      } catch (e) {
+        say({ id: m && m.id, error: String(e && e.message || e) });
+      }
+    }
+  }
+}
+`;
+
+// ---- Windows
+const WIN_SENDKEYS = { Enter: "{ENTER}", Tab: "{TAB}", Backspace: "{BACKSPACE}", Escape: "{ESC}", Delete: "{DELETE}", Home: "{HOME}", End: "{END}", PageUp: "{PGUP}", PageDown: "{PGDN}", ArrowLeft: "{LEFT}", ArrowRight: "{RIGHT}", ArrowUp: "{UP}", ArrowDown: "{DOWN}", Space: " ", Insert: "{INSERT}", ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => ["F" + (i + 1), `{F${i + 1}}`])) };
+const WIN_HELPER = String.raw`
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class CCScreen {
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, int dx, int dy, int data, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+}
+"@
+[CCScreen]::SetProcessDPIAware() | Out-Null
+$codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq "image/jpeg" }
+function Say($s) { [Console]::Out.WriteLine($s); [Console]::Out.Flush() }
+$downs = @{ 0 = 0x0002; 1 = 0x0020; 2 = 0x0008 }
+$ups = @{ 0 = 0x0004; 1 = 0x0040; 2 = 0x0010 }
+Say '{"ready":true,"view":true,"control":true}'
+while ($true) {
+  $line = [Console]::In.ReadLine()
+  if ($null -eq $line) { break }
+  $m = $null
+  try {
+    $m = $line | ConvertFrom-Json
+    $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    if ($m.t -eq "frame") {
+      $shot = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+      $g = [System.Drawing.Graphics]::FromImage($shot)
+      $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $shot.Size)
+      $w = [Math]::Min([int]$m.w, $b.Width)
+      $h = [int][Math]::Round($b.Height * $w / $b.Width)
+      $small = New-Object System.Drawing.Bitmap $w, $h
+      $g2 = [System.Drawing.Graphics]::FromImage($small)
+      $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBilinear
+      $g2.DrawImage($shot, 0, 0, $w, $h)
+      $ms = New-Object System.IO.MemoryStream
+      $ep = New-Object System.Drawing.Imaging.EncoderParameters 1
+      $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ([long]$m.q)
+      $small.Save($ms, $codec, $ep)
+      $g.Dispose(); $g2.Dispose(); $shot.Dispose(); $small.Dispose()
+      Say ('{"id":' + $m.id + ',"jpeg":"' + [Convert]::ToBase64String($ms.ToArray()) + '"}')
+    } else {
+      foreach ($e in $m.events) {
+        $x = [int]($b.Left + $e.x * ($b.Width - 1)); $y = [int]($b.Top + $e.y * ($b.Height - 1))
+        if ($e.t -eq "move") { [CCScreen]::SetCursorPos($x, $y) | Out-Null }
+        elseif ($e.t -eq "down") { [CCScreen]::SetCursorPos($x, $y) | Out-Null; [CCScreen]::mouse_event($downs[[int]$e.b], 0, 0, 0, [UIntPtr]::Zero) }
+        elseif ($e.t -eq "up") { [CCScreen]::SetCursorPos($x, $y) | Out-Null; [CCScreen]::mouse_event($ups[[int]$e.b], 0, 0, 0, [UIntPtr]::Zero) }
+        elseif ($e.t -eq "scroll") {
+          [CCScreen]::SetCursorPos($x, $y) | Out-Null
+          if ($e.dy) { [CCScreen]::mouse_event(0x0800, 0, 0, -120 * [int]$e.dy, [UIntPtr]::Zero) }
+          if ($e.dx) { [CCScreen]::mouse_event(0x1000, 0, 0, 120 * [int]$e.dx, [UIntPtr]::Zero) }
+        }
+        elseif ($e.t -eq "keys") {
+          if ($e.win) { [CCScreen]::keybd_event(0x5B, 0, 0, [UIntPtr]::Zero) }
+          [System.Windows.Forms.SendKeys]::SendWait($e.s)
+          if ($e.win) { [CCScreen]::keybd_event(0x5B, 0, 2, [UIntPtr]::Zero) }
+        }
+      }
+      Say ('{"id":' + $m.id + ',"ok":true}')
+    }
+  } catch {
+    $id = if ($m) { $m.id } else { 0 }
+    Say ('{"id":' + $id + ',"error":' + (ConvertTo-Json ([string]$_.Exception.Message)) + '}')
+  }
+}
+`;
+// SendKeys treats these as instructions, so typed they're put in braces
+const sendKeysText = s => s.replace(/[+^%~(){}[\]]/g, c => `{${c}}`).replace(/\n/g, "{ENTER}");
+function winKeys(ev) {
+  if (ev.t === "text") return { t: "keys", s: sendKeysText(ev.s) };
+  const prefix = (ev.mods.includes("ctrl") ? "^" : "") + (ev.mods.includes("alt") ? "%" : "") + (ev.mods.includes("shift") ? "+" : "");
+  const key = WIN_SENDKEYS[ev.k] || sendKeysText(ev.k);
+  return { t: "keys", s: prefix + (prefix && key.length > 1 && !key.startsWith("{") ? `(${key})` : key), win: ev.mods.includes("meta") };
+}
+
+// ---- Linux (X11)
+const X_KEYS = { Enter: "Return", Tab: "Tab", Backspace: "BackSpace", Escape: "Escape", Delete: "Delete", Home: "Home", End: "End", PageUp: "Prior", PageDown: "Next", ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down", Space: "space", Insert: "Insert", "-": "minus", "=": "equal", "[": "bracketleft", "]": "bracketright", ";": "semicolon", "'": "apostrophe", ",": "comma", ".": "period", "/": "slash", "`": "grave", "\\": "backslash" };
+const X_MODS = { ctrl: "ctrl", alt: "alt", shift: "shift", meta: "super" };
+
+// Runs a program and gives back what it printed, or throws with what it said went wrong.
+function run(spawn, cmd, args, { timeout = 15000, env, input } = {}) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(cmd, args, { env, windowsHide: true });
+    } catch (e) {
+      return reject(e);
+    }
+    const out = [];
+    let err = "";
+    const timer = setTimeout(() => child.kill("SIGKILL"), timeout);
+    child.stdout.on("data", d => out.push(d));
+    child.stderr.on("data", d => (err += d));
+    child.on("error", e => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on("close", code => {
+      clearTimeout(timer);
+      if (code === 0) resolve(Buffer.concat(out));
+      else reject(Object.assign(new Error(err.trim().slice(0, 300) || `${cmd} ended with code ${code}`), { code: "EXIT" }));
+    });
+    if (input !== undefined) child.stdin.end(input);
+  });
+}
+
+// A helper that stays running, answering one JSON line with another, matched by id.
+function lineHelper(spawn, cmd, args, { env, onEnd } = {}) {
+  const child = spawn(cmd, args, { env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  const waiting = new Map();
+  let ready;
+  const readyP = new Promise(r => (ready = r));
+  let buf = "";
+  let err = "";
+  let n = 0;
+  child.stdout.on("data", d => {
+    buf += d;
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      let m;
+      try {
+        m = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (m.ready) ready(m);
+      const w = waiting.get(m.id);
+      if (w) {
+        waiting.delete(m.id);
+        w(m);
+      }
+    }
+  });
+  child.stderr.on("data", d => (err = (err + d).slice(-2000)));
+  const end = () => {
+    ready(null);
+    for (const w of waiting.values()) w({ error: err.trim() || "The helper stopped." });
+    waiting.clear();
+    if (onEnd) onEnd();
+  };
+  child.on("error", end);
+  child.on("close", end);
+  return {
+    ready: readyP,
+    ask(msg, ms = 20000) {
+      const id = ++n;
+      return new Promise(resolve => {
+        const t = setTimeout(() => {
+          waiting.delete(id);
+          resolve({ error: "The helper didn't answer in time." });
+        }, ms);
+        waiting.set(id, m => {
+          clearTimeout(t);
+          resolve(m);
+        });
+        // ASCII only, so a character is never split between two reads
+        try {
+          child.stdin.write(JSON.stringify({ ...msg, id }).replace(/[\u007f-￿]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")) + "\n");
+        } catch {}
+      });
+    },
+    close() {
+      try {
+        child.stdin.end();
+      } catch {}
+      try {
+        child.kill();
+      } catch {}
+    }
+  };
+}
+
+export function makeScreen({ platform = process.platform, env = process.env, spawn = nodeSpawn, dir = os.tmpdir(), log = () => {} } = {}) {
+  const fake = /^fake:(.+)$/.exec(env.CLAUDECONNECT_SCREEN || "");
+  const tmp = join(os.tmpdir(), `claudeconnect-screen-${process.pid}`);
+  let helper = null;
+  let helperInfo = null;
+  let idle = null;
+  let awakeAt = 0;
+  let xSize = null;
+
+  // the helper starts when Remote is used, and stops after a minute without it
+  function touch() {
+    clearTimeout(idle);
+    idle = setTimeout(close, 60000);
+    idle.unref?.();
+  }
+  async function getHelper() {
+    touch();
+    if (helper) return helper;
+    mkdirSync(tmp, { recursive: true });
+    const ended = () => {
+      if (helper === h) helper = null;
+    };
+    let h;
+    if (platform === "darwin") {
+      const file = join(tmp, "helper.js");
+      writeFileSync(file, MAC_HELPER.replace("__KEYCODES__", JSON.stringify(MAC_KEYCODES)));
+      h = lineHelper(spawn, "osascript", ["-l", "JavaScript", file], { env, onEnd: ended });
+    } else if (platform === "win32") {
+      const file = join(tmp, "helper.ps1");
+      writeFileSync(file, WIN_HELPER);
+      h = lineHelper(spawn, "powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file], { env, onEnd: ended });
+    } else return null;
+    helper = h;
+    let slow;
+    helperInfo = await Promise.race([h.ready, new Promise(r => (slow = setTimeout(() => r(null), 20000)))]);
+    clearTimeout(slow);
+    if (!helperInfo) {
+      h.close();
+      if (helper === h) helper = null;
+      throw new ScreenError("helper", platform === "darwin" ? "This Mac didn't start the Remote helper (osascript)." : "Windows didn't start the Remote helper (PowerShell).");
+    }
+    return h;
+  }
+  function close() {
+    clearTimeout(idle);
+    if (helper) helper.close();
+    helper = null;
+    helperInfo = null;
+    try {
+      rmSync(tmp, { recursive: true, force: true });
+    } catch {}
+  }
+
+  // the display of a Mac is woken, and kept on while Remote is being looked at
+  function keepDisplayOn() {
+    if (platform !== "darwin" || Date.now() - awakeAt < 20000) return;
+    awakeAt = Date.now();
+    try {
+      const c = spawn("caffeinate", ["-u", "-d", "-t", "30"], { stdio: "ignore" });
+      c.on("error", () => {});
+      c.unref?.();
+    } catch {}
+  }
+
+  async function frame({ width = 1280, quality = 60 } = {}) {
+    width = Math.max(320, Math.min(2560, Math.round(width) || 1280));
+    quality = Math.max(20, Math.min(90, Math.round(quality) || 60));
+    let jpeg;
+    if (fake) jpeg = readFileSync(fake[1]);
+    else if (platform === "darwin") {
+      keepDisplayOn();
+      mkdirSync(tmp, { recursive: true });
+      const shot = join(tmp, `shot-${Date.now()}.jpg`);
+      const small = shot.replace(/\.jpg$/, "-s.jpg");
+      try {
+        try {
+          await run(spawn, "screencapture", ["-x", "-m", "-C", "-t", "jpg", shot], { env });
+        } catch (e) {
+          throw new ScreenError("no_display", /could not create image|no displays?/i.test(e.message) ? "This Mac's screen is off. With the lid closed, Remote needs another display connected; or open the lid." : `macOS didn't take a picture of the screen (${e.message}).`);
+        }
+        await run(spawn, "sips", ["-s", "format", "jpeg", "-s", "formatOptions", String(quality), "-Z", String(width), shot, "--out", small], { env });
+        jpeg = readFileSync(small);
+      } finally {
+        for (const f of [shot, small]) {
+          try {
+            unlinkSync(f);
+          } catch {}
+        }
+      }
+    } else if (platform === "win32") {
+      const h = await getHelper();
+      const r = await h.ask({ t: "frame", w: width, q: quality });
+      if (r.error) throw new ScreenError("capture", `Windows didn't take a picture of the screen (${String(r.error).slice(0, 200)}). A locked screen or an administrator prompt can't be shown.`);
+      jpeg = Buffer.from(String(r.jpeg || ""), "base64");
+    } else {
+      if (!env.DISPLAY) throw new ScreenError("unsupported", env.WAYLAND_DISPLAY ? "Remote works with X11 on Linux, and this desktop uses Wayland." : "There's no desktop to show on this computer (no DISPLAY).");
+      try {
+        jpeg = await run(spawn, "import", ["-silent", "-window", "root", "-resize", `${width}x>`, "-quality", String(quality), "jpg:-"], { env });
+      } catch (e) {
+        if (e.code !== "ENOENT") throw new ScreenError("capture", `The picture of the screen failed (${e.message}).`);
+        try {
+          jpeg = await run(spawn, "ffmpeg", ["-loglevel", "error", "-f", "x11grab", "-i", env.DISPLAY, "-frames:v", "1", "-vf", `scale='min(${width},iw)':-2`, "-q:v", String(Math.round(2 + ((100 - quality) / 100) * 20)), "-f", "mjpeg", "-"], { env });
+        } catch (e2) {
+          throw new ScreenError("missing", e2.code === "ENOENT" ? "Remote needs ImageMagick (or ffmpeg) on this computer to show the screen." : `The picture of the screen failed (${e2.message}).`);
+        }
+      }
+    }
+    const size = jpegSize(jpeg);
+    if (!size) throw new ScreenError("capture", "The picture of the screen came out unreadable.");
+    return { jpeg, ...size };
+  }
+
+  async function input(events) {
+    const evs = cleanEvents(events);
+    if (!evs.length) return;
+    if (fake) {
+      appendFileSync(join(dir, "screen-input.jsonl"), evs.map(e => JSON.stringify(e)).join("\n") + "\n");
+      return;
+    }
+    if (platform === "darwin" || platform === "win32") {
+      const h = await getHelper();
+      const r = await h.ask({ t: "input", events: platform === "win32" ? evs.map(e => (e.t === "text" || e.t === "key" ? winKeys(e) : e)) : evs });
+      if (r.error) {
+        const msg = String(r.error);
+        if (platform === "darwin" && /not allowed|assistive|1002|1743|-25211|accessibility/i.test(msg)) throw new ScreenError("control_denied", "This Mac doesn't let node control it yet. On the Mac: System Settings → Privacy & Security → Accessibility, and turn on node.");
+        throw new ScreenError("input", `That didn't reach the computer (${msg.slice(0, 200)}).`);
+      }
+      return;
+    }
+    // Linux: one xdotool for the lot
+    if (!env.DISPLAY) throw new ScreenError("unsupported", "There's no desktop to control on this computer.");
+    try {
+      if (!xSize) {
+        const [w, h] = String(await run(spawn, "xdotool", ["getdisplaygeometry"], { env })).trim().split(/\s+/).map(Number);
+        xSize = { w, h };
+      }
+    } catch (e) {
+      throw new ScreenError("missing", e.code === "ENOENT" ? "Remote can show this screen, but needs xdotool on this computer to use its mouse and keyboard." : `xdotool failed (${e.message}).`);
+    }
+    const args = [];
+    const at = e => ["mousemove", String(Math.round(e.x * (xSize.w - 1))), String(Math.round(e.y * (xSize.h - 1)))];
+    const BTN = { 0: "1", 1: "2", 2: "3" };
+    for (const e of evs) {
+      if (e.t === "move") args.push(...at(e));
+      else if (e.t === "down") args.push(...at(e), "mousedown", BTN[e.b]);
+      else if (e.t === "up") args.push(...at(e), "mouseup", BTN[e.b]);
+      else if (e.t === "scroll") {
+        args.push(...at(e));
+        if (e.dy) args.push("click", "--repeat", String(Math.abs(e.dy)), e.dy > 0 ? "5" : "4");
+        if (e.dx) args.push("click", "--repeat", String(Math.abs(e.dx)), e.dx > 0 ? "7" : "6");
+      } else if (e.t === "text") args.push("type", "--delay", "4", "--", e.s);
+      else if (e.t === "key") args.push("key", "--", [...e.mods.map(m => X_MODS[m]), X_KEYS[e.k] || e.k].join("+"));
+    }
+    try {
+      // typed text is read as UTF-8 whatever this computer's language settings say
+      await run(spawn, "xdotool", args, { env: { ...env, LC_ALL: "C.UTF-8" } });
+    } catch (e) {
+      throw new ScreenError("input", `xdotool failed (${e.message}).`);
+    }
+  }
+
+  // Turning Remote on: a Mac asks, on its own screen, to allow Screen Recording and Accessibility. Gives back what's allowed.
+  async function ask() {
+    if (fake || platform !== "darwin") return { view: true, control: true };
+    const h = await getHelper();
+    const r = await h.ask({ t: "ask" }, 30000);
+    return { view: r.view !== false, control: r.control !== false };
+  }
+
+  return { frame, input, ask, close, get platform() { return fake ? "fake" : platform; } };
+}
