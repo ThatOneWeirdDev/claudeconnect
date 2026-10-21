@@ -269,3 +269,31 @@ test("live on a Mac: the helper is built once with Apple's tools, if they're the
   live.stop();
   assert.equal(helper.ended, true);
 });
+
+test("a Mac reports what Remote is allowed, and re-requesting opens the Settings pane only for what isn't on yet", async t => {
+  const dir = mkdtempSync(join(os.tmpdir(), "cc-perms-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  let state = { view: false, control: false };
+  const { spawn, calls } = fakeSpawn({ answer: (cmd, args) => (cmd === "sips" ? (writeFileSync(args[args.indexOf("--out") + 1], PICTURE), "") : ""), helper: m => (m.t === "ask" || m.t === "check" ? state : { ok: true }) });
+  const s = makeScreen({ platform: "darwin", env: {}, spawn, dir });
+  const opened = () => calls.filter(c => c.cmd === "open").map(c => c.args[0]);
+  // reading only: asks the helper to check, opens nothing
+  assert.deepEqual(await s.perms(), { view: false, control: false });
+  assert.equal(calls.find(c => c.cmd === "osascript").lines.at(-1).t, "check");
+  assert.deepEqual(opened(), []);
+  // re-request: prompts, and opens the pane for each one still off
+  assert.deepEqual(await s.perms({ prompt: true, open: true }), { view: false, control: false });
+  assert.equal(calls.find(c => c.cmd === "osascript").lines.at(-1).t, "ask");
+  assert.equal(opened().length, 2);
+  assert.ok(opened().some(u => /ScreenCapture/.test(u)) && opened().some(u => /Accessibility/.test(u)));
+  // once Screen Recording is on, re-requesting opens only Accessibility
+  state = { view: true, control: false };
+  await s.perms({ open: true });
+  assert.equal(opened().filter(u => /ScreenCapture/.test(u)).length, 1, "the Screen Recording pane isn't opened again");
+  assert.equal(opened().filter(u => /Accessibility/.test(u)).length, 2);
+  s.close();
+  // anywhere else, both are always allowed and nothing is opened
+  const lin = fakeSpawn();
+  assert.deepEqual(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: lin.spawn }).perms({ prompt: true, open: true }), { view: true, control: true });
+  assert.equal(lin.calls.length, 0);
+});

@@ -891,7 +891,12 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "sessions") return this.saveSessions(m.sessions);
     if (m.type === "commands") return this.saveCommands(m.commands);
     if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result") return this.gotTranscript(m);
-    if (m.type === "screen_status") return this.screenSay({ code: typeof m.code === "string" && /^[a-z_]{1,20}$/.test(m.code) ? m.code : "failed", error: String(m.error || "").slice(0, 300), os: typeof m.os === "string" ? m.os.slice(0, 10) : "" });
+    if (m.type === "screen_status") {
+      const o = { code: typeof m.code === "string" && /^[a-z_]{1,20}$/.test(m.code) ? m.code : "failed", error: String(m.error || "").slice(0, 300), os: typeof m.os === "string" ? m.os.slice(0, 10) : "" };
+      if (typeof m.view === "boolean") o.view = m.view;
+      if (typeof m.control === "boolean") o.control = m.control;
+      return this.screenSay(o);
+    }
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
       return this.gotTranscript(m);
@@ -1404,6 +1409,9 @@ export class ChatgqlHub extends DurableObject {
         this.screenSeen(ws);
         this.sendAgent(agent, { type: "screen_ack" });
       }
+      // the page asking the computer to request its screen permissions again (ask, with its own prompts) or just report them
+      else if (m.t === "ask") this.sendAgent(agent, { type: "screen_ask" });
+      else if (m.t === "perms") this.sendAgent(agent, { type: "screen_check" });
       else if (m.t === "input" && Array.isArray(m.events) && m.events.length) this.sendAgent(agent, { type: "screen_input", events: m.events.slice(0, 200), tags: [...new Set(this.viewers().map(v => this.agentInfo(v).tag).filter(Boolean))] });
     } catch {}
   }
