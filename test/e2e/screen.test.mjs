@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startSite } from "../helpers/site.mjs";
+import { startSite, connectAgent } from "../helpers/site.mjs";
 import { makeComputer } from "../helpers/computer.mjs";
 import { openPage, findChromium } from "../helpers/browser.mjs";
 
@@ -278,4 +278,49 @@ test("on a phone, Remote asks to be turned sideways, then fills the whole screen
   await page.until(`document.getElementById("screen").classList.contains("phone-full")`, "sideways again");
   await page.evaluate(`document.querySelector('#scFloat [data-scf="close"]').click()`);
   assert.equal(await page.evaluate(`document.getElementById("screen").hidden && !document.getElementById("screen").classList.contains("phone-full")`), true);
+});
+
+test("the page can have the computer report its screen permissions and request them again", async t => {
+  const { site } = await boot(t);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const v = await viewer(t, site);
+  await until(async () => v.pictures.length, "the screen");
+  // just reading what's allowed
+  v.said.length = 0;
+  v.send({ t: "perms" });
+  const perms = await until(async () => v.said.find(m => m.code === "perms"), "the permissions");
+  assert.equal(perms.view, true);
+  assert.equal(perms.control, true);
+  assert.equal(perms.os, process.platform);
+  // asking the computer to request them again: the stand-in allows both, so it says so
+  v.said.length = 0;
+  v.send({ t: "ask" });
+  assert.equal((await until(async () => v.said.find(m => m.code === "perms"), "the permissions again")).view, true);
+});
+
+test("on a Mac with a permission off, Remote lists what's missing and offers to ask the Mac again", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const site = await startSite();
+  await site.claim();
+  t.after(() => site.stop());
+  // a stand-in computer that can do Remote and has it on, but sends no pictures — so the "permission off" note stays up
+  const agent = await connectAgent(site, { caps: ["update", "admin", "modes", "history", "screen", "screenlive", "computer"], computer: { screen: true } });
+  t.after(() => agent.close());
+  const page = await openPage(site.origin + "/", { width: 1280, height: 800 });
+  t.after(() => page.close());
+  await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
+  await page.evaluate(`location.reload()`);
+  await page.until(`document.getElementById("screenNav")`, "the sidebar");
+  await page.evaluate(`document.getElementById("screenNav").click()`);
+  // the page opens the live connection and the computer is asked to start
+  await agent.next(m => m.type === "screen_start", 10000);
+  // the computer says Screen Recording isn't allowed yet, as a Mac would before it's turned on
+  agent.send({ type: "screen_status", code: "need_perms", view: false, control: true, os: "darwin" });
+  await page.until(`/Screen Recording/.test(document.getElementById("scMsg").innerText) && document.querySelector('[data-sc="ask"]')`, "the permission note");
+  const txt = await page.evaluate(`document.getElementById("scMsg").innerText`);
+  assert.match(txt, /Accessibility/);
+  assert.match(txt, /on the Mac itself/);
+  // asking the Mac again reaches the computer, and the button acknowledges so the person knows to approve there
+  await page.evaluate(`document.querySelector('[data-sc="ask"]').click()`);
+  await agent.next(m => m.type === "screen_ask", 10000);
+  await page.until(`/approve on your Mac/.test(document.getElementById("scMsg").innerText)`, "the asked state");
 });

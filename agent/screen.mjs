@@ -866,15 +866,38 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
     }
   }
 
-  // Turning Remote on: a Mac asks, on its own screen, to allow Screen Recording and Accessibility, and starts building its
-  // streaming helper. Gives back what's allowed.
-  async function ask() {
-    if (fake || platform !== "darwin") return { view: true, control: true };
-    buildMacHelper();
-    const h = await getHelper();
-    const r = await h.ask({ t: "ask" }, 30000);
-    return { view: r.view !== false, control: r.control !== false };
+  // The System Settings panes where a Mac turns Screen Recording (to see the screen) and Accessibility (to use the mouse and
+  // keyboard) on for node. Opened for the person so they don't have to hunt; macOS still only takes the switch on the Mac.
+  const SETTINGS = {
+    view: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+    control: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+  };
+  function openSettings(url) {
+    try {
+      const c = spawn("open", [url], { stdio: "ignore" });
+      c.on("error", () => {});
+      c.unref?.();
+    } catch {}
   }
+  // What Remote is allowed on this Mac: `view` (Screen Recording) and `control` (Accessibility). Anywhere else, both always.
+  // `prompt` asks macOS to show its own request (only the first time it will); `open` also opens the Settings pane for each
+  // one not yet allowed, for when the request won't show again and the person flips the switch themselves. Plain, it only
+  // reads the current state.
+  async function perms({ prompt = false, open = false } = {}) {
+    if (fake || platform !== "darwin") return { view: true, control: true };
+    if (prompt || open) buildMacHelper();
+    const h = await getHelper();
+    const r = await h.ask({ t: prompt ? "ask" : "check" }, 30000);
+    const got = { view: r.view !== false, control: r.control !== false };
+    if (open) {
+      if (!got.view) openSettings(SETTINGS.view);
+      if (!got.control) openSettings(SETTINGS.control);
+    }
+    return got;
+  }
+  // Turning Remote on: a Mac shows macOS's own request for Screen Recording and Accessibility, and starts building its
+  // streaming helper. Gives back what's allowed.
+  const ask = () => perms({ prompt: true });
 
-  return { frame, stream, input, ask, showing, close, buildMacHelper, get platform() { return fake ? "fake" : platform; } };
+  return { frame, stream, input, ask, perms, showing, close, buildMacHelper, get platform() { return fake ? "fake" : platform; } };
 }

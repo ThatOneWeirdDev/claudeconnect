@@ -537,7 +537,13 @@ svg{display:block;flex:none}
 .sc-msg h3{margin:0 0 8px;color:var(--text);font-size:18px;line-height:26px;font-weight:600}
 .sc-msg p{margin:0 0 12px}
 .sc-msg .fine{font-size:13px;color:var(--text-3)}
+.sc-perms{list-style:none;margin:0 0 12px;padding:0;text-align:left;display:inline-block}
+.sc-perms li{margin:4px 0;font-size:14px;color:var(--text-2)}
+.sc-perms li.on{color:var(--ok)}
+.sc-perms li b{color:var(--text);font-weight:600}
+.sc-perms li .fine{color:var(--text-3)}
 .sc-err{position:absolute;top:20px;left:50%;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));padding:8px 14px;border-radius:12px;background:var(--elevated);box-shadow:var(--shadow);color:var(--danger-text);font-size:13px;line-height:18px}
+.sc-err .sc-ask{margin-left:8px;color:var(--accent);font-weight:600;text-decoration:underline}
 .sc-type{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;resize:none;pointer-events:none;font-size:16px}
 .screen:fullscreen .sc-stage{padding:0;background:#000}
 /* a phone: upright, it asks to be turned; on its side, Remote takes the whole screen, with two small buttons on top */
@@ -3198,7 +3204,7 @@ setInterval(() => { if (!document.hidden) loadState(); }, 20000);
 // `tag`: a mark no one can see (zero-width characters), in the tab's title while Remote is open. The computer looks for it in
 // its own window titles: there, this page would be showing the computer it runs on.
 const ZW = ["​", "‌", "‍", "⁠"];
-const D = { tag: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => ZW[b & 3]).join(""), code: "", open: false, ws: null, retry: null, w: 0, note: null, os: "", queue: [], flushing: false, err: "", inputErr: "", inputAt: 0, drag: -1, moveAt: 0, wheel: 0, touch: null, tap: null, pending: null, painting: false, shown: false };
+const D = { tag: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => ZW[b & 3]).join(""), code: "", open: false, ws: null, retry: null, w: 0, note: null, os: "", queue: [], flushing: false, err: "", inputErr: "", inputAt: 0, drag: -1, moveAt: 0, wheel: 0, touch: null, tap: null, pending: null, painting: false, shown: false, perms: null, asked: 0 };
 function markTitle() {
   const want = `Remote${D.tag} · ${tabName()}`;
   if (D.open && document.title !== want) document.title = want;
@@ -3253,6 +3259,8 @@ function screenConnect() {
   ws.onopen = () => {
     D.w = screenWidth();
     ws.send(JSON.stringify({ t: "hello", w: D.w, tag: D.tag }));
+    // ask the computer what it allows, if it hasn't said yet, so the page can offer to request it again
+    if (!D.perms) try { ws.send('{"t":"perms"}'); } catch {}
   };
   ws.onmessage = e => {
     if (typeof e.data === "string") {
@@ -3295,7 +3303,14 @@ function screenTick() {
 function screenStatusIn(m) {
   const a = S.state && S.state.agent;
   if (m.os) D.os = m.os;
+  // what the computer allows: on its own (perms), or because the picture is held up until Screen Recording is on (need_perms)
+  if (m.code === "perms" || m.code === "need_perms") {
+    D.perms = { view: m.view !== false, control: m.control !== false };
+    if (m.code === "need_perms") { D.code = "need_perms"; D.err = ""; D.shown = false; $("scView").hidden = true; }
+    return renderScreen();
+  }
   if (m.code === "input" || m.code === "control_denied" || m.code === "missing" && D.shown) {
+    if (m.code === "control_denied") D.perms = { view: (D.perms && D.perms.view) !== false, control: false };
     D.inputErr = m.error || "";
     D.inputAt = Date.now();
     return renderScreen();
@@ -3340,8 +3355,31 @@ function screenNote() {
   if (!a.screen || D.code === "agent_old") return `<h3>Update ${esc(CFG.name)} first</h3><p>The program on your computer is from before this version of Remote. Update it, then come back here.</p>`;
   if (!(a.computer && a.computer.screen)) return `<h3>Use your computer from here</h3><p>Remote shows your computer's screen on this page, and lets you use its mouse and keyboard from any device you're signed in on.</p><p class="fine">On a Mac, the Mac asks once to allow Screen Recording and Accessibility for node. Answer on the Mac itself, then come back here.</p><button class="btn primary" type="button" data-sc="on"${PC.busy === "screen" ? " disabled" : ""}>${PC.busy === "screen" ? "Turning on…" : "Turn on Remote"}</button>`;
   if (D.code === "same_computer") return `<h3>This is the computer ${esc(CFG.name)} runs on</h3><p>Remote shows this computer's own screen, so here it would show itself inside itself, over and over, and move the mouse out from under you.</p><p class="fine">Open ${esc(CFG.name)} on another device, like your phone or another computer, to use Remote.</p>`;
+  if (D.code === "need_perms") return permNote();
   if (D.err) return `<h3>The screen can't be shown</h3><p>${esc(D.err)}</p>`;
   return `<div class="wait" style="margin:0;justify-content:center"><span class="spin"></span><span>Connecting to your computer…</span></div>`;
+}
+// On a Mac that hasn't allowed Remote yet: what's on and off, and a button that has the Mac ask again (and open the Settings
+// panes there). macOS only takes the answer on the Mac itself, so from here the page can ask and then watch it come on.
+function permNote() {
+  const p = D.perms || {};
+  const row = (ok, name, what) => `<li class="${ok ? "on" : "off"}">${ok ? "✓" : "○"} <b>${name}</b> — ${ok ? "on" : "off"}<span class="fine"> · ${what}</span></li>`;
+  const asked = D.asked && Date.now() - D.asked < 15000;
+  return `<h3>Let this computer be used from here</h3>
+    <p>${esc(CFG.name)} needs this Mac to allow:</p>
+    <ul class="sc-perms">${row(p.view, "Screen Recording", "to show the screen")}${row(p.control, "Accessibility", "to move the mouse and type")}</ul>
+    <p class="fine">Tap below and the Mac shows its request and opens the right settings. Turn these on <b>on the Mac itself</b> — macOS only accepts it there. The screen then appears here on its own.</p>
+    <button class="btn primary" type="button" data-sc="ask"${asked ? " disabled" : ""}>${asked ? "Asked — now approve on your Mac" : "Ask my Mac for permission"}</button>`;
+}
+// have the computer request its permissions again; it answers with what's allowed, and the picture starts once the Mac
+// allows the screen to be seen. The live connection carries the ask, so make sure it's open first.
+function askAgain() {
+  screenConnect();
+  const ws = D.ws;
+  if (ws && ws.readyState === 1) { try { ws.send('{"t":"ask"}'); } catch {} }
+  D.asked = Date.now();
+  D.note = null;
+  renderScreen();
 }
 function renderScreen() {
   if (!D.open) return;
@@ -3356,7 +3394,9 @@ function renderScreen() {
   if (note !== D.note) $("scMsg").innerHTML = D.note = note;
   $("scMsg").hidden = shown;
   $("scErr").hidden = !D.inputErr;
-  $("scErr").textContent = D.inputErr;
+  // a control error on a Mac is almost always Accessibility not being on yet: offer to ask again, right there
+  const canAsk = D.inputErr && D.os === "darwin" && /accessibility|assistive|control/i.test(D.inputErr);
+  if (D.inputErr) $("scErr").innerHTML = esc(D.inputErr) + (canAsk ? ` <button class="sc-ask" type="button" data-sc="ask">Ask my Mac again</button>` : "");
   $("scStage").classList.toggle("keys", focus);
   $("scFull").hidden = !document.fullscreenEnabled;
   const way = phoneWay();
@@ -3551,6 +3591,8 @@ $("scMsg").addEventListener("click", async e => {
   D.err = "";
   screenTick();
 });
+// "Ask my Mac again", wherever it is shown (the permission note or over a control error)
+$("scStage").addEventListener("click", e => { if (e.target.closest('[data-sc="ask"]')) askAgain(); });
 
 /* ---------- account menu and theme ---------- */
 const THEMES = [["system", "System", I.monitor], ["light", "Light", I.sun], ["dark", "Dark", I.moon]];

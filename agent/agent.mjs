@@ -1071,7 +1071,7 @@ async function setComputer(m) {
     cfg.screen = v.screen;
     saveConfig();
     log(v.screen ? "Remote is on: the site can show this computer's screen and use its mouse and keyboard." : "Remote is off.");
-    if (v.screen) SCREEN.ask().catch(() => {});
+    if (v.screen) SCREEN.ask().then(screenPerms).catch(() => {});
     else {
       screenStop();
       SCREEN.close();
@@ -1738,6 +1738,8 @@ function onMessage(raw) {
   else if (m.type === "screen_start") screenStart(m);
   else if (m.type === "screen_stop") screenStop();
   else if (m.type === "screen_ack") screenAck();
+  else if (m.type === "screen_ask") screenReask();
+  else if (m.type === "screen_check") SCREEN.perms().then(screenPerms).catch(() => {});
   else if (m.type === "screen_input") liveInput(m);
   else if (m.type === "fs_search") findFiles(m);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
@@ -1880,6 +1882,23 @@ function screenAck() {
   LIVE.heard = Date.now();
   if (LIVE.wake) LIVE.wake();
 }
+// What this computer allows Remote to do, for the page to show (Screen Recording and Accessibility, on a Mac; both always
+// elsewhere). The person turns these on, so the page can only ask and watch, never grant them.
+function screenPerms(p) {
+  if (p) send({ type: "screen_status", code: "perms", view: p.view !== false, control: p.control !== false, os: process.platform });
+}
+// The page asked this computer to request its permissions again: a Mac shows macOS's own request (the first time) and opens
+// the Settings panes for whatever isn't allowed yet, so the person turns it on there. Then the picture and control start on
+// their own. Nothing here can grant them; only the person at the Mac can.
+async function screenReask() {
+  if (cfg.screen !== true) return screenStatus("off", "Remote is off on this computer.");
+  try {
+    screenPerms(await SCREEN.perms({ prompt: true, open: true }));
+    if (LIVE) LIVE.viewOk = false;
+  } catch (e) {
+    screenStatus("failed", (e && e.message) || e);
+  }
+}
 async function liveLoop(L) {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   if (Date.now() - screenSeen > 120000) log("Remote: this computer's screen is being shown on the site.");
@@ -1902,6 +1921,18 @@ async function liveLoop(L) {
       screenStatus("same_computer", `This is the computer ${siteName()} runs on, so Remote would show itself inside itself. Use Remote from another device, like your phone.`);
       await sleep(5000);
       continue;
+    }
+    // on a Mac, nothing to show until Screen Recording is allowed; keep checking so the picture starts the moment it is, and
+    // tell the page which permissions are missing so it can offer to ask again. Checked only until it's allowed once.
+    if (process.platform === "darwin" && !L.viewOk) {
+      const p = await SCREEN.perms().catch(() => null);
+      if (p && !p.view) {
+        send({ type: "screen_status", code: "need_perms", view: p.view, control: p.control, os: "darwin" });
+        await sleep(2500);
+        continue;
+      }
+      if (p) screenPerms(p);
+      L.viewOk = true;
     }
     let f;
     try {
