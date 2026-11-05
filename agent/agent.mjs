@@ -1837,26 +1837,38 @@ async function sameComputer(tag) {
   return here.same;
 }
 
-// ---- Remote, live. While a page shows the screen, pictures go to the site as fast as this computer takes them, as binary
-// messages, and the site passes them on. The page says when it has shown each one, and no more than two are on their way at
-// a time, so a slow connection gets fewer pictures but never late ones. A picture the same as the last isn't sent again.
-// What's done over it comes back as messages without a reply; anything that goes wrong is told to the page (screen_status).
+// ---- Remote, live. While a page shows the screen, pictures go to the site as fast as this computer takes them, up to the
+// rate the page asked for (`fps`), as binary messages, and the site passes them on. The page says when it has shown each one,
+// and no more than two are on their way at a time, so a slow connection gets fewer pictures but never late ones. A picture
+// the same as the last isn't sent again. What's done over it comes back as messages without a reply; anything that goes wrong
+// is told to the page (screen_status).
 let LIVE = null;
 const screenStatus = (code, error) => send({ type: "screen_status", code, error: String(error || "").slice(0, 300), os: process.platform });
 function screenStart(m) {
   if (cfg.screen !== true) return screenStatus("off", "Remote is off on this computer.");
   const width = Math.max(320, Math.min(2560, Math.round(Number(m.w)) || 1600));
+  const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps)) || 30));
   const tags = (Array.isArray(m.tags) ? m.tags : []).filter(t => typeof t === "string").slice(0, 8);
+  soundSync(m.sound === true);
   if (LIVE && LIVE.asked === width) {
     const fresh = tags.some(t => !LIVE.tags.includes(t));
     LIVE.tags = tags;
+    // a new rate: the screen is captured at it from now on (the loop takes the new source as it comes)
+    if (LIVE.fps !== fps) {
+      const old = LIVE.src;
+      LIVE.fps = fps;
+      LIVE.src = SCREEN.stream({ width: LIVE.width, quality: LIVE.quality, fps });
+      old.stop();
+      if (LIVE.wake) LIVE.wake();
+    }
     if (fresh) screenAgain(LIVE);
     return;
   }
-  screenStop();
-  // `heard`: when the page last said it had a picture, or when one went with none on its way
-  const L = { asked: width, width, quality: 60, tags, inflight: 0, heard: Date.now(), last: null, wake: null };
-  L.src = SCREEN.stream({ width, quality: L.quality });
+  liveStop();
+  // `heard`: when the page last said it had a picture, or when one went with none on its way. `same`: whether a page looking
+  // is on this very computer (unknown until the first look)
+  const L = { asked: width, width, quality: 60, fps, tags, inflight: 0, heard: Date.now(), last: null, wake: null, tookAt: 0, same: null };
+  L.src = SCREEN.stream({ width, quality: L.quality, fps });
   LIVE = L;
   liveLoop(L).catch(e => screenStatus("failed", e.message || e));
 }
@@ -1869,12 +1881,60 @@ async function screenAgain(L) {
     L.inflight++;
   } catch {}
 }
-function screenStop() {
+function liveStop() {
   if (!LIVE) return;
   const L = LIVE;
   LIVE = null;
   L.src.stop();
   if (L.wake) L.wake();
+}
+function screenStop() {
+  liveStop();
+  soundStop();
+}
+// ---- Remote's sound: what this computer plays, while a page looking at Remote has its sound on. It goes as it's heard, in
+// pieces of 40 ms, uncompressed (16-bit PCM), as binary messages of its own: not with the pictures, not at their rate, and
+// not held back by them. Never to a page on this computer itself (it would hear itself), and dropped rather than sent late
+// when the connection to the site falls behind.
+let SOUND = null;
+let soundSeen = 0;
+function soundSync(on) {
+  if (!on) return soundStop();
+  if (SOUND) return;
+  const me = { failed: false };
+  SOUND = me;
+  me.src = SCREEN.sound({
+    onChunk: c => {
+      if (SOUND !== me || !LIVE || LIVE.same !== false || !ws || ws.readyState !== 1) return;
+      if ((ws.bufferedAmount || 0) > 1000000) return;
+      try {
+        ws.send(c);
+      } catch {}
+    },
+    onEnd: e => {
+      if (SOUND !== me) return;
+      me.failed = true;
+      screenStatus("sound", e.message || e);
+    }
+  });
+  me.src.started.then(
+    () => {
+      if (SOUND === me && Date.now() - soundSeen > 120000) log("Remote: this computer's sound is being played on the site.");
+      soundSeen = Date.now();
+    },
+    e => {
+      // not tried again until the page turns its sound off and on, or looks again
+      if (SOUND !== me || (e && e.code === "stopped")) return;
+      me.failed = true;
+      screenStatus("sound", (e && e.message) || e);
+    }
+  );
+}
+function soundStop() {
+  if (!SOUND) return;
+  const me = SOUND;
+  SOUND = null;
+  me.src.stop();
 }
 function screenAck() {
   if (!LIVE) return;
@@ -1917,6 +1977,7 @@ async function liveLoop(L) {
     }
     let same = false;
     for (const t of L.tags) if (await sameComputer(t)) same = true;
+    L.same = same;
     if (same) {
       screenStatus("same_computer", `This is the computer ${siteName()} runs on, so Remote would show itself inside itself. Use Remote from another device, like your phone.`);
       await sleep(5000);
@@ -1934,11 +1995,25 @@ async function liveLoop(L) {
       if (p) screenPerms(p);
       L.viewOk = true;
     }
+    // no faster than the page asked for, counted from when the last picture was asked for (sent or not, so a still screen
+    // taken one picture at a time isn't taken any more often): the picture taken after the wait is the newest there is
+    const gap = L.tookAt + 1000 / L.fps - Date.now();
+    if (gap > 2) {
+      await new Promise(r => {
+        L.wake = r;
+        setTimeout(r, gap);
+      });
+      continue;
+    }
     let f;
+    const src = L.src;
+    L.tookAt = Date.now();
     try {
-      f = await L.src.next();
+      f = await src.next();
     } catch (e) {
       if (LIVE !== L) break;
+      // replaced meanwhile (a new rate): the new one carries on
+      if (src !== L.src) continue;
       screenStatus(e instanceof ScreenError ? e.code : "failed", (e && e.message) || e);
       await sleep(3000);
       continue;
@@ -1953,7 +2028,7 @@ async function liveLoop(L) {
       L.src.stop();
       if (L.quality > 30) L.quality -= 15;
       else L.width = Math.max(640, Math.round(L.width * 0.75));
-      L.src = SCREEN.stream({ width: L.width, quality: L.quality });
+      L.src = SCREEN.stream({ width: L.width, quality: L.quality, fps: L.fps });
       continue;
     }
     if (!ws || ws.readyState !== 1) {
@@ -1998,7 +2073,7 @@ function workflowsOn() {
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `files` the file browser.
 function helloMessage() {
   // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
-  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "screen", "search", "screenlive", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
+  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "screen", "search", "screenlive", "sound", "fps", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()], command: COMMAND, site: siteName() };
 }
 

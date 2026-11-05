@@ -23,11 +23,12 @@ async function until(fn, what, ms = 30000) {
   throw new Error("timed out waiting for " + what);
 }
 
-async function boot(t, pictures = [PICTURE]) {
+async function boot(t, pictures = [PICTURE], env = {}) {
   const site = await startSite();
   await site.claim();
   const pc = makeComputer({ site, githubUrl: "http://127.0.0.1:9" });
   pc.env.CLAUDECONNECT_SCREEN = "fake:" + pictures.join(",");
+  Object.assign(pc.env, env);
   const agent = pc.startAgent();
   t.after(async () => {
     agent.kill("SIGKILL");
@@ -38,22 +39,26 @@ async function boot(t, pictures = [PICTURE]) {
   const done = () => (existsSync(join(pc.dir, "screen-input.jsonl")) ? readFileSync(join(pc.dir, "screen-input.jsonl"), "utf8").trim().split("\n").filter(Boolean).map(l => JSON.parse(l)) : []);
   return { site, pc, done };
 }
-// A page looking at Remote, played by the test: the live connection as the page opens it, with its own invisible mark. It
-// says it has each picture as it comes, unless told not to.
+// A page looking at Remote, played by the test: the live connection as the page opens it, with its own invisible mark, the
+// pictures a second it wants and whether it plays the sound. It says it has each picture as it comes, unless told not to;
+// pieces of sound (they start with "CCAU") are kept apart, with when each came.
 const mark = () => Array.from({ length: 12 }, () => "\u200b\u200c\u200d\u2060"[Math.floor(Math.random() * 4)]).join("");
-async function viewer(t, site, { origin = site.origin, w = 1280, tag = mark(), ack = true } = {}) {
+const isSound = b => b.length >= 12 && b.subarray(0, 4).toString() === "CCAU";
+async function viewer(t, site, { origin = site.origin, w = 1280, tag = mark(), ack = true, fps, sound } = {}) {
   const res = await site.mf.dispatchFetch(site.origin + "/api/screen/live", { headers: { upgrade: "websocket", origin } });
   if (!res.webSocket) return { status: res.status };
   const ws = res.webSocket;
   ws.accept();
-  const v = { status: 101, pictures: [], said: [], ack, send: o => ws.send(JSON.stringify(o)), close: () => ws.close() };
+  const v = { status: 101, pictures: [], sound: [], said: [], ack, send: o => ws.send(JSON.stringify(o)), close: () => ws.close() };
   ws.addEventListener("message", e => {
     if (typeof e.data === "string") return v.said.push(JSON.parse(e.data));
-    v.pictures.push(Buffer.from(e.data));
+    const b = Buffer.from(e.data);
+    if (isSound(b)) return v.sound.push(b);
+    v.pictures.push(b);
     if (v.ack) ws.send('{"t":"ack"}');
   });
   t.after(() => { try { ws.close(); } catch {} });
-  v.send({ t: "hello", w, tag });
+  v.send({ t: "hello", w, tag, ...(fps !== undefined ? { fps } : {}), ...(sound !== undefined ? { sound } : {}) });
   return v;
 }
 
@@ -144,6 +149,82 @@ test("pictures come one after another as fast as the page takes them, never more
   await until(async () => slow.pictures.length >= 15, "more, once it took them");
 });
 
+test("the computer's sound comes as it plays, uncompressed, only to pages that want it, and never waits on the pictures", async t => {
+  const { site } = await boot(t, [PICTURE, OTHER]);
+  const state = (await site.api("/api/state")).body;
+  assert.equal(state.agent.screenSound, true, "this computer can send its sound");
+  assert.equal(state.agent.screenFps, true, "and take the rate from the page");
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  // a page with its sound on that never says it has a picture: two pictures, then none, but the sound keeps coming
+  const ears = await viewer(t, site, { sound: true, ack: false });
+  const quiet = await viewer(t, site);
+  await until(async () => ears.sound.length >= 3, "the sound");
+  const from = ears.sound.length;
+  await sleep(1000);
+  const pieces = ears.sound.length - from;
+  assert.ok(pieces >= 15 && pieces <= 35, `${pieces} pieces of 40 ms in a second`);
+  assert.equal(ears.pictures.length, 2, "the pictures wait for it; the sound doesn't");
+  for (const p of ears.sound.slice(0, 5)) {
+    assert.equal(p.readUInt32LE(4), 48000, "48 kHz");
+    assert.equal(p[8], 2, "two channels");
+    assert.equal(p[9], 1, "16-bit PCM, not compressed");
+    assert.equal(p.length, 12 + 1920 * 4, "40 ms of it");
+  }
+  assert.ok(quiet.pictures.length > 5, "the other page still gets pictures");
+  assert.equal(quiet.sound.length, 0, "and no sound, since it didn't ask");
+  // turned off, it stops, for everyone (no one else wanted it), and on again it comes back
+  ears.send({ t: "sound", sound: false });
+  await sleep(400);
+  const stopped = ears.sound.length;
+  await sleep(600);
+  assert.equal(ears.sound.length, stopped, "no more once it's off");
+  quiet.send({ t: "sound", sound: true });
+  await until(async () => quiet.sound.length >= 3, "the sound, for the page that asked now");
+  assert.equal(ears.sound.length, stopped, "only to the one that wants it");
+});
+
+test("a computer that can't send its sound says why, and the pictures carry on", async t => {
+  const { site } = await boot(t, [PICTURE, OTHER], { CLAUDECONNECT_SOUND: "none" });
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const v = await viewer(t, site, { sound: true });
+  const said = await until(async () => v.said.find(m => m.code === "sound"), "why there's no sound");
+  assert.match(said.error, /no sound/);
+  const n = v.pictures.length;
+  await until(async () => v.pictures.length > n + 5, "more pictures");
+  assert.equal(v.sound.length, 0);
+});
+
+test("each page gets the pictures a second it picked, and the computer streams at the highest asked for", async t => {
+  const { site } = await boot(t, [PICTURE, OTHER]);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const count = async (v, ms = 2000) => {
+    const from = v.pictures.length;
+    await sleep(ms);
+    return ((v.pictures.length - from) * 1000) / ms;
+  };
+  const slow = await viewer(t, site, { fps: 5 });
+  await until(async () => slow.pictures.length, "the first picture");
+  let rate = await count(slow);
+  assert.ok(rate >= 3 && rate <= 6.5, `${rate} a second, asked for 5`);
+  // another page asks for more: it gets it, and the first still gets its 5
+  const fast = await viewer(t, site, { fps: 30 });
+  await until(async () => fast.pictures.length, "the first picture, for the fast one");
+  const [a, b] = await Promise.all([count(slow), count(fast)]);
+  assert.ok(a >= 3 && a <= 6.5, `${a} a second for the page that asked for 5`);
+  assert.ok(b >= 15, `${b} a second for the page that asked for 30`);
+  // changed from the page: the rate follows
+  fast.close();
+  slow.send({ t: "fps", fps: 15 });
+  await sleep(500);
+  rate = await count(slow);
+  assert.ok(rate >= 10 && rate <= 17, `${rate} a second, asked for 15`);
+  // anything that isn't a rate is 30; more than 60 is 60
+  slow.send({ t: "fps", fps: "lots" });
+  await sleep(500);
+  rate = await count(slow);
+  assert.ok(rate >= 18, `${rate} a second, for a rate that wasn't one`);
+});
+
 test("Remote in the sidebar: turned on from there, the screen shows live, and clicks, keys and the wheel go over", { skip: !CHROME && "needs a Chromium" }, async t => {
   const { site, pc, done } = await boot(t, [PICTURE, OTHER]);
   const page = await openPage(site.origin + "/", { width: 1280, height: 800 });
@@ -211,6 +292,51 @@ test("Remote in the sidebar: turned on from there, the screen shows live, and cl
   assert.equal(await page.evaluate(`document.getElementById("screen").hidden && !document.getElementById("main").classList.contains("screen-open")`), true);
 });
 
+
+test("on the Remote page, the pictures a second are picked from a list, and the sound button turns the sound on and off", { skip: !CHROME && "needs a Chromium" }, async t => {
+  const { site } = await boot(t, [PICTURE, OTHER]);
+  assert.equal((await site.post("/api/computer", { screen: true })).status, 200);
+  const page = await openPage(site.origin + "/", { width: 1280, height: 800 });
+  t.after(() => page.close());
+  await page.until(`(async () => (await (await fetch("/api/state")).json()).agent.online)()`, "the computer online");
+  await page.evaluate(`location.reload()`);
+  await page.until(`document.getElementById("screenNav")`, "the sidebar");
+  await page.evaluate(`document.getElementById("screenNav").click()`);
+  await page.until(`!document.getElementById("scView").hidden`, "the screen");
+  assert.equal(await page.evaluate(`!document.getElementById("scFps").hidden && document.getElementById("scFps").value`), "30", "30 a second to start with");
+  assert.equal(await page.evaluate(`!document.getElementById("scSound").hidden && document.getElementById("scSound").getAttribute("aria-pressed")`), "true", "sound on to start with");
+  // what the page draws, counted: a changing screen at 30, then at 5 once that's picked
+  const changes = ms => page.evaluate(`new Promise(done => {
+    const c = document.getElementById("scView").getContext("2d");
+    let last = "", n = 0;
+    const end = Date.now() + ${ms};
+    (function look() {
+      const px = c.getImageData(100, 100, 1, 1).data.join();
+      if (px !== last) { n++; last = px; }
+      if (Date.now() < end) setTimeout(look, 4);
+      else done(n);
+    })();
+  })`);
+  assert.ok((await changes(1500)) >= 15, "many a second at 30");
+  await page.until(`/Live · \\d+ fps/.test(document.getElementById("scStatus").textContent)`, "the rate in the status");
+  await page.evaluate(`(() => { const s = document.getElementById("scFps"); s.value = "5"; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  await page.until(`localStorage.getItem("gql.remoteFps") === "5"`, "the rate kept in this browser");
+  await sleep(700);
+  const slow = await changes(2000);
+  assert.ok(slow >= 4 && slow <= 14, `${slow} changes in 2s, at 5 a second`);
+  // the sound button: off, and on again (a real click, as browsers want before they play sound)
+  const box = await page.evaluate(`(() => { const r = document.getElementById("scSound").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  const click = async () => {
+    await page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x, y: box.y, button: "left", clickCount: 1, buttons: 1 });
+    await page.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x, y: box.y, button: "left", clickCount: 1, buttons: 0 });
+  };
+  await click();
+  await page.until(`document.getElementById("scSound").getAttribute("aria-pressed") === "false"`, "the sound off");
+  await click();
+  await page.until(`document.getElementById("scSound").getAttribute("aria-pressed") === "true"`, "the sound on again");
+  // after a click the browser plays it: the status no longer asks for one
+  await page.until(`!/click the screen for sound/.test(document.getElementById("scStatus").textContent)`, "the sound playing", 10000);
+});
 
 test("on the computer Remote would show, it says so and shows nothing: the page's invisible mark is in a window title there", async t => {
   const { site, pc, done } = await boot(t);

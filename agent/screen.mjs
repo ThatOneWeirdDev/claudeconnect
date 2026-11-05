@@ -9,7 +9,13 @@
 // - Windows: one PowerShell helper takes the pictures and moves the mouse and types (System.Drawing and user32).
 // - Linux: X11 only. ImageMagick's `import` (or ffmpeg) takes the pictures, and xdotool, when it's installed, does the rest.
 //
-// CLAUDECONNECT_SCREEN=fake:<file.jpg> shows that picture instead, and writes what's done to screen-input.jsonl (for tests).
+// Sound (`sound()`): what the computer is playing, as it plays, uncompressed: 16-bit PCM, two channels, at 48 kHz (or the rate
+// Windows mixes at). It comes on its own, as it's captured, not with the pictures. A Mac hears it through ScreenCaptureKit (a
+// second small helper, macOS 13 and later), Windows through WASAPI's loopback (a PowerShell helper), Linux through PulseAudio
+// or PipeWire (parec, or ffmpeg).
+//
+// CLAUDECONNECT_SCREEN=fake:<file.jpg> shows that picture instead, and writes what's done to screen-input.jsonl (for tests);
+// its sound is a steady tone, or none with CLAUDECONNECT_SOUND=none.
 import { spawn as nodeSpawn } from "node:child_process";
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, unlinkSync, rmSync, existsSync, renameSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -500,6 +506,315 @@ export function splitSized(onFrame) {
   };
 }
 
+// ---- sound
+
+// A Mac's sound, through ScreenCaptureKit (macOS 13 and newer): built like the picture helper, as a program of its own so the
+// pictures never depend on it. It writes what the Mac plays as it plays it: 16-bit stereo PCM at 48 kHz, samples interleaved,
+// nothing else. ScreenCaptureKit only hears with a picture to go with it, so it asks for the smallest, rarest one there is.
+export const MAC_SOUND = String.raw`
+import Foundation
+import ScreenCaptureKit
+import CoreGraphics
+import CoreMedia
+import CoreAudio
+import AudioToolbox
+
+let out = FileHandle.standardOutput
+var running: SCStream?
+
+func fail(_ text: String, _ code: Int32) -> Never {
+  FileHandle.standardError.write((text + "\n").data(using: .utf8)!)
+  exit(code)
+}
+
+final class Sink: NSObject, SCStreamOutput, SCStreamDelegate {
+  func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer, of type: SCStreamOutputType) {
+    guard type == .audio, CMSampleBufferIsValid(buffer) else { return }
+    let frames = CMSampleBufferGetNumSamples(buffer)
+    guard frames > 0, let desc = CMSampleBufferGetFormatDescription(buffer),
+          let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee else { return }
+    var needed = 0
+    CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(buffer, bufferListSizeNeededOut: &needed, bufferListOut: nil, bufferListSize: 0, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: nil)
+    guard needed > 0 else { return }
+    let raw = UnsafeMutableRawPointer.allocate(byteCount: needed, alignment: 16)
+    defer { raw.deallocate() }
+    let list = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+    var block: CMBlockBuffer?
+    guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(buffer, bufferListSizeNeededOut: nil, bufferListOut: list, bufferListSize: needed, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: &block) == noErr else { return }
+    let buffers = UnsafeMutableAudioBufferListPointer(list)
+    guard buffers.count > 0 else { return }
+    let channels = max(1, Int(asbd.mChannelsPerFrame))
+    let float = (asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+    let planar = (asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0
+    var pcm = [Int16](repeating: 0, count: frames * 2)
+    // the samples are in the block buffer, kept until they're read
+    withExtendedLifetime(block) {
+      for f in 0..<frames {
+        for c in 0..<2 {
+          let ch = min(c, channels - 1)
+          let b = planar ? buffers[min(ch, buffers.count - 1)] : buffers[0]
+          guard let p = b.mData else { continue }
+          let i = planar ? f : f * channels + ch
+          let v: Float = float ? p.assumingMemoryBound(to: Float.self)[i] : Float(p.assumingMemoryBound(to: Int16.self)[i]) / 32768
+          pcm[f * 2 + c] = v.isFinite ? Int16(max(-1, min(1, v)) * 32767) : 0
+        }
+      }
+    }
+    pcm.withUnsafeBytes { out.write(Data($0)) }
+  }
+  func stream(_ stream: SCStream, didStopWithError error: Error) {
+    fail("stopped: \(error.localizedDescription)", 2)
+  }
+}
+
+let sink = Sink()
+Task {
+  do {
+    let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? content.displays.first else { fail("no display", 3) }
+    let config = SCStreamConfiguration()
+    config.capturesAudio = true
+    config.sampleRate = 48000
+    config.channelCount = 2
+    config.excludesCurrentProcessAudio = true
+    config.width = 2
+    config.height = 2
+    config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+    let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: sink)
+    try stream.addStreamOutput(sink, type: .audio, sampleHandlerQueue: DispatchQueue(label: "sound"))
+    try await stream.startCapture()
+    running = stream
+  } catch {
+    fail("failed: \(error.localizedDescription)", 4)
+  }
+}
+// it ends with the program that started it, when that end of its input closes
+DispatchQueue.global().async {
+  _ = FileHandle.standardInput.readDataToEndOfFile()
+  exit(0)
+}
+RunLoop.main.run()
+`;
+
+// Windows' sound, through WASAPI's loopback: a copy of what the speakers are playing, in whatever format Windows mixes in,
+// turned into 16-bit stereo PCM. It first writes "CCAU" and the rate (4 bytes, little-endian), then the samples as they come.
+// Windows sends nothing while nothing plays. C# 5, for Windows PowerShell's own compiler.
+export const WIN_SOUND = String.raw`
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+Add-Type -WarningAction SilentlyContinue -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
+public static class CCSound {
+  [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] public class DeviceEnumerator {}
+  [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IMMDeviceEnumerator {
+    [PreserveSig] int EnumAudioEndpoints(int flow, int mask, out IntPtr devices);
+    [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice device);
+  }
+  [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IMMDevice {
+    [PreserveSig] int Activate(ref Guid iid, int context, IntPtr args, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
+  }
+  [ComImport, Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IAudioClient {
+    [PreserveSig] int Initialize(int mode, int flags, long duration, long period, IntPtr format, IntPtr session);
+    [PreserveSig] int GetBufferSize(out uint frames);
+    [PreserveSig] int GetStreamLatency(out long latency);
+    [PreserveSig] int GetCurrentPadding(out uint padding);
+    [PreserveSig] int IsFormatSupported(int mode, IntPtr format, out IntPtr closest);
+    [PreserveSig] int GetMixFormat(out IntPtr format);
+    [PreserveSig] int GetDevicePeriod(out long normal, out long least);
+    [PreserveSig] int Start();
+    [PreserveSig] int Stop();
+    [PreserveSig] int Reset();
+    [PreserveSig] int SetEventHandle(IntPtr handle);
+    [PreserveSig] int GetService(ref Guid iid, [MarshalAs(UnmanagedType.IUnknown)] out object service);
+  }
+  [ComImport, Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  public interface IAudioCaptureClient {
+    [PreserveSig] int GetBuffer(out IntPtr data, out uint frames, out uint flags, out long position, out long counter);
+    [PreserveSig] int ReleaseBuffer(uint frames);
+    [PreserveSig] int GetNextPacketSize(out uint frames);
+  }
+  static void Check(int hr) { if (hr < 0) Marshal.ThrowExceptionForHR(hr); }
+  static short Clip(double v) { if (v > 1) v = 1; else if (v < -1) v = -1; return (short)(v * 32767); }
+  // one packet, as Windows mixes it, to 16-bit stereo: the first two channels (one played on both, from a mono device)
+  public static void ToPcm(byte[] raw, int frames, int channels, int block, int bits, bool isFloat, byte[] pcm) {
+    int width = bits / 8;
+    for (int f = 0; f < frames; f++) {
+      for (int c = 0; c < 2; c++) {
+        int o = f * block + (c < channels ? c : 0) * width;
+        short s = 0;
+        if (isFloat && bits == 32) s = Clip(BitConverter.ToSingle(raw, o));
+        else if (isFloat && bits == 64) s = Clip(BitConverter.ToDouble(raw, o));
+        else if (!isFloat && bits == 16) s = BitConverter.ToInt16(raw, o);
+        else if (!isFloat && bits == 24) s = (short)(raw[o + 1] | (raw[o + 2] << 8));
+        else if (!isFloat && bits == 32) s = (short)(BitConverter.ToInt32(raw, o) >> 16);
+        pcm[(f * 2 + c) * 2] = (byte)s;
+        pcm[(f * 2 + c) * 2 + 1] = (byte)(s >> 8);
+      }
+    }
+  }
+  public static void Run() {
+    IMMDeviceEnumerator devices = (IMMDeviceEnumerator)new DeviceEnumerator();
+    IMMDevice device;
+    // what plays through the speakers (render, console)
+    Check(devices.GetDefaultAudioEndpoint(0, 0, out device));
+    Guid iid = typeof(IAudioClient).GUID;
+    object o;
+    Check(device.Activate(ref iid, 23, IntPtr.Zero, out o));
+    IAudioClient client = (IAudioClient)o;
+    IntPtr fmt;
+    Check(client.GetMixFormat(out fmt));
+    int tag = (ushort)Marshal.ReadInt16(fmt, 0);
+    int channels = Marshal.ReadInt16(fmt, 2);
+    int rate = Marshal.ReadInt32(fmt, 4);
+    int block = Marshal.ReadInt16(fmt, 12);
+    int bits = Marshal.ReadInt16(fmt, 14);
+    bool isFloat = tag == 3 || (tag == 0xFFFE && Marshal.ReadInt32(fmt, 24) == 3);
+    // shared, loopback, with 200 ms of room
+    Check(client.Initialize(0, 0x00020000, 2000000, 0, fmt, IntPtr.Zero));
+    Guid cid = typeof(IAudioCaptureClient).GUID;
+    Check(client.GetService(ref cid, out o));
+    IAudioCaptureClient capture = (IAudioCaptureClient)o;
+    Stream output = Console.OpenStandardOutput();
+    byte[] head = new byte[8];
+    head[0] = 67; head[1] = 67; head[2] = 65; head[3] = 85;
+    Array.Copy(BitConverter.GetBytes(rate), 0, head, 4, 4);
+    output.Write(head, 0, 8);
+    output.Flush();
+    Check(client.Start());
+    byte[] raw = new byte[0];
+    for (;;) {
+      Thread.Sleep(10);
+      uint n;
+      Check(capture.GetNextPacketSize(out n));
+      while (n > 0) {
+        IntPtr data;
+        uint frames, flags;
+        long position, counter;
+        Check(capture.GetBuffer(out data, out frames, out flags, out position, out counter));
+        int len = (int)frames * block;
+        if (raw.Length < len) raw = new byte[len];
+        bool silent = (flags & 2) != 0;
+        if (!silent) Marshal.Copy(data, raw, 0, len);
+        Check(capture.ReleaseBuffer(frames));
+        byte[] pcm = new byte[frames * 4];
+        if (!silent) ToPcm(raw, (int)frames, channels, block, bits, isFloat, pcm);
+        output.Write(pcm, 0, pcm.Length);
+        Check(capture.GetNextPacketSize(out n));
+      }
+      output.Flush();
+    }
+  }
+}
+"@
+[CCSound]::Run()
+`;
+
+// Each piece of sound that goes to the site: "CCAU", the rate (4 bytes, little-endian), the channels, the format (1: 16-bit
+// signed, as WAV numbers them), two zero bytes, then the samples. A picture always starts with a JPEG's 0xFF 0xD8, so the two
+// can't be mistaken for each other.
+export const SOUND_MAGIC = Buffer.from("CCAU");
+export function soundHeader(rate, channels = 2, format = 1) {
+  const h = Buffer.alloc(12);
+  SOUND_MAGIC.copy(h, 0);
+  h.writeUInt32LE(rate >>> 0, 4);
+  h[8] = channels;
+  h[9] = format;
+  return h;
+}
+export const isSound = b => !!b && b.length >= 12 && b[0] === 0x43 && b[1] === 0x43 && b[2] === 0x41 && b[3] === 0x55;
+
+// Raw stereo 16-bit PCM cut into pieces of `ms` each, whole frames only, each with its header. What's left over goes after a
+// moment without more (Windows sends nothing between sounds, so the end of one isn't held back until the next). With
+// `rateFirst`, the stream starts with "CCAU" and its rate (anything before that is skipped).
+export function soundChunks({ rate = 48000, rateFirst = false, ms = 40, onChunk, idle = 60 }) {
+  let buf = Buffer.alloc(0);
+  let known = !rateFirst;
+  let timer = null;
+  const each = () => Math.max(1, Math.round((rate * ms) / 1000)) * 4;
+  const give = n => {
+    if (n <= 0) return;
+    onChunk(Buffer.concat([soundHeader(rate), buf.subarray(0, n)]));
+    buf = buf.subarray(n);
+  };
+  const flush = () => {
+    timer = null;
+    give(buf.length - (buf.length % 4));
+  };
+  return {
+    feed(chunk) {
+      buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
+      if (!known) {
+        const at = buf.indexOf(SOUND_MAGIC);
+        if (at < 0 || buf.length < at + 8) {
+          if (buf.length > 65536) buf = buf.subarray(buf.length - 8);
+          return;
+        }
+        rate = buf.readUInt32LE(at + 4) || 48000;
+        buf = buf.subarray(at + 8);
+        known = true;
+      }
+      while (buf.length >= each()) give(each());
+      clearTimeout(timer);
+      timer = buf.length ? setTimeout(flush, idle) : null;
+    },
+    stop() {
+      clearTimeout(timer);
+      timer = null;
+    },
+    get rate() {
+      return rate;
+    }
+  };
+}
+
+// A program that writes sound: its pieces go to `onChunk` as they come. `started` is true once it's been running for a moment
+// (or sent something), false if it ended first; `ended` settles with why, whenever it ends.
+function soundSource(spawn, cmd, args, { env, rate, rateFirst, name, onChunk, grace = 1500 }) {
+  const cut = soundChunks({ rate, rateFirst, onChunk });
+  let child;
+  let err = "";
+  let stopped = false;
+  let endOk;
+  const ended = new Promise(r => (endOk = r));
+  try {
+    child = spawn(cmd, args, { env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  } catch (e) {
+    endOk(e);
+    return { started: Promise.resolve(false), ended, stop() {} };
+  }
+  let heard;
+  const sent = new Promise(r => (heard = r));
+  child.stdout.on("data", d => {
+    heard();
+    if (!stopped) cut.feed(d);
+  });
+  child.stderr.on("data", d => (err = (err + d).slice(-2000)));
+  child.on("error", e => endOk(e));
+  child.on("close", code => endOk(Object.assign(new Error(`${name} stopped${err.trim() ? ": " + err.trim().split("\n").pop() : ` (${code})`}`), { code: "EXIT" })));
+  let t;
+  const started = Promise.race([sent.then(() => true), ended.then(() => false), new Promise(r => (t = setTimeout(() => r(true), grace)))]).finally(() => clearTimeout(t));
+  return {
+    started,
+    ended,
+    stop() {
+      stopped = true;
+      cut.stop();
+      try {
+        child.stdin.end();
+      } catch {}
+      try {
+        child.kill();
+      } catch {}
+    }
+  };
+}
+
 // A program that keeps sending pictures: the newest one waits to be taken, older ones are dropped. `first` settles with the
 // first picture, or with why there won't be one.
 function pushSource(spawn, cmd, args, { env, split, name }) {
@@ -753,30 +1068,32 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
   // grabbing the screen (Linux, or a Mac that has it). Anything that doesn't start, or stops, gives way to taking one picture
   // at a time, the next already being taken while the last is on its way.
   const macHelperBin = join(dir, `screen-mac-${createHash("sha256").update(MAC_STREAM).digest("hex").slice(0, 12)}`);
-  // Builds the Mac helper with Apple's command line tools, if they're there (never asking to install them), once; meanwhile
-  // pictures are taken the slower way. A failed build isn't tried again for this version of it.
-  function buildMacHelper() {
-    if (platform !== "darwin" || fake || building || existsSync(macHelperBin) || existsSync(macHelperBin + ".failed")) return building;
-    building = (async () => {
+  const macSoundBin = join(dir, `sound-mac-${createHash("sha256").update(MAC_SOUND).digest("hex").slice(0, 12)}`);
+  // Builds a Mac helper with Apple's command line tools, if they're there (never asking to install them), once. A failed build
+  // isn't tried again for this version of it.
+  const builds = {};
+  function buildSwift(source, bin, macos, done, failed) {
+    if (platform !== "darwin" || fake || existsSync(bin) || existsSync(bin + ".failed")) return builds[bin] || null;
+    if (builds[bin]) return builds[bin];
+    builds[bin] = (async () => {
       try {
         await run(spawn, "xcode-select", ["-p"], { env, timeout: 5000 });
       } catch {
         return false;
       }
-      const src = macHelperBin + ".swift";
+      const src = bin + ".swift";
       try {
-        writeFileSync(src, MAC_STREAM);
-        // ScreenCaptureKit is macOS 12.3 and later; on an older Mac the helper doesn't start and the slower way is used
-        const target = `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos12.3`;
-        await run(spawn, "xcrun", ["swiftc", "-O", "-target", target, "-o", macHelperBin + ".tmp", src], { env, timeout: 300000 });
-        renameSync(macHelperBin + ".tmp", macHelperBin);
-        log("Remote: built the helper that streams this Mac's screen.");
+        writeFileSync(src, source);
+        const target = `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos${macos}`;
+        await run(spawn, "xcrun", ["swiftc", "-O", "-target", target, "-o", bin + ".tmp", src], { env, timeout: 300000 });
+        renameSync(bin + ".tmp", bin);
+        log(done);
         return true;
       } catch (e) {
         try {
-          writeFileSync(macHelperBin + ".failed", String((e && e.message) || e).slice(0, 2000));
+          writeFileSync(bin + ".failed", String((e && e.message) || e).slice(0, 2000));
         } catch {}
-        log("Remote: couldn't build the screen streaming helper, so pictures are taken one at a time:", String((e && e.message) || e).slice(0, 300));
+        log(failed, String((e && e.message) || e).slice(0, 300));
         return false;
       } finally {
         try {
@@ -784,7 +1101,99 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
         } catch {}
       }
     })();
+    return builds[bin];
+  }
+  // the pictures: ScreenCaptureKit is macOS 12.3 and later; on an older Mac the helper doesn't start and the slower way is
+  // used, as it is meanwhile
+  function buildMacHelper() {
+    building = buildSwift(MAC_STREAM, macHelperBin, "12.3", "Remote: built the helper that streams this Mac's screen.", "Remote: couldn't build the screen streaming helper, so pictures are taken one at a time:");
     return building;
+  }
+  // the sound: ScreenCaptureKit hears it from macOS 13 on
+  function buildMacSound() {
+    return buildSwift(MAC_SOUND, macSoundBin, "13.0", "Remote: built the helper that plays this Mac's sound on the site.", "Remote: couldn't build the sound helper, so Remote has no sound on this Mac:");
+  }
+
+  // ---- Sound: what this computer is playing, as it plays, in pieces of 40 ms (`onChunk`, each with its header), until
+  // `stop()`. `started` settles once a way of hearing it is running, or rejects with why there's none (a ScreenError, code
+  // "sound"). `onEnd` is told if it stops by itself later.
+  function sound({ onChunk, onEnd = () => {} }) {
+    let stopped = false;
+    let src = null;
+    if (fake) {
+      if (env.CLAUDECONNECT_SOUND === "none") return { started: Promise.reject(new ScreenError("sound", "This computer has no sound to send.")), stop() {} };
+      // the stand-in: a steady 440 Hz tone, at the pace it would play
+      let n = 0;
+      const timer = setInterval(() => {
+        const frames = 1920;
+        const pcm = Buffer.alloc(frames * 4);
+        for (let i = 0; i < frames; i++, n++) {
+          const v = Math.round(Math.sin((2 * Math.PI * 440 * n) / 48000) * 8000);
+          pcm.writeInt16LE(v, i * 4);
+          pcm.writeInt16LE(v, i * 4 + 2);
+        }
+        onChunk(Buffer.concat([soundHeader(48000), pcm]));
+      }, 40);
+      return { started: Promise.resolve(true), stop: () => clearInterval(timer) };
+    }
+    const tries = [];
+    let why = "";
+    if (platform === "darwin") {
+      tries.push(async () => {
+        await buildMacSound();
+        if (!existsSync(macSoundBin)) {
+          why = "Sound from a Mac needs macOS 13 or later and Apple's command line tools (xcode-select --install in Terminal).";
+          return null;
+        }
+        why = "This Mac didn't let Remote hear its sound. It needs Screen Recording for node (System Settings → Privacy & Security), and macOS 13 or later.";
+        return [macSoundBin, [], { rate: 48000, name: "The sound helper" }];
+      });
+    } else if (platform === "win32") {
+      tries.push(() => {
+        mkdirSync(tmp, { recursive: true });
+        const file = join(tmp, "sound.ps1");
+        writeFileSync(file, WIN_SOUND);
+        why = "Windows didn't let Remote hear its sound (there may be no speakers or headphones set up).";
+        return ["powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file], { rateFirst: true, name: "The sound helper" }];
+      });
+    } else {
+      why = "Sound on Linux needs PulseAudio or PipeWire, with parec (pulseaudio-utils) or ffmpeg.";
+      tries.push(() => ["parec", ["--device=@DEFAULT_MONITOR@", "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=20", "--raw"], { rate: 48000, name: "parec" }]);
+      tries.push(() => ["ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "pulse", "-fragment_size", "3840", "-i", "@DEFAULT_MONITOR@", "-ac", "2", "-ar", "48000", "-f", "s16le", "-"], { rate: 48000, name: "ffmpeg" }]);
+    }
+    const started = (async () => {
+      let last = null;
+      for (const make of tries) {
+        if (stopped) break;
+        const how = await make();
+        if (!how || stopped) continue;
+        const [cmd, args, o] = how;
+        const s = soundSource(spawn, cmd, args, { env, ...o, onChunk: c => !stopped && onChunk(c) });
+        if (await s.started) {
+          if (stopped) {
+            s.stop();
+            break;
+          }
+          src = s;
+          s.ended.then(e => {
+            if (!stopped && src === s) onEnd(new ScreenError("sound", `The sound stopped (${String((e && e.message) || e).slice(0, 200)}).`));
+          });
+          return true;
+        }
+        last = await s.ended;
+        s.stop();
+      }
+      if (stopped) throw new ScreenError("stopped", "Stopped.");
+      throw new ScreenError("sound", why + (last && last.code !== "ENOENT" && last.message ? ` (${String(last.message).slice(0, 200)})` : ""));
+    })();
+    started.catch(() => {});
+    return {
+      started,
+      stop() {
+        stopped = true;
+        if (src) src.stop();
+      }
+    };
   }
 
   function stream({ width = 1600, quality = 60, fps = 30 } = {}) {
@@ -885,7 +1294,10 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
   // reads the current state.
   async function perms({ prompt = false, open = false } = {}) {
     if (fake || platform !== "darwin") return { view: true, control: true };
-    if (prompt || open) buildMacHelper();
+    if (prompt || open) {
+      buildMacHelper();
+      buildMacSound();
+    }
     const h = await getHelper();
     const r = await h.ask({ t: prompt ? "ask" : "check" }, 30000);
     const got = { view: r.view !== false, control: r.control !== false };
@@ -899,5 +1311,5 @@ export function makeScreen({ platform = process.platform, env = process.env, spa
   // streaming helper. Gives back what's allowed.
   const ask = () => perms({ prompt: true });
 
-  return { frame, stream, input, ask, perms, showing, close, buildMacHelper, get platform() { return fake ? "fake" : platform; } };
+  return { frame, stream, sound, input, ask, perms, showing, close, buildMacHelper, buildMacSound, get platform() { return fake ? "fake" : platform; } };
 }

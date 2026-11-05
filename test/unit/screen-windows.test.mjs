@@ -93,3 +93,38 @@ test("the Windows helper answers pictures, does mouse, wheel and keys with the r
     s.close();
   }
 });
+
+test("the Windows sound helper's script parses, its C# compiles, and what Windows mixes becomes 16-bit stereo", { skip: !HAVE && "needs PowerShell" }, () => {
+  const a = SOURCE.indexOf("const WIN_SOUND = String.raw`") + "const WIN_SOUND = String.raw`".length;
+  const dir = mkdtempSync(join(os.tmpdir(), "cc-ps-sound-"));
+  // float 32 stereo (one sample past full scale), 16-bit mono (played on both sides), 24-bit stereo
+  const f32 = Buffer.alloc(16);
+  [0.5, -0.5, 1.5, -1].forEach((v, i) => f32.writeFloatLE(v, i * 4));
+  const i16 = Buffer.alloc(4);
+  i16.writeInt16LE(1000, 0);
+  i16.writeInt16LE(-2000, 2);
+  const i24 = Buffer.from([0x56, 0x34, 0x12, 0xba, 0xdc, 0xfe]);
+  const cases = [
+    [f32, 2, 2, 8, 32, "$true", [16383, -16383, 32767, -32767]],
+    [i16, 2, 1, 2, 16, "$false", [1000, 1000, -2000, -2000]],
+    [i24, 1, 2, 6, 24, "$false", [0x1234, -292]]
+  ];
+  try {
+    writeFileSync(join(dir, "sound.ps1"), SOURCE.slice(a, SOURCE.indexOf("\n`;", a)));
+    const calls = cases.map(([raw, frames, ch, block, bits, fl]) => `$pcm = New-Object byte[] ${frames * 4}; [CCSound]::ToPcm([Convert]::FromBase64String("${raw.toString("base64")}"), ${frames}, ${ch}, ${block}, ${bits}, ${fl}, $pcm); [Convert]::ToBase64String($pcm)`).join("\n");
+    const r = spawnSync(PWSH, ["-NoProfile", "-NonInteractive", "-Command", `$t = $null; $e = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile("${join(dir, "sound.ps1")}", [ref]$t, [ref]$e)
+if ($e.Count) { $e | ForEach-Object { "error: $($_.Extent.StartLineNumber): $($_.Message)" }; exit 1 }
+$src = Get-Content -Raw "${join(dir, "sound.ps1")}"
+Add-Type -TypeDefinition ([regex]::Match($src, '(?s)@"\r?\n(.*?)\r?\n"@').Groups[1].Value)
+${calls}`], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const out = r.stdout.trim().split(/\r?\n/).map(l => Buffer.from(l, "base64"));
+    cases.forEach(([, frames, , , , , want], i) => {
+      const got = Array.from({ length: frames * 2 }, (_, k) => out[i].readInt16LE(k * 2));
+      assert.deepEqual(got, want);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

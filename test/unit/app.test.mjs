@@ -550,8 +550,8 @@ test("everything `<command> edit` asks about can also be changed on the page", (
 test("something waiting on the computer shows over the page, escaped, and the answer goes back for that reply", () => {
   const els = {};
   const $ = id => (els[id] = els[id] || { hidden: true, innerHTML: "", textContent: "" });
-  const ctx = { $, esc: v => String(v).replace(/</g, "&lt;").replace(/"/g, "&quot;"), CFG: { name: "Site" }, R: { q: null, busy: false } };
-  vm.runInNewContext(lift("showRemote") + lift("hideRemote") + "this.showRemote = showRemote; this.hideRemote = hideRemote;", ctx);
+  const ctx = { $, esc: v => String(v).replace(/</g, "&lt;").replace(/"/g, "&quot;"), CFG: { name: "Site" }, R: { q: null, busy: false, chat: null }, S: { chatId: "c1", chats: [{ id: "c1", title: "Here" }, { id: "c2", title: "Left <behind>" }] } };
+  vm.runInNewContext(lift("showRemote") + lift("hideRemote") + lift("hideRemoteOf") + "this.showRemote = showRemote; this.hideRemote = hideRemote; this.hideRemoteOf = hideRemoteOf;", ctx);
   ctx.showRemote({ id: "a1", kind: "permission", title: "Run a command", detail: "rm -rf <build>", at: 1 });
   assert.equal(els.remote.hidden, false);
   // the question comes from the site's own assistant, by the site's name
@@ -564,7 +564,19 @@ test("something waiting on the computer shows over the page, escaped, and the an
   assert.equal(els.remote.hidden, false, "only its own id closes it");
   ctx.hideRemote("a1");
   assert.equal(els.remote.hidden, true);
-  assert.match(lift("answerRemote"), /apiJson\("\/api\/remote", \{ method: "POST"[^\n]*JSON\.stringify\(\{ chatId: S\.chatId, id: R\.q\.id, \.\.\.body \}\)/);
+  // a question from a chat you've left (its reply still running) says which chat, and stays while you look at another
+  ctx.showRemote({ id: "b1", kind: "permission", title: "Edit a file", at: 2 }, "c2");
+  assert.equal(ctx.R.chat, "c2");
+  assert.match(els.rBody.innerHTML, /<p class="rnote">In “Left &lt;behind>”\. Site is asking/);
+  ctx.hideRemoteOf("c1");
+  assert.equal(els.remote.hidden, false, "opening another chat doesn't close it");
+  ctx.hideRemoteOf("c2");
+  assert.equal(els.remote.hidden, true);
+  ctx.showRemote({ id: "c1q", kind: "permission", title: "Run", at: 3 });
+  assert.equal(ctx.R.chat, "c1", "one from the chat shown is that chat's");
+  assert.doesNotMatch(els.rBody.innerHTML, /In “/);
+  // the answer goes to the question's own chat
+  assert.match(lift("answerRemote"), /const chat = R\.chat \|\| S\.chatId;[\s\S]*apiJson\("\/api\/remote", \{ method: "POST"[^\n]*JSON\.stringify\(\{ chatId: chat, id: R\.q\.id, \.\.\.body \}\)/);
 });
 
 test("out of usage, the note under the message box says when it comes back, and offers a free reset", () => {
@@ -666,4 +678,115 @@ test("an update only says it's done once the site answers as the new version, an
   const job = lift("renderJob");
   assert.match(job, /if \(!liveAt\(to\)\) \{[\s\S]*Making sure the new version is live/);
   assert.match(lift("applyUpdate"), /if \(run && run\.state === "done" && run\.kind !== "settings" && !liveAt\(run\.to\)\) return checkLive\(run\.to\);/);
+});
+
+test("Remote plays the computer's sound as it comes: each piece straight after the last, a little in hand, and none late", () => {
+  const started = [];
+  const ctx = {
+    AU: { on: true, next: 0, ctx: null },
+    DataView,
+    Math
+  };
+  const audio = {
+    state: "running",
+    currentTime: 10,
+    destination: {},
+    createBuffer(ch, frames, rate) {
+      const data = Array.from({ length: ch }, () => new Float32Array(frames));
+      return { duration: frames / rate, numberOfChannels: ch, rate, data, getChannelData: c => data[c] };
+    },
+    createBufferSource() {
+      const s = { connect() {}, start: at => started.push({ at, buffer: s.buffer }) };
+      return s;
+    }
+  };
+  ctx.AU.ctx = audio;
+  vm.runInNewContext(lift("playSound") + "this.playSound = playSound;", ctx);
+  // a piece as the computer sends it: CCAU, 48000, two channels, 16-bit, then 1920 frames (40 ms)
+  const piece = (frames = 1920, v = 16384) => {
+    const b = new ArrayBuffer(12 + frames * 4);
+    const dv = new DataView(b);
+    [0x43, 0x43, 0x41, 0x55].forEach((x, i) => dv.setUint8(i, x));
+    dv.setUint32(4, 48000, true);
+    dv.setUint8(8, 2);
+    dv.setUint8(9, 1);
+    for (let i = 0; i < frames; i++) {
+      dv.setInt16(12 + i * 4, v, true);
+      dv.setInt16(12 + i * 4 + 2, -v, true);
+    }
+    return b;
+  };
+  ctx.playSound(piece());
+  assert.equal(started.length, 1);
+  assert.ok(Math.abs(started[0].at - 10.06) < 1e-9, "the first starts with 60 ms in hand");
+  assert.equal(started[0].buffer.data[0][0], 0.5, "left, 16-bit to -1..1");
+  assert.equal(started[0].buffer.data[1][0], -0.5, "right");
+  assert.ok(Math.abs(started[0].buffer.duration - 0.04) < 1e-9);
+  ctx.playSound(piece());
+  assert.ok(Math.abs(started[1].at - 10.1) < 1e-9, "the next straight after it, with no gap");
+  // a burst after the connection stalled: once 400 ms are waiting, the rest is dropped rather than heard late
+  for (let i = 0; i < 20; i++) ctx.playSound(piece());
+  assert.ok(started.length < 15, `${started.length} scheduled`);
+  assert.ok(started.at(-1).at <= 10.4 + 1e-9);
+  // the sound stopped for a while (nothing plays between sounds on Windows): it starts again with a little in hand
+  audio.currentTime = 30;
+  const n = started.length;
+  ctx.playSound(piece());
+  assert.ok(Math.abs(started[n].at - 30.06) < 1e-9);
+  // nothing while the sound is off, or before the browser lets it play, or for something that isn't a sound piece
+  ctx.AU.on = false;
+  ctx.playSound(piece());
+  ctx.AU.on = true;
+  audio.state = "suspended";
+  ctx.playSound(piece());
+  audio.state = "running";
+  const bad = piece();
+  new DataView(bad).setUint8(9, 7);
+  ctx.playSound(bad);
+  assert.equal(started.length, n + 1);
+});
+
+test("Remote has a sound switch and a pictures-a-second picker, on the page and on a phone turned sideways", () => {
+  assert.match(html, /<select class="sc-fps" id="scFps" aria-label="Pictures a second"[^>]*hidden><option value="1">1 fps<\/option><option value="5">5 fps<\/option>[\s\S]*?<option value="30">30 fps<\/option><option value="60">60 fps<\/option><\/select>/);
+  assert.match(html, /<button class="icon-btn" id="scSound" type="button" aria-pressed="true" aria-label="Sound"/);
+  assert.match(html, /<div class="sc-float" id="scFloat"><select class="sc-fps" id="scFpsF"[\s\S]*?<button type="button" id="scSoundF" data-scf="sound"/);
+  assert.match(script, /const FPS = \[1, 5, 10, 15, 24, 30, 60\];/);
+  // what the page wants goes to the site: in its hello, and whenever it changes
+  assert.match(lift("screenConnect"), /ws\.binaryType = "arraybuffer";[\s\S]*JSON\.stringify\(\{ t: "hello", w: D\.w, tag: D\.tag, fps: fpsNow\(\), sound: D\.soundSaid \}\)/);
+  assert.match(lift("setFps"), /store\.set\("remoteFps", n\);[\s\S]*JSON\.stringify\(\{ t: "fps", fps: n \}\)/);
+  assert.match(lift("soundSay"), /JSON\.stringify\(\{ t: "sound", sound: want \}\)/);
+  // a sound piece is played and not answered; a picture is answered straight away and drawn
+  const conn = lift("screenConnect");
+  assert.ok(conn.indexOf("if (isSoundPiece(e.data)) return playSound(e.data);") < conn.indexOf(`ws.send('{"t":"ack"}')`));
+  assert.match(conn, /D\.pending = new Blob\(\[e\.data\], \{ type: "image\/jpeg" \}\);/);
+});
+
+test("a chat can be left while its reply is still being written: it carries on, and the page keeps listening for it", () => {
+  // no more "wait for this reply to finish"
+  assert.doesNotMatch(script, /Wait for this reply to finish/);
+  assert.match(lift("openChat"), /stopPolling\(\);\n  letGo\(\);/);
+  assert.match(lift("newChat"), /stopPolling\(\);\n  letGo\(\);/);
+  const ctx = { S: { busy: true, sending: null, live: null, chats: [{ id: "a", title: "A", running: null }, { id: "b", title: "B" }] }, cancelAnimationFrame() {} };
+  vm.runInNewContext(lift("letGo") + "this.letGo = letGo;", ctx);
+  const s = { chatId: "a", away: false };
+  ctx.S.sending = s;
+  ctx.S.live = { raf: 0 };
+  ctx.letGo();
+  assert.equal(s.away, true);
+  assert.equal(ctx.S.busy, false, "the message box is free for the next chat");
+  assert.equal(ctx.S.sending, null);
+  assert.equal(ctx.S.live, null);
+  assert.equal(ctx.S.chats[0].running, true, "marked as answering in the sidebar");
+  // what a reply you've left says: its new chat goes in the sidebar, a question still shows, and it ends
+  const shown = [];
+  const ev = { S: { chats: [] }, renderHistory() {}, showRemote: (q, chat) => shown.push(["show", q.id, chat]), hideRemote: id => shown.push(["hide", id]), hideRemoteOf: chat => shown.push(["hideOf", chat]) };
+  vm.runInNewContext(lift("awayEvent") + "this.awayEvent = awayEvent;", ev);
+  const away = { chatId: null, away: true };
+  assert.equal(ev.awayEvent({ type: "meta", chat: { id: "n1", title: "New one" }, runId: "r1" }, away), false);
+  assert.equal(away.chatId, "n1");
+  assert.equal(JSON.stringify(ev.S.chats.map(c => [c.id, c.running])), JSON.stringify([["n1", "r1"]]));
+  assert.equal(ev.awayEvent({ type: "delta", text: "ignored" }, away), false);
+  ev.awayEvent({ type: "remote", remote: { id: "q1" } }, away);
+  assert.equal(ev.awayEvent({ type: "done", message: {} }, away), true);
+  assert.deepEqual(shown, [["show", "q1", "n1"], ["hideOf", "n1"]]);
 });
