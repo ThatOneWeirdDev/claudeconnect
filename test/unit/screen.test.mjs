@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import os from "node:os";
-import { makeScreen, cleanEvents, jpegSize, splitJpegs, splitSized, MAC_STREAM } from "../../agent/screen.mjs";
+import { makeScreen, cleanEvents, jpegSize, splitJpegs, splitSized, MAC_STREAM, MAC_SOUND, WIN_SOUND, soundChunks, soundHeader, isSound } from "../../agent/screen.mjs";
 
 const PICTURE = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen.jpg"));
 const OTHER = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen2.jpg"));
@@ -296,4 +296,175 @@ test("a Mac reports what Remote is allowed, and re-requesting opens the Settings
   const lin = fakeSpawn();
   assert.deepEqual(await makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: lin.spawn }).perms({ prompt: true, open: true }), { view: true, control: true });
   assert.equal(lin.calls.length, 0);
+});
+
+// ---- sound
+
+// A stand-in for programs that keep running: `behave(cmd, args, child)` makes each one write, or end, as the test wants.
+function runningSpawn(behave) {
+  const calls = [];
+  const spawn = (cmd, args) => {
+    const c = new EventEmitter();
+    c.stdout = new EventEmitter();
+    c.stderr = new EventEmitter();
+    const call = { cmd, args, killed: false };
+    calls.push(call);
+    c.stdin = { write() {}, end() {} };
+    c.kill = () => {
+      call.killed = true;
+      setImmediate(() => c.emit("close", null));
+    };
+    setImmediate(() => behave(cmd, args, c));
+    return c;
+  };
+  return { spawn, calls };
+}
+const pcm = (frames, v = 1000) => {
+  const b = Buffer.alloc(frames * 4);
+  for (let i = 0; i < frames * 2; i++) b.writeInt16LE(v, i * 2);
+  return b;
+};
+
+test("sound goes in pieces of 40 ms, each with its header, however it arrives, and what's left over follows", async () => {
+  const h = soundHeader(48000);
+  assert.deepEqual([...h], [0x43, 0x43, 0x41, 0x55, 0x80, 0xbb, 0, 0, 2, 1, 0, 0], "CCAU, 48000 little-endian, two channels, 16-bit");
+  assert.equal(isSound(h), true);
+  assert.equal(isSound(PICTURE), false, "a picture isn't sound");
+  assert.equal(isSound(Buffer.from("CCA")), false);
+  const got = [];
+  const cut = soundChunks({ rate: 48000, onChunk: c => got.push(c), idle: 30 });
+  // 1920 frames are 40 ms at 48 kHz: 7680 bytes; it comes in odd sizes, even mid-sample
+  const all = pcm(1920 * 2 + 100);
+  for (let i = 0; i < all.length; i += 1001) cut.feed(all.subarray(i, i + 1001));
+  assert.equal(got.length, 2);
+  for (const c of got) {
+    assert.equal(c.length, 12 + 7680);
+    assert.ok(isSound(c));
+    assert.equal(c.readUInt32LE(4), 48000);
+  }
+  // the rest goes after a moment without more: whole frames only
+  await new Promise(r => setTimeout(r, 80));
+  assert.equal(got.length, 3);
+  assert.equal(got[2].length, 12 + 400);
+  assert.deepEqual(Buffer.concat(got.map(c => c.subarray(12))), all);
+  cut.stop();
+
+  // Windows' helper says its rate first, after anything PowerShell might have written
+  const win = [];
+  const wcut = soundChunks({ rateFirst: true, onChunk: c => win.push(c), idle: 30 });
+  const rate = Buffer.alloc(4);
+  rate.writeUInt32LE(44100);
+  wcut.feed(Buffer.from("WARNING: something\r\nCC"));
+  wcut.feed(Buffer.concat([Buffer.from("AU"), rate, pcm(1764)]));
+  assert.equal(win.length, 1, "40 ms at 44.1 kHz is 1764 frames");
+  assert.equal(win[0].readUInt32LE(4), 44100);
+  assert.equal(win[0].length, 12 + 1764 * 4);
+  wcut.stop();
+});
+
+test("sound on Linux: from PulseAudio or PipeWire with parec, else ffmpeg; and why not, when neither works", async () => {
+  // parec hears it
+  const ok = runningSpawn((cmd, args, c) => c.stdout.emit("data", pcm(1920)));
+  const pieces = [];
+  const s = makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: ok.spawn }).sound({ onChunk: p => pieces.push(p) });
+  assert.equal(await s.started, true);
+  assert.equal(ok.calls[0].cmd, "parec");
+  assert.deepEqual(ok.calls[0].args, ["--device=@DEFAULT_MONITOR@", "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=20", "--raw"]);
+  assert.equal(pieces.length, 1);
+  assert.equal(pieces[0].length, 12 + 7680);
+  s.stop();
+  assert.equal(ok.calls[0].killed, true, "stopped with it");
+
+  // no parec: ffmpeg, from the same place, as raw 16-bit stereo at 48 kHz
+  const ff = runningSpawn((cmd, args, c) => (cmd === "parec" ? c.emit("error", Object.assign(new Error("not found"), { code: "ENOENT" })) : c.stdout.emit("data", pcm(10))));
+  const s2 = makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: ff.spawn }).sound({ onChunk() {} });
+  assert.equal(await s2.started, true);
+  assert.deepEqual(ff.calls.map(c => c.cmd), ["parec", "ffmpeg"]);
+  assert.deepEqual(ff.calls[1].args.slice(-9), ["-i", "@DEFAULT_MONITOR@", "-ac", "2", "-ar", "48000", "-f", "s16le", "-"]);
+  s2.stop();
+
+  // neither: it says what's needed, and what the last one said
+  const none = runningSpawn((cmd, args, c) => {
+    if (cmd === "parec") return c.emit("error", Object.assign(new Error("not found"), { code: "ENOENT" }));
+    c.stderr.emit("data", "default.monitor: Connection refused\n");
+    c.emit("close", 1);
+  });
+  const s3 = makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: none.spawn }).sound({ onChunk() {} });
+  await assert.rejects(s3.started, e => e.code === "sound" && /PulseAudio or PipeWire/.test(e.message) && /Connection refused/.test(e.message));
+
+  // one that stops later is told
+  let child;
+  const later = runningSpawn((cmd, args, c) => {
+    child = c;
+    c.stdout.emit("data", pcm(10));
+  });
+  let ended = null;
+  const s4 = makeScreen({ platform: "linux", env: { DISPLAY: ":0" }, spawn: later.spawn }).sound({ onChunk() {}, onEnd: e => (ended = e) });
+  assert.equal(await s4.started, true);
+  child.stderr.emit("data", "pulse went away\n");
+  child.emit("close", 1);
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal(ended.code, "sound");
+  assert.match(ended.message, /pulse went away/);
+});
+
+test("sound on Windows: the PowerShell helper, which says its rate first", async t => {
+  const dir = mkdtempSync(join(os.tmpdir(), "cc-sound-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const rate = Buffer.alloc(4);
+  rate.writeUInt32LE(44100);
+  let script = "";
+  const win = runningSpawn((cmd, args, c) => {
+    script = readFileSync(args[args.indexOf("-File") + 1], "utf8");
+    c.stdout.emit("data", Buffer.concat([Buffer.from("CCAU"), rate, pcm(1764)]));
+  });
+  const pieces = [];
+  const s = makeScreen({ platform: "win32", env: {}, spawn: win.spawn, dir }).sound({ onChunk: p => pieces.push(p) });
+  assert.equal(await s.started, true);
+  assert.equal(win.calls[0].cmd, "powershell.exe");
+  assert.equal(script, WIN_SOUND);
+  assert.match(WIN_SOUND, /0x00020000/, "loopback: what's playing, not a microphone");
+  assert.equal(pieces[0].readUInt32LE(4), 44100);
+  s.stop();
+});
+
+test("sound on a Mac comes from its own helper, built for macOS 13 apart from the picture one; without it, Remote says why", async t => {
+  const dir = mkdtempSync(join(os.tmpdir(), "cc-macsound-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, `sound-mac-${createHash("sha256").update(MAC_SOUND).digest("hex").slice(0, 12)}`);
+  assert.match(MAC_SOUND, /config\.capturesAudio = true/);
+  assert.match(MAC_SOUND, /config\.excludesCurrentProcessAudio = true/);
+  assert.match(MAC_SOUND, /config\.sampleRate = 48000/);
+  // without Apple's tools: no sound, and why
+  const bare = runningSpawn((cmd, args, c) => c.emit("error", Object.assign(new Error("not found"), { code: "ENOENT" })));
+  const s0 = makeScreen({ platform: "darwin", env: {}, spawn: bare.spawn, dir }).sound({ onChunk() {} });
+  await assert.rejects(s0.started, e => e.code === "sound" && /macOS 13 or later and Apple's command line tools/.test(e.message));
+  // with them: built for macOS 13, then run
+  const pieces = [];
+  const tools = runningSpawn((cmd, args, c) => {
+    if (cmd === "xcrun") writeFileSync(args[args.indexOf("-o") + 1], "built");
+    if (cmd === bin) return c.stdout.emit("data", pcm(1920));
+    c.emit("close", 0);
+  });
+  const screen = makeScreen({ platform: "darwin", env: {}, spawn: tools.spawn, dir });
+  const s = screen.sound({ onChunk: p => pieces.push(p) });
+  assert.equal(await s.started, true);
+  const xc = tools.calls.find(c => c.cmd === "xcrun");
+  assert.deepEqual(xc.args.slice(0, 4), ["swiftc", "-O", "-target", `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos13.0`]);
+  assert.ok(existsSync(bin));
+  assert.equal(pieces.length, 1);
+  s.stop();
+  assert.equal(tools.calls.filter(c => c.cmd === "xcrun").length, 1, "only the sound helper was built");
+});
+
+test("the stand-in's sound is a steady tone, as it would play, and none when it's told so", async () => {
+  const pieces = [];
+  const s = makeScreen({ env: { CLAUDECONNECT_SCREEN: "fake:" + join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "screen.jpg") } }).sound({ onChunk: p => pieces.push(p) });
+  assert.equal(await s.started, true);
+  await new Promise(r => setTimeout(r, 230));
+  s.stop();
+  assert.ok(pieces.length >= 4 && pieces.length <= 7, `${pieces.length} pieces in 230 ms`);
+  assert.ok(pieces.every(p => isSound(p) && p.length === 12 + 7680));
+  const silent = makeScreen({ env: { CLAUDECONNECT_SCREEN: "fake:x.jpg", CLAUDECONNECT_SOUND: "none" } }).sound({ onChunk() {} });
+  await assert.rejects(silent.started, e => e.code === "sound");
 });

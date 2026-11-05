@@ -530,6 +530,8 @@ svg{display:block;flex:none}
 .sc-head h2{margin:0 10px 0 0;font-size:18px;line-height:28px;font-weight:600}
 .sc-status{flex:1;min-width:0;color:var(--text-2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-status b{color:var(--ok);font-weight:500}
+.sc-fps{flex:none;height:32px;margin-right:4px;padding:0 8px;border:1px solid var(--border-2);border-radius:9999px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+#scSound[aria-pressed="false"],#scSoundF[aria-pressed="false"]{opacity:.55}
 .sc-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px;background:var(--surface-3);overflow:hidden}
 .sc-stage canvas{display:block;flex:none;border-radius:6px;box-shadow:var(--shadow-s);user-select:none;-webkit-user-select:none;-webkit-user-drag:none;touch-action:none;cursor:default}
 .sc-stage.keys canvas{outline:2px solid var(--focus);outline-offset:2px}
@@ -561,6 +563,7 @@ svg{display:block;flex:none}
 .screen.phone-full .sc-float{display:flex;position:absolute;top:calc(env(safe-area-inset-top) + 6px);left:50%;transform:translateX(-50%);z-index:2;gap:8px}
 .sc-float button{width:34px;height:34px;display:grid;place-items:center;border-radius:9999px;background:rgba(0,0,0,.55);color:#fff;opacity:.85;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .sc-float svg{width:18px;height:18px}
+.sc-float .sc-fps{height:34px;margin:0;border:0;background:rgba(0,0,0,.55);color:#fff;opacity:.85;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 @media (max-width: 640px){.sc-stage{padding:4px}.sc-head{padding-left:12px}.sc-head h2{margin-right:8px}}
 .screen:fullscreen .sc-stage img{border-radius:0;box-shadow:none}
 .fb-head{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;height:48px;padding:0 8px 0 12px;border-top:1px solid var(--border-0);border-bottom:1px solid var(--border-0)}
@@ -924,6 +927,8 @@ svg{display:block;flex:none}
       <div class="sc-head">
         <h2 id="scTitle">Remote</h2>
         <span class="sc-status" id="scStatus" aria-live="polite"></span>
+        <select class="sc-fps" id="scFps" aria-label="Pictures a second" title="How many pictures of the screen a second" hidden><option value="1">1 fps</option><option value="5">5 fps</option><option value="10">10 fps</option><option value="15">15 fps</option><option value="24">24 fps</option><option value="30">30 fps</option><option value="60">60 fps</option></select>
+        <button class="icon-btn" id="scSound" type="button" aria-pressed="true" aria-label="Sound" title="Sound" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
         <button class="icon-btn" id="scKeys" type="button" title="Keyboard" aria-label="Type on your computer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg></button>
         <button class="icon-btn" id="scFull" type="button" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg></button>
         <button class="icon-btn" id="scClose" type="button" title="Back to the chat" aria-label="Close Remote"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
@@ -933,7 +938,7 @@ svg{display:block;flex:none}
         <div class="sc-msg" id="scMsg"></div>
         <div class="sc-err" id="scErr" hidden></div>
         <div class="sc-turn" id="scTurn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg><b>Turn your phone sideways</b><span>Remote fills the whole screen with your phone on its side.</span></div>
-        <div class="sc-float" id="scFloat"><button type="button" data-scf="keys" aria-label="Type on your computer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg></button><button type="button" data-scf="close" aria-label="Close Remote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button></div>
+        <div class="sc-float" id="scFloat"><select class="sc-fps" id="scFpsF" aria-label="Pictures a second" hidden><option value="1">1 fps</option><option value="5">5 fps</option><option value="10">10 fps</option><option value="15">15 fps</option><option value="24">24 fps</option><option value="30">30 fps</option><option value="60">60 fps</option></select><button type="button" id="scSoundF" data-scf="sound" aria-pressed="true" aria-label="Sound" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button><button type="button" data-scf="keys" aria-label="Type on your computer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg></button><button type="button" data-scf="close" aria-label="Close Remote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button></div>
         <textarea class="sc-type" id="scType" aria-label="Keys you press go to your computer" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
       </div>
     </div>
@@ -1041,6 +1046,7 @@ const S = {
   chats: [],
   state: null,
   busy: false,
+  sending: null,
   files: [],
   live: null,
   poll: null,
@@ -1982,10 +1988,46 @@ function loadDraft() {
   updateSend();
 }
 addEventListener("pagehide", () => saveDraft());
+// What was written for a chat that isn't the one shown (a message that couldn't be sent after you'd gone to another chat):
+// it waits there as that chat's draft, unless there's one already.
+function keepDraft(key, text) {
+  if (draftKey() === key && S.draftReady) {
+    if (!$("input").value.trim()) {
+      $("input").value = text;
+      saveDraft();
+      grow();
+      updateSend();
+    }
+    return;
+  }
+  const all = store.get(DRAFTS, {}) || {};
+  if (all[key] && typeof all[key].text === "string" && all[key].text.trim()) return;
+  all[key] = { text, at: Date.now() };
+  store.set(DRAFTS, all);
+}
+// Going to another chat (or a new one) while a reply is still being written here: the reply carries on, on the computer and
+// on the site, which keeps it, and the sidebar marks the chat until it's done. This page goes on listening in the background,
+// only for a question it asks you and for when it's done, and going back to the chat shows how far it's got.
+function letGo() {
+  const s = S.sending;
+  if (!s) return;
+  s.away = true;
+  S.sending = null;
+  S.busy = false;
+  if (S.live && S.live.raf) cancelAnimationFrame(S.live.raf);
+  S.live = null;
+  if (s.chatId) S.chats = S.chats.map(c => (c.id === s.chatId && !c.running ? { ...c, running: true } : c));
+}
 
 async function openChat(id, push) {
+  // already here, with its reply coming in
+  if (S.busy && S.chatId === id) {
+    closeFiles(false);
+    closeScreen();
+    return;
+  }
   stopPolling();
-  if (S.live && S.busy) return toast("Wait for this reply to finish, or stop it first.");
+  letGo();
   closeFiles(false);
   closeScreen();
   const switching = S.chatId !== id;
@@ -2019,10 +2061,10 @@ async function openChat(id, push) {
   renderBar();
   S.live = null;
   renderThread(j.messages);
-  hideRemote();
+  hideRemoteOf(id);
   if (j.chat.running) {
     liveStart(j.partial);
-    if (j.partial && j.partial.remote) showRemote(j.partial.remote);
+    if (j.partial && j.partial.remote) showRemote(j.partial.remote, id);
     S.poll = setTimeout(() => pollChat(id), 1500);
   }
   renderHistory();
@@ -2040,11 +2082,11 @@ async function pollChat(id) {
   if (j.chat.running) {
     if (!S.live) liveStart(j.partial);
     else if (j.partial) { const L = S.live; L.text = j.partial.text; L.tools = j.partial.tools; L.status = j.partial.status; L.thinking = j.partial.thinking || ""; L.thinkingMs = j.partial.thinkingMs || 0; L.parts = livePartsFrom(j.partial); L.thinkActive = L.status === "Thinking" && lastPart(L) !== "text"; liveQueue(); }
-    if (j.partial && j.partial.remote) showRemote(j.partial.remote);
-    else hideRemote();
+    if (j.partial && j.partial.remote) showRemote(j.partial.remote, id);
+    else hideRemoteOf(id);
     S.poll = setTimeout(() => pollChat(id), 1500);
   } else {
-    hideRemote();
+    hideRemoteOf(id);
     S.live = null;
     renderThread(j.messages);
     autoScroll(true);
@@ -2054,7 +2096,7 @@ async function pollChat(id) {
 }
 function newChat(push) {
   stopPolling();
-  if (S.busy) return toast("Wait for this reply to finish, or stop it first.");
+  letGo();
   closeFiles(false);
   closeScreen();
   const switching = S.chatId !== null;
@@ -2390,6 +2432,14 @@ async function send() {
   const model = modelNow();
   const effort = effortFor(model);
   const startedIn = S.chatId;
+  // this message, while its reply comes in here; `away` once you've gone to another chat (letGo)
+  const s = { chatId: startedIn, away: false };
+  const finish = () => {
+    if (S.sending !== s) return;
+    S.sending = null;
+    S.busy = false;
+  };
+  S.sending = s;
   S.busy = true;
   input.value = "";
   saveDraft();
@@ -2404,6 +2454,11 @@ async function send() {
   autoScroll(true);
   updateSend();
   const restore = msg => {
+    if (s.away) {
+      keepDraft(startedIn || "new", text);
+      if (msg) toast(`Your message wasn't sent. ${msg}`, 8000);
+      return;
+    }
     userNode.remove();
     if (S.live) { S.live.el.remove(); S.live = null; }
     if (!$("threadInner").children.length) $("main").classList.add("is-empty");
@@ -2418,14 +2473,14 @@ async function send() {
   try {
     res = await api("/api/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId: S.chatId, text, model, effort, perm: permNow(), files: files.map(f => ({ name: f.name, type: f.type, data: f.data })) }) });
   } catch (e) {
-    S.busy = false;
+    finish();
     restore(e.message === "Signed out" ? "" : e.message);
     updateSend();
     return;
   }
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
-    S.busy = false;
+    finish();
     restore((j.error || `Something went wrong (${res.status}).`) + (j.resetsAt ? ` It resets ${relTime(j.resetsAt)}.` : ""));
     if (j.code === "offline" || j.code === "credits_off" || j.code === "no_credits") loadState();
     updateSend();
@@ -2447,11 +2502,16 @@ async function send() {
         if (!line.trim()) continue;
         let ev;
         try { ev = JSON.parse(line); } catch { continue; }
-        if (handleEvent(ev, startedIn)) gotDone = true;
+        if (handleEvent(ev, startedIn, s)) gotDone = true;
       }
     }
   } catch {}
-  S.busy = false;
+  const away = s.away;
+  finish();
+  if (away) {
+    loadChats();
+    return;
+  }
   if (!gotDone && S.chatId) {
     S.chat = S.chat || { running: true };
     S.poll = setTimeout(() => pollChat(S.chatId), 800);
@@ -2459,10 +2519,12 @@ async function send() {
   updateSend();
   loadChats();
 }
-function handleEvent(ev, startedIn) {
+function handleEvent(ev, startedIn, s) {
+  if (s && s.away) return awayEvent(ev, s);
   const L = S.live;
   switch (ev.type) {
     case "meta":
+      if (s) s.chatId = ev.chat.id;
       S.chatId = ev.chat.id;
       S.chat = { id: ev.chat.id, title: ev.chat.title, running: ev.runId, model: ev.user && ev.user.meta ? ev.user.meta.model : modelNow(), effort: ev.user && ev.user.meta ? ev.user.meta.effort : effortFor(modelNow()), mode: (ev.user && ev.user.meta && ev.user.meta.mode) || "code", perm: (ev.user && ev.user.meta && ev.user.meta.perm) || "auto" };
       renderBar();
@@ -2477,7 +2539,7 @@ function handleEvent(ev, startedIn) {
       if (L) { L.text += ev.text; livePart(L, "text").text += ev.text; L.thinkActive = false; liveQueue(); }
       return false;
     case "remote":
-      showRemote(ev.remote);
+      showRemote(ev.remote, S.chatId);
       return false;
     case "remote_done":
       hideRemote(ev.id);
@@ -2499,39 +2561,66 @@ function handleEvent(ev, startedIn) {
       return false;
     case "done":
       if (S.chat) S.chat.running = null;
-      hideRemote();
+      hideRemoteOf(S.chatId);
       liveFinish(ev.message);
       return true;
     default:
       return false;
   }
 }
+// What a reply you've left says while it's still coming in: the chat it made (a new one, now in the sidebar), a question for
+// you, and when it's done.
+function awayEvent(ev, s) {
+  if (ev.type === "meta") {
+    s.chatId = ev.chat.id;
+    if (!S.chats.some(c => c.id === ev.chat.id)) {
+      S.chats = [{ id: ev.chat.id, title: ev.chat.title, updated: Date.now(), running: ev.runId }, ...S.chats];
+      renderHistory();
+    }
+  } else if (ev.type === "remote") showRemote(ev.remote, s.chatId);
+  else if (ev.type === "remote_done") hideRemote(ev.id);
+  else if (ev.type === "done") {
+    hideRemoteOf(s.chatId);
+    return true;
+  }
+  return false;
+}
 /* ---------- something on the computer waiting for you: Claude Code asking permission, or a window of the Claude app ---------- */
 // Only that window shows, over the darkened page. Claude Code's question has Allow and Deny; the Claude app's window is a picture
 // of it you can click, as if you were at the computer, with its buttons underneath too. Your answer goes to the computer, which
 // sends a fresh picture (or closes this) once the app has taken it.
-const R = { q: null, busy: false };
-function showRemote(q) {
+// A question belongs to its chat (`R.chat`), which needn't be the one shown: a reply you've left can still ask.
+const R = { q: null, busy: false, chat: null };
+function showRemote(q, chat) {
   if (!q || !q.id) return;
   if (R.q && R.q.id === q.id && R.q.at === q.at && !$("remote").hidden) return;
   R.q = q;
+  R.chat = chat || S.chatId;
   R.busy = false;
+  const other = R.chat && R.chat !== S.chatId ? (S.chats.find(c => c.id === R.chat) || {}).title : "";
   $("rName").textContent = CFG.name;
-  $("rBody").innerHTML = `<h3>${esc(q.title)}</h3>${q.detail ? `<pre>${esc(q.detail)}</pre>` : ""}<p class="rnote">${esc(CFG.name)} is asking, and waits for your answer. It carries on once you choose.</p><div class="rbtns"><button class="btn ghost" type="button" data-ranswer="deny">Deny</button><button class="btn primary" type="button" data-ranswer="allow">Allow</button></div>`;
+  $("rBody").innerHTML = `<h3>${esc(q.title)}</h3>${q.detail ? `<pre>${esc(q.detail)}</pre>` : ""}<p class="rnote">${other ? `In “${esc(other)}”. ` : ""}${esc(CFG.name)} is asking, and waits for your answer. It carries on once you choose.</p><div class="rbtns"><button class="btn ghost" type="button" data-ranswer="deny">Deny</button><button class="btn primary" type="button" data-ranswer="allow">Allow</button></div>`;
   $("remote").hidden = false;
 }
 function hideRemote(id) {
   if (id && R.q && R.q.id !== id) return;
   R.q = null;
+  R.chat = null;
   $("remote").hidden = true;
   $("rBody").innerHTML = "";
 }
+// a question from this chat, if that's what's showing; one from another chat stays
+function hideRemoteOf(chat) {
+  if (R.q && R.chat && R.chat !== chat) return;
+  hideRemote();
+}
 async function answerRemote(body) {
-  if (!R.q || R.busy || !S.chatId) return;
+  const chat = R.chat || S.chatId;
+  if (!R.q || R.busy || !chat) return;
   R.busy = true;
   $("rBody").querySelectorAll("button").forEach(b => (b.disabled = true));
   try {
-    await apiJson("/api/remote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId: S.chatId, id: R.q.id, ...body }) });
+    await apiJson("/api/remote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId: chat, id: R.q.id, ...body }) });
     // a question is answered; a window's fresh picture (or its closing) comes from the computer
     if (R.q && R.q.kind === "permission") hideRemote();
   } catch (e) {
@@ -3204,7 +3293,83 @@ setInterval(() => { if (!document.hidden) loadState(); }, 20000);
 // `tag`: a mark no one can see (zero-width characters), in the tab's title while Remote is open. The computer looks for it in
 // its own window titles: there, this page would be showing the computer it runs on.
 const ZW = ["​", "‌", "‍", "⁠"];
-const D = { tag: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => ZW[b & 3]).join(""), code: "", open: false, ws: null, retry: null, w: 0, note: null, os: "", queue: [], flushing: false, err: "", inputErr: "", inputAt: 0, drag: -1, moveAt: 0, wheel: 0, touch: null, tap: null, pending: null, painting: false, shown: false, perms: null, asked: 0 };
+const D = { tag: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => ZW[b & 3]).join(""), code: "", open: false, ws: null, retry: null, w: 0, note: null, os: "", queue: [], flushing: false, err: "", inputErr: "", inputAt: 0, soundErr: "", soundAt: 0, drag: -1, moveAt: 0, wheel: 0, touch: null, tap: null, pending: null, painting: false, shown: false, perms: null, asked: 0, painted: [] };
+// How many pictures a second this browser asks for, picked on the Remote page (the computer sends at the highest any page
+// looking asks for, and each page gets no more than its own).
+const FPS = [1, 5, 10, 15, 24, 30, 60];
+D.fps = FPS.includes(Number(store.get("remoteFps", 30))) ? Number(store.get("remoteFps", 30)) : 30;
+// the rate asked for: the one picked, where the computer's program lets it be picked
+function fpsNow() { const a = S.state && S.state.agent; return a && a.screenFps ? D.fps : 30; }
+function setFps(n) {
+  n = Number(n);
+  if (!FPS.includes(n) || n === D.fps) return;
+  D.fps = n;
+  store.set("remoteFps", n);
+  if (D.ws && D.ws.readyState === 1) try { D.ws.send(JSON.stringify({ t: "fps", fps: n })); } catch {}
+  renderScreen();
+}
+
+/* The computer's sound, as it plays: uncompressed pieces (16-bit PCM, 40 ms each) on the same connection as the pictures but
+   not tied to them, played one straight after another with a little in hand. Behind by more than a moment (a slow connection
+   catching up), a piece is dropped rather than played late. A browser only plays sound after a click or a key, and opening
+   Remote is one; otherwise it starts with the first click on the screen. */
+const AU = { on: store.get("remoteSound", true) !== false, ctx: null, next: 0 };
+const SPEAKER = { on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>', off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>' };
+function soundCan() { const a = S.state && S.state.agent; return !!(a && a.screenSound); }
+function soundCtx() {
+  if (!AU.on || !soundCan()) return null;
+  if (!AU.ctx) {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    try { AU.ctx = new C({ latencyHint: "interactive", sampleRate: 48000 }); } catch { try { AU.ctx = new C(); } catch { return null; } }
+    AU.ctx.onstatechange = () => renderScreen();
+  }
+  if (AU.ctx.state !== "running") AU.ctx.resume().catch(() => {});
+  return AU.ctx;
+}
+const isSoundPiece = d => d.byteLength >= 12 && (b => b[0] === 0x43 && b[1] === 0x43 && b[2] === 0x41 && b[3] === 0x55)(new Uint8Array(d, 0, 4));
+function playSound(buf) {
+  const ctx = AU.ctx;
+  if (!AU.on || !ctx || ctx.state !== "running") return;
+  const dv = new DataView(buf);
+  const rate = dv.getUint32(4, true);
+  const ch = dv.getUint8(8);
+  const fmt = dv.getUint8(9);
+  const bytes = fmt === 3 ? 4 : 2;
+  if (rate < 8000 || rate > 192000 || ch < 1 || ch > 8 || (fmt !== 1 && fmt !== 3)) return;
+  const frames = Math.floor((buf.byteLength - 12) / (bytes * ch));
+  if (!frames) return;
+  const now = ctx.currentTime;
+  if (AU.next < now + 0.01) AU.next = now + 0.06;
+  else if (AU.next > now + 0.4) return;
+  const ab = ctx.createBuffer(ch, frames, rate);
+  for (let c = 0; c < ch; c++) {
+    const out = ab.getChannelData(c);
+    for (let i = 0, o = 12 + c * bytes; i < frames; i++, o += ch * bytes) out[i] = fmt === 3 ? dv.getFloat32(o, true) : dv.getInt16(o, true) / 32768;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = ab;
+  src.connect(ctx.destination);
+  src.start(AU.next);
+  AU.next += ab.duration;
+}
+function setSound(on) {
+  AU.on = on;
+  store.set("remoteSound", on);
+  D.soundErr = "";
+  AU.next = 0;
+  if (on) soundCtx();
+  else if (AU.ctx) AU.ctx.suspend().catch(() => {});
+  soundSay();
+  renderScreen();
+}
+// the computer sends its sound while this page wants it: told again whenever that changes (turned on or off here, or the
+// computer's program found able to)
+function soundSay() {
+  const want = AU.on && soundCan();
+  if (!D.ws || D.ws.readyState !== 1 || D.soundSaid === want) return;
+  try { D.ws.send(JSON.stringify({ t: "sound", sound: want })); D.soundSaid = want; } catch {}
+}
 function markTitle() {
   const want = `Remote${D.tag} · ${tabName()}`;
   if (D.open && document.title !== want) document.title = want;
@@ -3232,6 +3397,8 @@ async function openScreen() {
   setView("screen");
   markTitle();
   $("app").classList.remove("side-open");
+  // opening Remote is a click, so the sound can start straight away
+  soundCtx();
   renderScreen();
   screenTick();
 }
@@ -3239,6 +3406,8 @@ function closeScreen() {
   if (!D.open) return;
   D.open = false;
   screenDisconnect();
+  if (AU.ctx) AU.ctx.suspend().catch(() => {});
+  AU.next = 0;
   if (document.fullscreenElement === $("screen")) document.exitFullscreen().catch(() => {});
   $("screen").hidden = true;
   $("screen").classList.remove("phone-full");
@@ -3254,11 +3423,12 @@ function screenConnect() {
   if (D.ws || !screenWanted()) return;
   clearTimeout(D.retry);
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/screen/live`);
-  ws.binaryType = "blob";
+  ws.binaryType = "arraybuffer";
   D.ws = ws;
   ws.onopen = () => {
     D.w = screenWidth();
-    ws.send(JSON.stringify({ t: "hello", w: D.w, tag: D.tag }));
+    D.soundSaid = AU.on && soundCan();
+    ws.send(JSON.stringify({ t: "hello", w: D.w, tag: D.tag, fps: fpsNow(), sound: D.soundSaid }));
     // ask the computer what it allows, if it hasn't said yet, so the page can offer to request it again
     if (!D.perms) try { ws.send('{"t":"perms"}'); } catch {}
   };
@@ -3269,9 +3439,11 @@ function screenConnect() {
       if (m && m.t === "status") screenStatusIn(m);
       return;
     }
-    // said straight away, so the next one is already on its way while this one is drawn
+    // a piece of sound plays as it comes, with no answer
+    if (isSoundPiece(e.data)) return playSound(e.data);
+    // a picture: said straight away, so the next one is already on its way while this one is drawn
     try { ws.send('{"t":"ack"}'); } catch {}
-    D.pending = e.data;
+    D.pending = new Blob([e.data], { type: "image/jpeg" });
     paintScreen();
   };
   ws.onclose = () => {
@@ -3291,6 +3463,7 @@ function screenDisconnect() {
 function screenTick() {
   if (!D.open) return;
   markTitle();
+  soundSay();
   if (screenWanted()) screenConnect();
   else {
     screenDisconnect();
@@ -3303,6 +3476,12 @@ function screenTick() {
 function screenStatusIn(m) {
   const a = S.state && S.state.agent;
   if (m.os) D.os = m.os;
+  // the sound didn't start (or stopped): said over the picture, which carries on
+  if (m.code === "sound") {
+    D.soundErr = m.error || "The sound couldn't be played here.";
+    D.soundAt = Date.now();
+    return renderScreen();
+  }
   // what the computer allows: on its own (perms), or because the picture is held up until Screen Recording is on (need_perms)
   if (m.code === "perms" || m.code === "need_perms") {
     D.perms = { view: m.view !== false, control: m.control !== false };
@@ -3336,6 +3515,9 @@ async function paintScreen() {
       if (resized) { c.width = bmp.width; c.height = bmp.height; }
       c.getContext("2d").drawImage(bmp, 0, 0);
       bmp.close();
+      const t = performance.now();
+      D.painted.push(t);
+      while (D.painted.length && t - D.painted[0] > 1000) D.painted.shift();
       if (!D.shown || resized || D.err) {
         D.shown = true;
         D.err = "";
@@ -3387,16 +3569,36 @@ function renderScreen() {
   const now = Date.now();
   if (D.inputErr && now - D.inputAt > 8000) D.inputErr = "";
   const focus = document.activeElement === $("scType");
-  const status = shown ? `<b>Live</b> · ${focus ? "keys go to your computer" : "click the screen to type on it"}` : "";
+  // how many pictures came in the last second, when the screen is changing
+  const t = performance.now();
+  while (D.painted.length && t - D.painted[0] > 1000) D.painted.shift();
+  const rate = D.painted.length > 1 ? ` · ${D.painted.length} fps` : "";
+  const deaf = AU.on && soundCan() && (!AU.ctx || AU.ctx.state !== "running") ? " · click the screen for sound" : "";
+  const status = shown ? `<b>Live</b>${rate} · ${focus ? "keys go to your computer" : "click the screen to type on it"}${deaf}` : "";
   if ($("scStatus").innerHTML !== status) $("scStatus").innerHTML = status;
+  // the rate, and the sound, where this computer's program can do them
+  const a = S.state && S.state.agent;
+  for (const id of ["scFps", "scFpsF"]) {
+    $(id).hidden = !(a && a.screenFps);
+    if ($(id).value !== String(D.fps)) $(id).value = String(D.fps);
+  }
+  if (D.soundErr && now - D.soundAt > 10000) D.soundErr = "";
+  for (const id of ["scSound", "scSoundF"]) {
+    const b = $(id);
+    b.hidden = !soundCan();
+    const want = AU.on ? "true" : "false";
+    if (b.getAttribute("aria-pressed") !== want) { b.setAttribute("aria-pressed", want); b.innerHTML = AU.on ? SPEAKER.on : SPEAKER.off; }
+    b.title = AU.on ? "Sound on: click to mute" : "Sound off: click to hear the computer";
+  }
   // only when it changes, so a button in it isn't replaced under the pointer
   const note = shown ? "" : screenNote();
   if (note !== D.note) $("scMsg").innerHTML = D.note = note;
   $("scMsg").hidden = shown;
-  $("scErr").hidden = !D.inputErr;
+  $("scErr").hidden = !D.inputErr && !(shown && D.soundErr);
   // a control error on a Mac is almost always Accessibility not being on yet: offer to ask again, right there
   const canAsk = D.inputErr && D.os === "darwin" && /accessibility|assistive|control/i.test(D.inputErr);
   if (D.inputErr) $("scErr").innerHTML = esc(D.inputErr) + (canAsk ? ` <button class="sc-ask" type="button" data-sc="ask">Ask my Mac again</button>` : "");
+  else if (shown && D.soundErr) $("scErr").textContent = "No sound: " + D.soundErr;
   $("scStage").classList.toggle("keys", focus);
   $("scFull").hidden = !document.fullscreenEnabled;
   const way = phoneWay();
@@ -3473,6 +3675,7 @@ const SC_KEYS = { Enter: "Enter", Tab: "Tab", Backspace: "Backspace", Escape: "E
 const scView = $("scView");
 scView.addEventListener("pointerdown", e => {
   e.preventDefault();
+  soundCtx();
   if (e.pointerType === "touch") {
     // a tap clicks, a long press right-clicks, and a finger moved scrolls
     const at = scAt(e);
@@ -3549,6 +3752,7 @@ $("scStage").addEventListener("wheel", e => {
 const scType = $("scType");
 scType.addEventListener("keydown", e => {
   e.stopPropagation();
+  soundCtx();
   if (e.isComposing || e.keyCode === 229) return;
   const mods = scMods(e);
   const named = SC_KEYS[e.key] || (e.key === " " && mods.some(m => m !== "shift") ? "Space" : "");
@@ -3577,8 +3781,11 @@ for (const mq of [phoneMq, uprightMq]) mq.addEventListener("change", () => { scr
 $("scFloat").addEventListener("click", e => {
   const b = e.target.closest("[data-scf]");
   if (b && b.dataset.scf === "keys") scType.focus();
+  else if (b && b.dataset.scf === "sound") setSound(!AU.on);
   else if (b) closeScreen();
 });
+$("scSound").onclick = () => setSound(!AU.on);
+for (const id of ["scFps", "scFpsF"]) $(id).addEventListener("change", e => setFps(e.target.value));
 $("scClose").onclick = closeScreen;
 $("scKeys").onclick = () => scType.focus();
 $("scFull").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : $("screen").requestFullscreen()).catch(() => {});
