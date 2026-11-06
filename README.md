@@ -72,31 +72,6 @@ The **Chat | Files** switch at the top of the page opens the **file browser** in
 
 **Images**, under **New chat** in the sidebar, opens ChatGPT's Images page (chatgpt.com/images) in a new tab.
 
-### Remote
-
-**Remote**, in the sidebar, shows your computer's screen in place of the chat, and lets you use its mouse and keyboard from wherever you've opened the site, a phone included. It's off until you turn it on: there's a **Turn on Remote** button on the Remote page, and a **Remote** switch in **Settings → General → This computer**.
-
-- **Using it:**
-  - Click, double-click, right-click, drag and scroll over the picture as you would on the computer.
-  - Once you've clicked it (it gets a blue outline), the keys you press go to the computer. Your shortcuts carry over: ⌘ on a Mac works as Ctrl on Windows and Linux, and the other way round.
-  - On a phone, turn it sideways: Remote asks for that, then fills the whole screen, with small keyboard and close buttons on top. Tap to click, hold to right-click, slide a finger to scroll, and the keyboard button to type.
-  - The full-screen button gives the screen the whole page.
-  - **Pictures a second:** the list at the top of Remote (1, 5, 10, 15, 24, 30 or 60; 30 to start with) sets how many pictures of the screen this browser gets, and the top bar shows how many are arriving. Fewer saves data on a slow connection; 60 is smoothest. Each browser keeps its own choice: the computer streams at the highest rate any page looking at it asks for, and each page gets no more than its own.
-  - **Sound:** the speaker button plays the computer's sound here, as it plays there. It's on unless you turn it off, and the browser starts it with your first click (opening Remote counts).
-- **Not on the computer it shows:** in a browser on that same computer, Remote would show itself inside itself, over and over, and move the mouse out from under you, so it says to use another device instead. While Remote is open, the page puts a mark no one can see (zero-width characters) in its tab's title. The computer looks for that mark in its own window titles and refuses when it finds it. It uses CoreGraphics or System Events on a Mac, the window list on Windows, and xdotool on Linux.
-- **How it works:** while the Remote page is open, the page keeps one connection (a WebSocket) to your site, and your computer streams its screen down it, at the pictures a second you picked (JPEGs sized to fit the page). The page says when it has each picture, and no more than two are ever on their way, so a slow connection gets fewer pictures but never late ones. A screen that isn't changing sends nothing.
-- **How the sound works:** the computer's sound goes down the same connection but on its own, as it's heard, not with the pictures or at their rate, and nothing waits for it. It isn't compressed: 16-bit PCM, two channels, at 48 kHz (about 1.5 Mbit/s while it's on). The page plays each 40 ms piece straight after the last with a moment in hand; if the connection falls behind, the page skips ahead rather than playing late. Sound is only sent while a page looking has it on, and never to a browser on the same computer (it would hear itself). What you do over it goes back on the same connection, in order, with positions as fractions of the picture. It all goes through your own site, only to you, and only while the Remote page is open and on screen. Your computer notes in its log when its screen starts being shown.
-- **Mac:**
-  - The first time, the Mac asks to allow **Screen Recording** and **Accessibility** for `node` (the program that runs your site there). That has to be answered on the Mac itself.
-  - If you're away from the Mac and Remote isn't working, the Remote page shows which of the two are still off and an **Ask my Mac for permission** button. It has the Mac show the request again and opens the right Settings panes there; you still turn them on **on the Mac itself** (macOS only accepts that on the computer), and the screen then appears here on its own. Nobody — not you from another device, not the site — can grant these remotely; that's macOS's protection, and Remote works within it.
-  - Seeing only the desktop picture means Screen Recording isn't allowed yet. Clicks doing nothing means Accessibility isn't. Turn on `node` for both in **System Settings → Privacy & Security**.
-  - A Mac with its **lid closed** has no screen to show unless another display is connected.
-  - A locked screen can be seen, but macOS doesn't let anything type the password into it from elsewhere.
-  - The screen is streamed with ScreenCaptureKit (macOS 12.3 and later), through a small helper your Mac builds the first time Remote is turned on. That needs Apple's command line tools (`xcode-select --install`), which are never installed or asked for by themselves. Without them it uses ffmpeg if that's installed, and otherwise takes one picture at a time with `screencapture`, which is slower.
-  - The sound comes through ScreenCaptureKit too (macOS 13 and later), from a second small helper built the same way, under the same **Screen Recording** permission: nothing more to allow. Without Apple's command line tools, Remote has no sound on a Mac, and says so.
-- **Windows:** works as it is, with no extra permissions. One PowerShell helper takes the pictures (with the mouse pointer drawn in), the next one already being taken while the last is on its way, and moves the mouse and types. Another hears the sound, through Windows' own loopback of what the speakers play (at whatever rate Windows mixes at, often 48 kHz). Windows' locked screen and administrator prompts can't be shown.
-- **Linux:** an X11 desktop, with ffmpeg to stream the screen (or ImageMagick, one picture at a time) and `xdotool` to use it. Wayland isn't supported. The sound comes from PulseAudio or PipeWire (what the default output plays), with `parec` or else ffmpeg.
-
 ### Under the message box
 
 | Control | What it does |
@@ -215,7 +190,6 @@ An older version kept the command it was set up with through renames. Updating r
 | `agent/trash.mjs` | Moves a file or folder to the system's Trash: `~/.Trash` on macOS, the Recycle Bin on Windows, and the freedesktop.org Trash (with the note that lets a file manager put it back) on Linux. |
 | `agent/limits.mjs` | Reads the limit resets on your Claude account. |
 | `agent/keepalive.mjs` | The watcher that starts the program again after a crash or a hang. |
-| `agent/screen.mjs` | Remote: the screen, streamed live where it can be, its sound, and the mouse and keyboard, on macOS, Windows and Linux. |
 | `agent/search.mjs` | Searching the file browser by name, with filters. |
 | `agent/permit.mjs` | The small MCP server Claude Code asks through for **Ask first**, which passes each question to the site. |
 | `site/worker.js` | The Cloudflare Worker and its Durable Object: chats, the locked page, plan usage, and the checklist for whatever is running. |
