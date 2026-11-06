@@ -11,7 +11,6 @@ import { resetsFrom } from "./limits.mjs";
 import { list as listFiles, info as fileInfo, readPart, trash as trashFile, write as writeFile, places, FilesError } from "./files.mjs";
 import { awakeOn, setAwake, holdAwake } from "./awake.mjs";
 import { keepRunning, CANT_RUN } from "./keepalive.mjs";
-import { makeScreen, ScreenError } from "./screen.mjs";
 import { search as searchFiles, forget as forgetSearch } from "./search.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -60,9 +59,9 @@ const API = cfg.api || "https://api.cloudflare.com/client/v4";
 // setting for it anymore.)
 const HISTORY = "all";
 // Older versions had a free plan, which typed messages into the Claude desktop app. It's gone: Claude Code answers, always.
-if (cfg.plan || cfg.appPaused !== undefined || cfg.appPort !== undefined || cfg.appRefused !== undefined) {
+if (cfg.plan || cfg.appPaused !== undefined || cfg.appPort !== undefined || cfg.appRefused !== undefined || cfg.screen !== undefined) {
   const wasFree = cfg.plan === "free";
-  for (const k of ["plan", "appPaused", "appPort", "appRefused"]) delete cfg[k];
+  for (const k of ["plan", "appPaused", "appPort", "appRefused", "screen"]) delete cfg[k];
   try {
     writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
   } catch {}
@@ -699,7 +698,7 @@ function send(obj) {
       } catch {}
     }
     // what only matters while it's happening isn't kept for later
-    if (!["delta", "replace", "beat", "status", "sessions", "transcript", "remote", "remote_done", "fs_result", "fs_part", "screen_status"].includes(obj.type)) outbox.push(c);
+    if (!["delta", "replace", "beat", "status", "sessions", "transcript", "remote", "remote_done", "fs_result", "fs_part"].includes(obj.type)) outbox.push(c);
   }
 }
 
@@ -1044,7 +1043,7 @@ function creditsOn() {
 // `credits` and `history` are what they always are now; they're still said for a site from before.)
 // Answers to an update's new questions arrive the same way, once the new version is running.
 function computerSettings() {
-  return { autostart: existsSync(startupPaths().file), awake: AWAKE, screen: cfg.screen === true, workspace: WORKSPACE, plan: "paid", subscription: subscription(), credits: creditsOn(), history: HISTORY };
+  return { autostart: existsSync(startupPaths().file), awake: AWAKE, workspace: WORKSPACE, plan: "paid", subscription: subscription(), credits: creditsOn(), history: HISTORY };
 }
 
 async function setComputer(m) {
@@ -1063,18 +1062,6 @@ async function setComputer(m) {
       saveConfig();
       holdIfAwake();
       log(AWAKE ? "Staying awake with the lid closed." : "Sleeping again when the lid is closed.");
-    }
-  }
-  // Remote: the site showing this computer's screen and using its mouse and keyboard. Turned on, a Mac asks on its own
-  // screen to allow that (Screen Recording and Accessibility), which is answered there, so this doesn't wait for it.
-  if (typeof v.screen === "boolean" && v.screen !== (cfg.screen === true)) {
-    cfg.screen = v.screen;
-    saveConfig();
-    log(v.screen ? "Remote is on: the site can show this computer's screen and use its mouse and keyboard." : "Remote is off.");
-    if (v.screen) SCREEN.ask().then(screenPerms).catch(() => {});
-    else {
-      screenStop();
-      SCREEN.close();
     }
   }
   // the folder Claude Code works in; it's made if it isn't there
@@ -1735,12 +1722,6 @@ function onMessage(raw) {
   else if (m.type === "site") saveSite(m);
   else if (m.type === "fs_list" || m.type === "fs_read" || m.type === "fs_trash" || m.type === "fs_write") handleFiles(m);
   else if (m.type === "release_check") checkRelease(m.req);
-  else if (m.type === "screen_start") screenStart(m);
-  else if (m.type === "screen_stop") screenStop();
-  else if (m.type === "screen_ack") screenAck();
-  else if (m.type === "screen_ask") screenReask();
-  else if (m.type === "screen_check") SCREEN.perms().then(screenPerms).catch(() => {});
-  else if (m.type === "screen_input") liveInput(m);
   else if (m.type === "fs_search") findFiles(m);
   else if (m.type === "reset_claim") claimReset(m).catch(e => send({ type: "reset_result", req: m.req, result: "error", reason: String(e.message || e).slice(0, 40) }));
 }
@@ -1807,257 +1788,6 @@ async function findFiles(m) {
   }
 }
 
-// ---- Remote (screen.mjs): the screen, and what's done over it, only while Remote is on. Someone starting to look is written
-// in the log.
-const SCREEN = makeScreen({ dir: HERE });
-let screenSeen = 0;
-// Remote in a browser on this very computer would show the screen inside itself, over and over, and move the mouse out from
-// under you. While Remote is open the page puts a mark no one can see in its title; a window here with that mark in its title
-// is the site, open here, so Remote says no. Looked for twice a second for the first few seconds (a title takes a moment to
-// change), then every ten.
-const marks = new Map();
-async function sameComputer(tag) {
-  if (typeof tag !== "string" || !tag) return false;
-  const now = Date.now();
-  let here = marks.get(tag);
-  if (!here) {
-    // one for each page watching; the oldest goes when there are more than a few
-    if (marks.size >= 8) marks.delete(marks.keys().next().value);
-    marks.set(tag, (here = { first: now, at: 0, same: false, looking: null }));
-  }
-  // what's done meanwhile waits for a look already under way, so nothing gets through before the first answer
-  if (here.looking) await here.looking;
-  else if (now - here.at >= (now - here.first < 5000 ? 500 : 10000)) {
-    here.at = now;
-    here.looking = SCREEN.showing(tag).catch(() => null);
-    const found = await here.looking;
-    here.looking = null;
-    if (found !== null) here.same = found;
-  }
-  return here.same;
-}
-
-// ---- Remote, live. While a page shows the screen, pictures go to the site as fast as this computer takes them, up to the
-// rate the page asked for (`fps`), as binary messages, and the site passes them on. The page says when it has shown each one,
-// and no more than two are on their way at a time, so a slow connection gets fewer pictures but never late ones. A picture
-// the same as the last isn't sent again. What's done over it comes back as messages without a reply; anything that goes wrong
-// is told to the page (screen_status).
-let LIVE = null;
-const screenStatus = (code, error) => send({ type: "screen_status", code, error: String(error || "").slice(0, 300), os: process.platform });
-function screenStart(m) {
-  if (cfg.screen !== true) return screenStatus("off", "Remote is off on this computer.");
-  const width = Math.max(320, Math.min(2560, Math.round(Number(m.w)) || 1600));
-  const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps)) || 30));
-  const tags = (Array.isArray(m.tags) ? m.tags : []).filter(t => typeof t === "string").slice(0, 8);
-  soundSync(m.sound === true);
-  if (LIVE && LIVE.asked === width) {
-    const fresh = tags.some(t => !LIVE.tags.includes(t));
-    LIVE.tags = tags;
-    // a new rate: the screen is captured at it from now on (the loop takes the new source as it comes)
-    if (LIVE.fps !== fps) {
-      const old = LIVE.src;
-      LIVE.fps = fps;
-      LIVE.src = SCREEN.stream({ width: LIVE.width, quality: LIVE.quality, fps });
-      old.stop();
-      if (LIVE.wake) LIVE.wake();
-    }
-    if (fresh) screenAgain(LIVE);
-    return;
-  }
-  liveStop();
-  // `heard`: when the page last said it had a picture, or when one went with none on its way. `same`: whether a page looking
-  // is on this very computer (unknown until the first look)
-  const L = { asked: width, width, quality: 60, fps, tags, inflight: 0, heard: Date.now(), last: null, wake: null, tookAt: 0, same: null };
-  L.src = SCREEN.stream({ width, quality: L.quality, fps });
-  LIVE = L;
-  liveLoop(L).catch(e => screenStatus("failed", e.message || e));
-}
-// someone else started looking at a screen that isn't changing: they get the picture there is, not only the next change
-async function screenAgain(L) {
-  for (const t of L.tags) if (await sameComputer(t)) return;
-  if (LIVE !== L || !L.last || !ws || ws.readyState !== 1) return;
-  try {
-    ws.send(L.last);
-    L.inflight++;
-  } catch {}
-}
-function liveStop() {
-  if (!LIVE) return;
-  const L = LIVE;
-  LIVE = null;
-  L.src.stop();
-  if (L.wake) L.wake();
-}
-function screenStop() {
-  liveStop();
-  soundStop();
-}
-// ---- Remote's sound: what this computer plays, while a page looking at Remote has its sound on. It goes as it's heard, in
-// pieces of 40 ms, uncompressed (16-bit PCM), as binary messages of its own: not with the pictures, not at their rate, and
-// not held back by them. Never to a page on this computer itself (it would hear itself), and dropped rather than sent late
-// when the connection to the site falls behind.
-let SOUND = null;
-let soundSeen = 0;
-function soundSync(on) {
-  if (!on) return soundStop();
-  if (SOUND) return;
-  const me = { failed: false };
-  SOUND = me;
-  me.src = SCREEN.sound({
-    onChunk: c => {
-      if (SOUND !== me || !LIVE || LIVE.same !== false || !ws || ws.readyState !== 1) return;
-      if ((ws.bufferedAmount || 0) > 1000000) return;
-      try {
-        ws.send(c);
-      } catch {}
-    },
-    onEnd: e => {
-      if (SOUND !== me) return;
-      me.failed = true;
-      screenStatus("sound", e.message || e);
-    }
-  });
-  me.src.started.then(
-    () => {
-      if (SOUND === me && Date.now() - soundSeen > 120000) log("Remote: this computer's sound is being played on the site.");
-      soundSeen = Date.now();
-    },
-    e => {
-      // not tried again until the page turns its sound off and on, or looks again
-      if (SOUND !== me || (e && e.code === "stopped")) return;
-      me.failed = true;
-      screenStatus("sound", (e && e.message) || e);
-    }
-  );
-}
-function soundStop() {
-  if (!SOUND) return;
-  const me = SOUND;
-  SOUND = null;
-  me.src.stop();
-}
-function screenAck() {
-  if (!LIVE) return;
-  LIVE.inflight = Math.max(0, LIVE.inflight - 1);
-  LIVE.heard = Date.now();
-  if (LIVE.wake) LIVE.wake();
-}
-// What this computer allows Remote to do, for the page to show (Screen Recording and Accessibility, on a Mac; both always
-// elsewhere). The person turns these on, so the page can only ask and watch, never grant them.
-function screenPerms(p) {
-  if (p) send({ type: "screen_status", code: "perms", view: p.view !== false, control: p.control !== false, os: process.platform });
-}
-// The page asked this computer to request its permissions again: a Mac shows macOS's own request (the first time) and opens
-// the Settings panes for whatever isn't allowed yet, so the person turns it on there. Then the picture and control start on
-// their own. Nothing here can grant them; only the person at the Mac can.
-async function screenReask() {
-  if (cfg.screen !== true) return screenStatus("off", "Remote is off on this computer.");
-  try {
-    screenPerms(await SCREEN.perms({ prompt: true, open: true }));
-    if (LIVE) LIVE.viewOk = false;
-  } catch (e) {
-    screenStatus("failed", (e && e.message) || e);
-  }
-}
-async function liveLoop(L) {
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  if (Date.now() - screenSeen > 120000) log("Remote: this computer's screen is being shown on the site.");
-  while (LIVE === L) {
-    screenSeen = Date.now();
-    if (L.inflight >= 2) {
-      // a page that went without a word isn't waited on for ever
-      if (Date.now() - L.heard > 5000) L.inflight = 0;
-      else {
-        await new Promise(r => {
-          L.wake = r;
-          setTimeout(r, 250);
-        });
-        continue;
-      }
-    }
-    let same = false;
-    for (const t of L.tags) if (await sameComputer(t)) same = true;
-    L.same = same;
-    if (same) {
-      screenStatus("same_computer", `This is the computer ${siteName()} runs on, so Remote would show itself inside itself. Use Remote from another device, like your phone.`);
-      await sleep(5000);
-      continue;
-    }
-    // on a Mac, nothing to show until Screen Recording is allowed; keep checking so the picture starts the moment it is, and
-    // tell the page which permissions are missing so it can offer to ask again. Checked only until it's allowed once.
-    if (process.platform === "darwin" && !L.viewOk) {
-      const p = await SCREEN.perms().catch(() => null);
-      if (p && !p.view) {
-        send({ type: "screen_status", code: "need_perms", view: p.view, control: p.control, os: "darwin" });
-        await sleep(2500);
-        continue;
-      }
-      if (p) screenPerms(p);
-      L.viewOk = true;
-    }
-    // no faster than the page asked for, counted from when the last picture was asked for (sent or not, so a still screen
-    // taken one picture at a time isn't taken any more often): the picture taken after the wait is the newest there is
-    const gap = L.tookAt + 1000 / L.fps - Date.now();
-    if (gap > 2) {
-      await new Promise(r => {
-        L.wake = r;
-        setTimeout(r, gap);
-      });
-      continue;
-    }
-    let f;
-    const src = L.src;
-    L.tookAt = Date.now();
-    try {
-      f = await src.next();
-    } catch (e) {
-      if (LIVE !== L) break;
-      // replaced meanwhile (a new rate): the new one carries on
-      if (src !== L.src) continue;
-      screenStatus(e instanceof ScreenError ? e.code : "failed", (e && e.message) || e);
-      await sleep(3000);
-      continue;
-    }
-    if (LIVE !== L) break;
-    if (L.last && f.equals(L.last)) {
-      await sleep(40);
-      continue;
-    }
-    // a picture too big for one message to the site: smaller ones from now on
-    if (f.length > 900000) {
-      L.src.stop();
-      if (L.quality > 30) L.quality -= 15;
-      else L.width = Math.max(640, Math.round(L.width * 0.75));
-      L.src = SCREEN.stream({ width: L.width, quality: L.quality, fps: L.fps });
-      continue;
-    }
-    if (!ws || ws.readyState !== 1) {
-      await sleep(500);
-      continue;
-    }
-    try {
-      ws.send(f);
-      L.last = f;
-      if (!L.inflight) L.heard = Date.now();
-      L.inflight++;
-    } catch {}
-  }
-}
-// what's done over the live picture, in the order it was done: no answer, only a word to the page if it didn't work
-let liveInputs = Promise.resolve();
-function liveInput(m) {
-  liveInputs = liveInputs.then(async () => {
-    if (cfg.screen !== true) return screenStatus("off", "Remote is off on this computer.");
-    const tags = (Array.isArray(m.tags) ? m.tags : []).filter(t => typeof t === "string").slice(0, 8);
-    for (const t of tags) if (await sameComputer(t)) return;
-    try {
-      await SCREEN.input(m.events);
-    } catch (e) {
-      screenStatus(e instanceof ScreenError ? e.code : "input", (e && e.message) || e);
-    }
-  });
-}
-
 // Ultracode (Extra high with multi-agent workflows) needs workflows, which can be turned off in Claude Code's settings or
 // by an environment variable; then it isn't offered on the site.
 function workflowsOn() {
@@ -2073,7 +1803,7 @@ function workflowsOn() {
 // What this computer can do. `modes` is how freely Claude Code acts, `ask` asking on the site, `files` the file browser.
 function helloMessage() {
   // ultracode (--effort ultracode: xhigh plus multi-agent workflows) is understood from Claude Code 2.1.284 on
-  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "screen", "search", "screenlive", "sound", "fps", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
+  const caps = ["update", "admin", "limits", "computer", "remote", "resets", "modes", "history", "credits", "files", "release", "search", ...(CAN_ASK ? ["ask"] : []), ...(versionAtLeast(CLAUDE_VERSION, "2.1.284") && workflowsOn() ? ["ultracode"] : [])];
   return { type: "hello", agent: VERSION, caps, computer: computerSettings(), warning: WARNING_CODE, tokenExp: cfg.tokenExp || 0, active: [...procs.keys()], command: COMMAND, site: siteName() };
 }
 
@@ -2143,8 +1873,6 @@ async function connect() {
     if (finished) return;
     finished = true;
     clearInterval(pingTimer);
-    // no one to show the screen to now; the site asks again once it's back
-    screenStop();
     if (ws === sock) ws = null;
     try {
       sock.close();

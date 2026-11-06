@@ -522,50 +522,6 @@ svg{display:block;flex:none}
 /* the file browser takes the place of the chat under the top bar, so the sidebar and the Chat | Files switch stay where they are */
 .files{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);color:var(--text)}
 .main.files-open .thread,.main.files-open .dock,.main.files-open #chatMore{display:none!important}
-/* ---- Remote: the computer's screen, in place of the chat like the file browser. The picture fits the space; what you do
-   over it goes to the computer. */
-.screen{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);color:var(--text)}
-.main.screen-open .thread,.main.screen-open .dock,.main.screen-open #chatMore{display:none!important}
-.sc-head{flex:none;display:flex;align-items:center;gap:2px;height:48px;padding:0 8px 0 16px;border-top:1px solid var(--border-0);border-bottom:1px solid var(--border-0)}
-.sc-head h2{margin:0 10px 0 0;font-size:18px;line-height:28px;font-weight:600}
-.sc-status{flex:1;min-width:0;color:var(--text-2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sc-status b{color:var(--ok);font-weight:500}
-.sc-fps{flex:none;height:32px;margin-right:4px;padding:0 8px;border:1px solid var(--border-2);border-radius:9999px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
-#scSound[aria-pressed="false"],#scSoundF[aria-pressed="false"]{opacity:.55}
-.sc-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px;background:var(--surface-3);overflow:hidden}
-.sc-stage canvas{display:block;flex:none;border-radius:6px;box-shadow:var(--shadow-s);user-select:none;-webkit-user-select:none;-webkit-user-drag:none;touch-action:none;cursor:default}
-.sc-stage.keys canvas{outline:2px solid var(--focus);outline-offset:2px}
-.sc-msg{max-width:460px;text-align:center;color:var(--text-2);font-size:14px;line-height:20px}
-.sc-msg h3{margin:0 0 8px;color:var(--text);font-size:18px;line-height:26px;font-weight:600}
-.sc-msg p{margin:0 0 12px}
-.sc-msg .fine{font-size:13px;color:var(--text-3)}
-.sc-perms{list-style:none;margin:0 0 12px;padding:0;text-align:left;display:inline-block}
-.sc-perms li{margin:4px 0;font-size:14px;color:var(--text-2)}
-.sc-perms li.on{color:var(--ok)}
-.sc-perms li b{color:var(--text);font-weight:600}
-.sc-perms li .fine{color:var(--text-3)}
-.sc-err{position:absolute;top:20px;left:50%;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));padding:8px 14px;border-radius:12px;background:var(--elevated);box-shadow:var(--shadow);color:var(--danger-text);font-size:13px;line-height:18px}
-.sc-err .sc-ask{margin-left:8px;color:var(--accent);font-weight:600;text-decoration:underline}
-.sc-type{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;resize:none;pointer-events:none;font-size:16px}
-.screen:fullscreen .sc-stage{padding:0;background:#000}
-/* a phone: upright, it asks to be turned; on its side, Remote takes the whole screen, with two small buttons on top */
-.sc-turn{display:flex;flex-direction:column;align-items:center;gap:8px;max-width:280px;text-align:center;color:var(--text-2);font-size:14px;line-height:20px}
-.sc-turn[hidden]{display:none}
-.sc-turn svg{width:64px;height:64px;margin-bottom:8px;color:var(--text);animation:sc-tilt 2.6s ease-in-out infinite}
-.sc-turn b{color:var(--text);font-size:18px;line-height:26px;font-weight:600}
-@keyframes sc-tilt{0%,25%{transform:rotate(0)}50%,85%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
-@media (prefers-reduced-motion: reduce){.sc-turn svg{animation:none;transform:rotate(-90deg)}}
-.sc-float{display:none}
-.screen.phone-full{position:fixed;inset:0;z-index:80;background:#000}
-.screen.phone-full .sc-head{display:none}
-.screen.phone-full .sc-stage{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:#000}
-.screen.phone-full .sc-stage canvas{border-radius:0;box-shadow:none;outline:none}
-.screen.phone-full .sc-float{display:flex;position:absolute;top:calc(env(safe-area-inset-top) + 6px);left:50%;transform:translateX(-50%);z-index:2;gap:8px}
-.sc-float button{width:34px;height:34px;display:grid;place-items:center;border-radius:9999px;background:rgba(0,0,0,.55);color:#fff;opacity:.85;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.sc-float svg{width:18px;height:18px}
-.sc-float .sc-fps{height:34px;margin:0;border:0;background:rgba(0,0,0,.55);color:#fff;opacity:.85;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-@media (max-width: 640px){.sc-stage{padding:4px}.sc-head{padding-left:12px}.sc-head h2{margin-right:8px}}
-.screen:fullscreen .sc-stage img{border-radius:0;box-shadow:none}
 .fb-head{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;height:48px;padding:0 8px 0 12px;border-top:1px solid var(--border-0);border-bottom:1px solid var(--border-0)}
 .fb-title{min-width:0;display:flex;align-items:center;gap:8px}
 .fb-tools{display:flex;align-items:center;justify-content:flex-end;gap:2px}
@@ -883,7 +839,6 @@ svg{display:block;flex:none}
       <button class="nav-item" id="newChat" type="button"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.67 3.91C16.89 2.69 18.86 2.69 20.08 3.91C21.30 5.13 21.30 7.10 20.08 8.32L14.14 14.26C13.38 15.02 12.39 15.52 11.32 15.67L9.14 15.98C8.82 16.03 8.51 15.92 8.29 15.70C8.07 15.48 7.96 15.17 8.01 14.85L8.32 12.67C8.47 11.60 8.97 10.61 9.73 9.85L15.67 3.91ZM18.67 5.32C18.23 4.88 17.52 4.88 17.08 5.32L11.14 11.26C10.69 11.72 10.39 12.31 10.30 12.96L10.17 13.82L11.03 13.69C11.68 13.60 12.27 13.30 12.73 12.85L18.67 6.91C19.11 6.47 19.11 5.76 18.67 5.32ZM11 3.99C11.00 4.55 10.55 4.99 10.00 5.00C9.00 5.00 8.29 5.00 7.74 5.06C7.20 5.11 6.88 5.20 6.63 5.32C6.07 5.61 5.61 6.07 5.32 6.63C5.19 6.90 5.10 7.24 5.05 7.85C5.00 8.47 5 9.26 5 10.4V13.6C5 14.73 5.00 15.52 5.05 16.14C5.10 16.75 5.19 17.09 5.32 17.36C5.61 17.92 6.07 18.38 6.63 18.67C6.90 18.80 7.24 18.89 7.85 18.94C8.47 18.99 9.26 19 10.4 19H13.6C14.73 19 15.52 18.99 16.14 18.94C16.75 18.89 17.09 18.80 17.36 18.67C17.92 18.38 18.38 17.92 18.67 17.36C18.79 17.11 18.88 16.79 18.93 16.25C18.99 15.70 18.99 14.99 18.99 13.99C19.00 13.44 19.44 12.99 20.00 13C20.55 13.00 21.00 13.44 20.99 14.00C20.99 14.97 20.99 15.78 20.93 16.44C20.86 17.11 20.73 17.71 20.45 18.26C19.97 19.21 19.21 19.97 18.27 20.45C17.67 20.75 17.03 20.88 16.30 20.94C15.60 21 14.72 21 13.64 21H10.35C9.27 21 8.39 21 7.69 20.94C6.96 20.88 6.32 20.75 5.73 20.45C4.78 19.97 4.02 19.21 3.54 18.26C3.24 17.67 3.11 17.03 3.05 16.30C2.99 15.60 2.99 14.72 3 13.64V10.35C2.99 9.27 2.99 8.39 3.05 7.69C3.11 6.96 3.24 6.32 3.54 5.73C4.02 4.78 4.78 4.02 5.73 3.54C6.28 3.26 6.88 3.13 7.55 3.06C8.21 3.00 9.02 3.00 9.99 3.00C10.55 2.99 10.99 3.44 11 3.99Z" fill="currentColor"/></svg><span>New chat</span><kbd data-keys="shift+o" aria-hidden="true">Ctrl Shift O</kbd></button>
       <label class="nav-item" id="searchRow"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.87 4.5C7.35 4.5 4.5 7.35 4.5 10.87C4.5 14.39 7.35 17.25 10.87 17.25C14.39 17.25 17.25 14.39 17.25 10.87C17.25 7.35 14.39 4.5 10.87 4.5ZM2.5 10.87C2.5 6.24 6.24 2.5 10.87 2.5C15.50 2.5 19.25 6.24 19.25 10.87C19.25 12.82 18.58 14.62 17.46 16.04L21.20 19.79C21.59 20.18 21.59 20.81 21.20 21.20C20.81 21.59 20.18 21.59 19.79 21.20L16.04 17.46C14.62 18.58 12.82 19.25 10.87 19.25C6.24 19.25 2.5 15.50 2.5 10.87Z" fill="currentColor"/></svg><input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats"><kbd data-keys="k" aria-hidden="true">Ctrl K</kbd></label>
       <a class="nav-item" id="imagesNav" href="https://chatgpt.com/images" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7.5" y="3.5" width="13" height="13" rx="3"/><path d="M16.5 20.5H7a3.5 3.5 0 0 1-3.5-3.5V7.5"/><path d="m8.5 14 3.2-3.2a1.5 1.5 0 0 1 2.1 0L19.5 16"/><circle cx="16" cy="7.5" r="1.3"/></svg><span>Images</span></a>
-      <button class="nav-item" id="screenNav" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12.5" rx="2.5"/><path d="M8.5 20.5h7M12 16.5v4"/></svg><span>Remote</span></button>
     </div>
     <div class="history-label">Recents</div>
     <nav class="history" id="history"></nav>
@@ -921,25 +876,6 @@ svg{display:block;flex:none}
         <nav class="fb-places" id="fbPlaces" aria-label="Places"></nav>
         <div class="fb-side"><div class="fb-list" id="fbList" role="list" aria-label="Files"></div><div class="fb-foot" id="fbFoot"></div></div>
         <section class="fb-view" id="fbView" aria-label="Preview"><div class="fb-vhead" id="fbVHead"></div><div class="fb-vbody" id="fbVBody"></div></section>
-      </div>
-    </div>
-    <div class="screen" id="screen" hidden role="region" aria-labelledby="scTitle">
-      <div class="sc-head">
-        <h2 id="scTitle">Remote</h2>
-        <span class="sc-status" id="scStatus" aria-live="polite"></span>
-        <select class="sc-fps" id="scFps" aria-label="Pictures a second" title="How many pictures of the screen a second" hidden><option value="1">1 fps</option><option value="5">5 fps</option><option value="10">10 fps</option><option value="15">15 fps</option><option value="24">24 fps</option><option value="30">30 fps</option><option value="60">60 fps</option></select>
-        <button class="icon-btn" id="scSound" type="button" aria-pressed="true" aria-label="Sound" title="Sound" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
-        <button class="icon-btn" id="scKeys" type="button" title="Keyboard" aria-label="Type on your computer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg></button>
-        <button class="icon-btn" id="scFull" type="button" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg></button>
-        <button class="icon-btn" id="scClose" type="button" title="Back to the chat" aria-label="Close Remote"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.83 5.83C6.33 5.32 7.16 5.32 7.66 5.83L12 10.16L16.33 5.83C16.83 5.32 17.66 5.32 18.16 5.83C18.67 6.33 18.67 7.16 18.16 7.66L13.83 12L18.16 16.33C18.67 16.83 18.67 17.66 18.16 18.16C17.66 18.67 16.83 18.67 16.33 18.16L12 13.83L7.66 18.16C7.16 18.67 6.33 18.67 5.83 18.16C5.32 17.66 5.32 16.83 5.83 16.33L10.16 12L5.83 7.66C5.32 7.16 5.32 6.33 5.83 5.83Z" fill="currentColor"/></svg></button>
-      </div>
-      <div class="sc-stage" id="scStage">
-        <canvas id="scView" role="img" aria-label="Your computer's screen" hidden></canvas>
-        <div class="sc-msg" id="scMsg"></div>
-        <div class="sc-err" id="scErr" hidden></div>
-        <div class="sc-turn" id="scTurn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg><b>Turn your phone sideways</b><span>Remote fills the whole screen with your phone on its side.</span></div>
-        <div class="sc-float" id="scFloat"><select class="sc-fps" id="scFpsF" aria-label="Pictures a second" hidden><option value="1">1 fps</option><option value="5">5 fps</option><option value="10">10 fps</option><option value="15">15 fps</option><option value="24">24 fps</option><option value="30">30 fps</option><option value="60">60 fps</option></select><button type="button" id="scSoundF" data-scf="sound" aria-pressed="true" aria-label="Sound" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button><button type="button" data-scf="keys" aria-label="Type on your computer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg></button><button type="button" data-scf="close" aria-label="Close Remote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button></div>
-        <textarea class="sc-type" id="scType" aria-label="Keys you press go to your computer" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
       </div>
     </div>
     <section class="thread" id="thread"><div class="thread-inner" id="threadInner"></div></section>
@@ -2023,13 +1959,11 @@ async function openChat(id, push) {
   // already here, with its reply coming in
   if (S.busy && S.chatId === id) {
     closeFiles(false);
-    closeScreen();
     return;
   }
   stopPolling();
   letGo();
   closeFiles(false);
-  closeScreen();
   const switching = S.chatId !== id;
   if (switching) saveDraft();
   let j;
@@ -2098,7 +2032,6 @@ function newChat(push) {
   stopPolling();
   letGo();
   closeFiles(false);
-  closeScreen();
   const switching = S.chatId !== null;
   if (switching) saveDraft();
   S.chatId = null;
@@ -2869,8 +2802,6 @@ function placeOf(id) { return F.places.find(p => p.id === id) || null; }
 // The Chat | Files switch at the top: one switch for both, so it never moves.
 function setView(v) {
   $("main").classList.toggle("files-open", v === "files");
-  $("main").classList.toggle("screen-open", v === "screen");
-  $("screenNav").classList.toggle("on", v === "screen");
   for (const b of document.querySelectorAll(".top [data-view]")) {
     b.classList.toggle("on", b.dataset.view === v);
     b.setAttribute("aria-selected", b.dataset.view === v);
@@ -2878,7 +2809,6 @@ function setView(v) {
 }
 
 function openFiles(path, pick, from, root) {
-  closeScreen();
   if (!F.open) F.back = document.activeElement;
   F.open = true;
   F.from = from || "";
@@ -3277,529 +3207,13 @@ $("search").addEventListener("blur", () => { if (!$("search").value) $("side").c
 // the file browser, from the sidebar and from the switch at the top: where it was left
 function showFiles() { $("app").classList.remove("side-open"); if (!F.open) openFiles(F.path, undefined, "", F.root); }
 document.querySelector('.top [data-view="files"]').onclick = showFiles;
-document.querySelector('.top [data-view="chat"]').onclick = () => { closeScreen(); closeFiles(false); };
+document.querySelector('.top [data-view="chat"]').onclick = () => closeFiles(false);
 if (store.get("collapsed", false)) $("app").classList.add("side-collapsed");
 
 document.title = tabName();
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadState(); loadChats(); } });
 setInterval(() => { if (!document.hidden) loadState(); }, 20000);
-
-/* ---------- Remote: the computer's screen, and its mouse and keyboard from here ----------
-   Live: one WebSocket to the site while Remote is open and the page is seen. The computer's pictures come in on it as fast
-   as the computer takes them and are drawn as they arrive; the page says when it has each one, so the computer never sends
-   faster than this connection takes them and nothing piles up late. What you do over the picture goes back on the same
-   connection, in order, with positions as fractions of the picture. */
-// `tag`: a mark no one can see (zero-width characters), in the tab's title while Remote is open. The computer looks for it in
-// its own window titles: there, this page would be showing the computer it runs on.
-const ZW = ["​", "‌", "‍", "⁠"];
-const D = { tag: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => ZW[b & 3]).join(""), code: "", open: false, ws: null, retry: null, w: 0, note: null, os: "", queue: [], flushing: false, err: "", inputErr: "", inputAt: 0, soundErr: "", soundAt: 0, drag: -1, moveAt: 0, wheel: 0, touch: null, tap: null, pending: null, painting: false, shown: false, perms: null, asked: 0, painted: [] };
-// How many pictures a second this browser asks for, picked on the Remote page (the computer sends at the highest any page
-// looking asks for, and each page gets no more than its own).
-const FPS = [1, 5, 10, 15, 24, 30, 60];
-D.fps = FPS.includes(Number(store.get("remoteFps", 30))) ? Number(store.get("remoteFps", 30)) : 30;
-// the rate asked for: the one picked, where the computer's program lets it be picked
-function fpsNow() { const a = S.state && S.state.agent; return a && a.screenFps ? D.fps : 30; }
-function setFps(n) {
-  n = Number(n);
-  if (!FPS.includes(n) || n === D.fps) return;
-  D.fps = n;
-  store.set("remoteFps", n);
-  if (D.ws && D.ws.readyState === 1) try { D.ws.send(JSON.stringify({ t: "fps", fps: n })); } catch {}
-  renderScreen();
-}
-
-/* The computer's sound, as it plays: uncompressed pieces (16-bit PCM, 40 ms each) on the same connection as the pictures but
-   not tied to them, played one straight after another with a little in hand. Behind by more than a moment (a slow connection
-   catching up), a piece is dropped rather than played late. A browser only plays sound after a click or a key, and opening
-   Remote is one; otherwise it starts with the first click on the screen. */
-const AU = { on: store.get("remoteSound", true) !== false, ctx: null, next: 0 };
-const SPEAKER = { on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>', off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>' };
-function soundCan() { const a = S.state && S.state.agent; return !!(a && a.screenSound); }
-function soundCtx() {
-  if (!AU.on || !soundCan()) return null;
-  if (!AU.ctx) {
-    const C = window.AudioContext || window.webkitAudioContext;
-    if (!C) return null;
-    try { AU.ctx = new C({ latencyHint: "interactive", sampleRate: 48000 }); } catch { try { AU.ctx = new C(); } catch { return null; } }
-    AU.ctx.onstatechange = () => renderScreen();
-  }
-  if (AU.ctx.state !== "running") AU.ctx.resume().catch(() => {});
-  return AU.ctx;
-}
-const isSoundPiece = d => d.byteLength >= 12 && (b => b[0] === 0x43 && b[1] === 0x43 && b[2] === 0x41 && b[3] === 0x55)(new Uint8Array(d, 0, 4));
-function playSound(buf) {
-  const ctx = AU.ctx;
-  if (!AU.on || !ctx || ctx.state !== "running") return;
-  const dv = new DataView(buf);
-  const rate = dv.getUint32(4, true);
-  const ch = dv.getUint8(8);
-  const fmt = dv.getUint8(9);
-  const bytes = fmt === 3 ? 4 : 2;
-  if (rate < 8000 || rate > 192000 || ch < 1 || ch > 8 || (fmt !== 1 && fmt !== 3)) return;
-  const frames = Math.floor((buf.byteLength - 12) / (bytes * ch));
-  if (!frames) return;
-  const now = ctx.currentTime;
-  if (AU.next < now + 0.01) AU.next = now + 0.06;
-  else if (AU.next > now + 0.4) return;
-  const ab = ctx.createBuffer(ch, frames, rate);
-  for (let c = 0; c < ch; c++) {
-    const out = ab.getChannelData(c);
-    for (let i = 0, o = 12 + c * bytes; i < frames; i++, o += ch * bytes) out[i] = fmt === 3 ? dv.getFloat32(o, true) : dv.getInt16(o, true) / 32768;
-  }
-  const src = ctx.createBufferSource();
-  src.buffer = ab;
-  src.connect(ctx.destination);
-  src.start(AU.next);
-  AU.next += ab.duration;
-}
-function setSound(on) {
-  AU.on = on;
-  store.set("remoteSound", on);
-  D.soundErr = "";
-  AU.next = 0;
-  if (on) soundCtx();
-  else if (AU.ctx) AU.ctx.suspend().catch(() => {});
-  soundSay();
-  renderScreen();
-}
-// the computer sends its sound while this page wants it: told again whenever that changes (turned on or off here, or the
-// computer's program found able to)
-function soundSay() {
-  const want = AU.on && soundCan();
-  if (!D.ws || D.ws.readyState !== 1 || D.soundSaid === want) return;
-  try { D.ws.send(JSON.stringify({ t: "sound", sound: want })); D.soundSaid = want; } catch {}
-}
-function markTitle() {
-  const want = `Remote${D.tag} · ${tabName()}`;
-  if (D.open && document.title !== want) document.title = want;
-}
-// On a phone: upright, Remote asks to be turned sideways; on its side, it fills the whole screen.
-const phoneMq = matchMedia("(pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 600px)");
-const uprightMq = matchMedia("(orientation: portrait)");
-function phoneWay() { return !phoneMq.matches ? "" : uprightMq.matches ? "turn" : "full"; }
-// whether the screen would be shown now (Remote on, the computer online and able, and not this computer)
-function screenReady() {
-  const a = S.state && S.state.agent;
-  return !!(a && a.online && a.screen && a.computer && a.computer.screen && D.code !== "same_computer");
-}
-// whether the live connection should be open: Remote open and seen, with something to show, and not waiting to be turned
-function screenWanted() {
-  const a = S.state && S.state.agent;
-  return D.open && !document.hidden && !!(a && a.online && a.screen && a.computer && a.computer.screen) && phoneWay() !== "turn";
-}
-async function openScreen() {
-  if (D.open || (F.open && !(await closeFiles(false)))) return;
-  D.open = true;
-  D.err = "";
-  D.code = "";
-  $("screen").hidden = false;
-  setView("screen");
-  markTitle();
-  $("app").classList.remove("side-open");
-  // opening Remote is a click, so the sound can start straight away
-  soundCtx();
-  renderScreen();
-  screenTick();
-}
-function closeScreen() {
-  if (!D.open) return;
-  D.open = false;
-  screenDisconnect();
-  if (AU.ctx) AU.ctx.suspend().catch(() => {});
-  AU.next = 0;
-  if (document.fullscreenElement === $("screen")) document.exitFullscreen().catch(() => {});
-  $("screen").hidden = true;
-  $("screen").classList.remove("phone-full");
-  $("scView").hidden = true;
-  D.shown = false;
-  document.title = tabName();
-  D.queue = [];
-  setView("chat");
-}
-// the width of picture this view wants: as many pixels as it shows, up to a big monitor's
-function screenWidth() { return Math.max(640, Math.min(1920, Math.round($("scStage").clientWidth * (devicePixelRatio || 1)))); }
-function screenConnect() {
-  if (D.ws || !screenWanted()) return;
-  clearTimeout(D.retry);
-  const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/screen/live`);
-  ws.binaryType = "arraybuffer";
-  D.ws = ws;
-  ws.onopen = () => {
-    D.w = screenWidth();
-    D.soundSaid = AU.on && soundCan();
-    ws.send(JSON.stringify({ t: "hello", w: D.w, tag: D.tag, fps: fpsNow(), sound: D.soundSaid }));
-    // ask the computer what it allows, if it hasn't said yet, so the page can offer to request it again
-    if (!D.perms) try { ws.send('{"t":"perms"}'); } catch {}
-  };
-  ws.onmessage = e => {
-    if (typeof e.data === "string") {
-      let m = null;
-      try { m = JSON.parse(e.data); } catch {}
-      if (m && m.t === "status") screenStatusIn(m);
-      return;
-    }
-    // a piece of sound plays as it comes, with no answer
-    if (isSoundPiece(e.data)) return playSound(e.data);
-    // a picture: said straight away, so the next one is already on its way while this one is drawn
-    try { ws.send('{"t":"ack"}'); } catch {}
-    D.pending = new Blob([e.data], { type: "image/jpeg" });
-    paintScreen();
-  };
-  ws.onclose = () => {
-    if (D.ws !== ws) return;
-    D.ws = null;
-    clearTimeout(D.retry);
-    if (D.open) D.retry = setTimeout(screenTick, 1500);
-  };
-}
-function screenDisconnect() {
-  clearTimeout(D.retry);
-  const ws = D.ws;
-  D.ws = null;
-  if (ws) try { ws.close(); } catch {}
-}
-// connected when it should be, and not when it shouldn't
-function screenTick() {
-  if (!D.open) return;
-  markTitle();
-  soundSay();
-  if (screenWanted()) screenConnect();
-  else {
-    screenDisconnect();
-    if (D.shown && phoneWay() === "turn") { D.shown = false; $("scView").hidden = true; }
-  }
-  renderScreen();
-}
-// What the site or the computer says is in the way. Something about the mouse and keyboard shows over the picture; anything
-// else replaces it until a picture comes again.
-function screenStatusIn(m) {
-  const a = S.state && S.state.agent;
-  if (m.os) D.os = m.os;
-  // the sound didn't start (or stopped): said over the picture, which carries on
-  if (m.code === "sound") {
-    D.soundErr = m.error || "The sound couldn't be played here.";
-    D.soundAt = Date.now();
-    return renderScreen();
-  }
-  // what the computer allows: on its own (perms), or because the picture is held up until Screen Recording is on (need_perms)
-  if (m.code === "perms" || m.code === "need_perms") {
-    D.perms = { view: m.view !== false, control: m.control !== false };
-    if (m.code === "need_perms") { D.code = "need_perms"; D.err = ""; D.shown = false; $("scView").hidden = true; }
-    return renderScreen();
-  }
-  if (m.code === "input" || m.code === "control_denied" || m.code === "missing" && D.shown) {
-    if (m.code === "control_denied") D.perms = { view: (D.perms && D.perms.view) !== false, control: false };
-    D.inputErr = m.error || "";
-    D.inputAt = Date.now();
-    return renderScreen();
-  }
-  D.code = m.code || "";
-  D.err = m.error || "";
-  if (m.code === "off" && a && a.computer) a.computer.screen = false;
-  D.shown = false;
-  $("scView").hidden = true;
-  screenTick();
-}
-// the newest picture that came, drawn when the last one is; any in between are skipped
-async function paintScreen() {
-  if (D.painting) return;
-  D.painting = true;
-  while (D.pending && D.open) {
-    const blob = D.pending;
-    D.pending = null;
-    try {
-      const bmp = await createImageBitmap(blob);
-      const c = $("scView");
-      const resized = c.width !== bmp.width || c.height !== bmp.height;
-      if (resized) { c.width = bmp.width; c.height = bmp.height; }
-      c.getContext("2d").drawImage(bmp, 0, 0);
-      bmp.close();
-      const t = performance.now();
-      D.painted.push(t);
-      while (D.painted.length && t - D.painted[0] > 1000) D.painted.shift();
-      if (!D.shown || resized || D.err) {
-        D.shown = true;
-        D.err = "";
-        D.code = "";
-        c.hidden = false;
-        fitScreen();
-        renderScreen();
-      }
-    } catch {}
-  }
-  D.painting = false;
-}
-// what the view says when there's no picture: why not, and what to do about it
-function screenNote() {
-  const a = S.state && S.state.agent;
-  if (!a || !a.online || D.code === "offline") return `<h3>${esc(CFG.name)} is offline</h3><p>Start it on your computer to see its screen here.</p>`;
-  if (!a.screen || D.code === "agent_old") return `<h3>Update ${esc(CFG.name)} first</h3><p>The program on your computer is from before this version of Remote. Update it, then come back here.</p>`;
-  if (!(a.computer && a.computer.screen)) return `<h3>Use your computer from here</h3><p>Remote shows your computer's screen on this page, and lets you use its mouse and keyboard from any device you're signed in on.</p><p class="fine">On a Mac, the Mac asks once to allow Screen Recording and Accessibility for node. Answer on the Mac itself, then come back here.</p><button class="btn primary" type="button" data-sc="on"${PC.busy === "screen" ? " disabled" : ""}>${PC.busy === "screen" ? "Turning on…" : "Turn on Remote"}</button>`;
-  if (D.code === "same_computer") return `<h3>This is the computer ${esc(CFG.name)} runs on</h3><p>Remote shows this computer's own screen, so here it would show itself inside itself, over and over, and move the mouse out from under you.</p><p class="fine">Open ${esc(CFG.name)} on another device, like your phone or another computer, to use Remote.</p>`;
-  if (D.code === "need_perms") return permNote();
-  if (D.err) return `<h3>The screen can't be shown</h3><p>${esc(D.err)}</p>`;
-  return `<div class="wait" style="margin:0;justify-content:center"><span class="spin"></span><span>Connecting to your computer…</span></div>`;
-}
-// On a Mac that hasn't allowed Remote yet: what's on and off, and a button that has the Mac ask again (and open the Settings
-// panes there). macOS only takes the answer on the Mac itself, so from here the page can ask and then watch it come on.
-function permNote() {
-  const p = D.perms || {};
-  const row = (ok, name, what) => `<li class="${ok ? "on" : "off"}">${ok ? "✓" : "○"} <b>${name}</b> — ${ok ? "on" : "off"}<span class="fine"> · ${what}</span></li>`;
-  const asked = D.asked && Date.now() - D.asked < 15000;
-  return `<h3>Let this computer be used from here</h3>
-    <p>${esc(CFG.name)} needs this Mac to allow:</p>
-    <ul class="sc-perms">${row(p.view, "Screen Recording", "to show the screen")}${row(p.control, "Accessibility", "to move the mouse and type")}</ul>
-    <p class="fine">Tap below and the Mac shows its request and opens the right settings. Turn these on <b>on the Mac itself</b> — macOS only accepts it there. The screen then appears here on its own.</p>
-    <button class="btn primary" type="button" data-sc="ask"${asked ? " disabled" : ""}>${asked ? "Asked — now approve on your Mac" : "Ask my Mac for permission"}</button>`;
-}
-// have the computer request its permissions again; it answers with what's allowed, and the picture starts once the Mac
-// allows the screen to be seen. The live connection carries the ask, so make sure it's open first.
-function askAgain() {
-  screenConnect();
-  const ws = D.ws;
-  if (ws && ws.readyState === 1) { try { ws.send('{"t":"ask"}'); } catch {} }
-  D.asked = Date.now();
-  D.note = null;
-  renderScreen();
-}
-function renderScreen() {
-  if (!D.open) return;
-  const shown = D.shown;
-  const now = Date.now();
-  if (D.inputErr && now - D.inputAt > 8000) D.inputErr = "";
-  const focus = document.activeElement === $("scType");
-  // how many pictures came in the last second, when the screen is changing
-  const t = performance.now();
-  while (D.painted.length && t - D.painted[0] > 1000) D.painted.shift();
-  const rate = D.painted.length > 1 ? ` · ${D.painted.length} fps` : "";
-  const deaf = AU.on && soundCan() && (!AU.ctx || AU.ctx.state !== "running") ? " · click the screen for sound" : "";
-  const status = shown ? `<b>Live</b>${rate} · ${focus ? "keys go to your computer" : "click the screen to type on it"}${deaf}` : "";
-  if ($("scStatus").innerHTML !== status) $("scStatus").innerHTML = status;
-  // the rate, and the sound, where this computer's program can do them
-  const a = S.state && S.state.agent;
-  for (const id of ["scFps", "scFpsF"]) {
-    $(id).hidden = !(a && a.screenFps);
-    if ($(id).value !== String(D.fps)) $(id).value = String(D.fps);
-  }
-  if (D.soundErr && now - D.soundAt > 10000) D.soundErr = "";
-  for (const id of ["scSound", "scSoundF"]) {
-    const b = $(id);
-    b.hidden = !soundCan();
-    const want = AU.on ? "true" : "false";
-    if (b.getAttribute("aria-pressed") !== want) { b.setAttribute("aria-pressed", want); b.innerHTML = AU.on ? SPEAKER.on : SPEAKER.off; }
-    b.title = AU.on ? "Sound on: click to mute" : "Sound off: click to hear the computer";
-  }
-  // only when it changes, so a button in it isn't replaced under the pointer
-  const note = shown ? "" : screenNote();
-  if (note !== D.note) $("scMsg").innerHTML = D.note = note;
-  $("scMsg").hidden = shown;
-  $("scErr").hidden = !D.inputErr && !(shown && D.soundErr);
-  // a control error on a Mac is almost always Accessibility not being on yet: offer to ask again, right there
-  const canAsk = D.inputErr && D.os === "darwin" && /accessibility|assistive|control/i.test(D.inputErr);
-  if (D.inputErr) $("scErr").innerHTML = esc(D.inputErr) + (canAsk ? ` <button class="sc-ask" type="button" data-sc="ask">Ask my Mac again</button>` : "");
-  else if (shown && D.soundErr) $("scErr").textContent = "No sound: " + D.soundErr;
-  $("scStage").classList.toggle("keys", focus);
-  $("scFull").hidden = !document.fullscreenEnabled;
-  const way = phoneWay();
-  $("screen").classList.toggle("phone-full", D.open && way === "full");
-  const turn = way === "turn" && screenReady();
-  $("scTurn").hidden = !turn;
-  if (turn) $("scMsg").hidden = true;
-}
-// now and then: the connection follows the state (turned on, the computer back online), and old notes clear
-setInterval(() => { if (D.open) screenTick(); }, 1000);
-document.addEventListener("visibilitychange", () => { if (D.open) screenTick(); });
-
-// the picture as large as the space allows, larger or smaller than it came, keeping its shape; and the width it's asked for
-// follows when the space changes a lot
-function fitScreen() {
-  const c = $("scView");
-  const st = $("scStage");
-  if (!c.hidden && c.width) {
-    const cs = getComputedStyle(st);
-    const k = Math.min((st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) / c.width, (st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)) / c.height);
-    if (k > 0) {
-      c.style.width = Math.floor(c.width * k) + "px";
-      c.style.height = Math.floor(c.height * k) + "px";
-    }
-  }
-  const w = screenWidth();
-  if (D.ws && D.ws.readyState === 1 && D.w && Math.abs(w - D.w) / D.w > 0.2) {
-    D.w = w;
-    try { D.ws.send(JSON.stringify({ t: "size", w })); } catch {}
-  }
-}
-new ResizeObserver(fitScreen).observe($("scStage"));
-
-// ---- what's done over the picture
-function scAt(e) {
-  const r = $("scView").getBoundingClientRect();
-  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
-}
-// Cmd on a Mac is Ctrl elsewhere: the shortcut you'd press here does the same over there
-function scMods(e) {
-  const mine = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-  const theirs = D.os === "darwin";
-  const out = [];
-  if (e.ctrlKey) out.push(!mine && theirs ? "meta" : "ctrl");
-  if (e.metaKey) out.push(mine && !theirs ? "ctrl" : "meta");
-  if (e.altKey) out.push("alt");
-  if (e.shiftKey) out.push("shift");
-  return [...new Set(out)];
-}
-function scSend(ev) {
-  const q = D.queue;
-  const last = q[q.length - 1];
-  if (ev.t === "move" && last && last.t === "move") q[q.length - 1] = ev;
-  else if (ev.t === "text" && last && last.t === "text") last.s += ev.s;
-  else if (ev.t === "scroll" && last && last.t === "scroll") { last.dy += ev.dy; last.dx += ev.dx; }
-  else q.push(ev);
-  if (q.length > 400) q.splice(0, q.length - 400);
-  scFlush();
-}
-// what was done in this turn of the page goes together, on the live connection; done while it's away, it's let go
-function scFlush() {
-  if (D.flushing) return;
-  D.flushing = true;
-  setTimeout(() => {
-    D.flushing = false;
-    const ws = D.ws;
-    if (!D.open || !ws || ws.readyState !== 1) return void (D.queue = []);
-    while (D.queue.length) {
-      try { ws.send(JSON.stringify({ t: "input", events: D.queue.splice(0, 200) })); } catch { D.queue = []; }
-    }
-  }, 0);
-}
-const SC_KEYS = { Enter: "Enter", Tab: "Tab", Backspace: "Backspace", Escape: "Escape", Delete: "Delete", Home: "Home", End: "End", PageUp: "PageUp", PageDown: "PageDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", Insert: "Insert", F1: "F1", F2: "F2", F3: "F3", F4: "F4", F5: "F5", F6: "F6", F7: "F7", F8: "F8", F9: "F9", F10: "F10", F11: "F11", F12: "F12" };
-const scView = $("scView");
-scView.addEventListener("pointerdown", e => {
-  e.preventDefault();
-  soundCtx();
-  if (e.pointerType === "touch") {
-    // a tap clicks, a long press right-clicks, and a finger moved scrolls
-    const at = scAt(e);
-    D.touch = { id: e.pointerId, x: e.clientX, y: e.clientY, at, moved: false, long: false };
-    D.touch.timer = setTimeout(() => {
-      if (!D.touch || D.touch.moved) return;
-      D.touch.long = true;
-      scSend({ t: "down", ...at, b: 2, n: 1 });
-      scSend({ t: "up", ...at, b: 2, n: 1 });
-    }, 550);
-    return;
-  }
-  $("scType").focus({ preventScroll: true });
-  try { scView.setPointerCapture(e.pointerId); } catch {}
-  D.drag = e.button;
-  scSend({ t: "down", ...scAt(e), b: e.button, n: Math.max(1, e.detail || 1) });
-});
-scView.addEventListener("pointermove", e => {
-  if (e.pointerType === "touch") {
-    const t = D.touch;
-    if (!t || t.id !== e.pointerId) return;
-    const dy = e.clientY - t.y;
-    const dx = e.clientX - t.x;
-    if (!t.moved && Math.hypot(dx, dy) < 10) return;
-    t.moved = true;
-    clearTimeout(t.timer);
-    const lines = { dy: Math.trunc(-dy / 24), dx: Math.trunc(-dx / 24) };
-    if (lines.dy || lines.dx) {
-      scSend({ t: "scroll", ...t.at, ...lines });
-      t.y -= -lines.dy * 24;
-      t.x -= -lines.dx * 24;
-    }
-    return;
-  }
-  const now = Date.now();
-  if (now - D.moveAt < (D.drag >= 0 ? 30 : 70)) return;
-  D.moveAt = now;
-  scSend({ t: "move", ...scAt(e) });
-});
-scView.addEventListener("pointerup", e => {
-  if (e.pointerType === "touch") {
-    const t = D.touch;
-    D.touch = null;
-    if (!t || t.id !== e.pointerId) return;
-    clearTimeout(t.timer);
-    if (t.moved || t.long) return;
-    // two taps close together are a double click
-    const now = Date.now();
-    const n = D.tap && now - D.tap.at < 400 && Math.hypot(t.x - D.tap.x, t.y - D.tap.y) < 30 ? 2 : 1;
-    D.tap = n === 1 ? { at: now, x: t.x, y: t.y } : null;
-    scSend({ t: "down", ...t.at, b: 0, n });
-    scSend({ t: "up", ...t.at, b: 0, n });
-    return;
-  }
-  D.drag = -1;
-  scSend({ t: "up", ...scAt(e), b: e.button, n: Math.max(1, e.detail || 1) });
-});
-scView.addEventListener("pointercancel", () => { if (D.touch) clearTimeout(D.touch.timer); D.touch = null; });
-scView.addEventListener("contextmenu", e => e.preventDefault());
-$("scStage").addEventListener("wheel", e => {
-  if (scView.hidden) return;
-  e.preventDefault();
-  D.wheel += e.deltaMode === 1 ? e.deltaY : e.deltaY / 40;
-  D.wheelX = (D.wheelX || 0) + (e.deltaMode === 1 ? e.deltaX : e.deltaX / 40);
-  const dy = Math.trunc(D.wheel);
-  const dx = Math.trunc(D.wheelX);
-  if (!dy && !dx) return;
-  D.wheel -= dy;
-  D.wheelX -= dx;
-  scSend({ t: "scroll", ...scAt(e), dy, dx });
-}, { passive: false });
-// The keys: a hidden box that has the focus while you use the screen. Keys with a meaning (Enter, arrows, shortcuts) go as
-// keys; letters as text. A phone's keyboard types into the box, and that text goes over.
-const scType = $("scType");
-scType.addEventListener("keydown", e => {
-  e.stopPropagation();
-  soundCtx();
-  if (e.isComposing || e.keyCode === 229) return;
-  const mods = scMods(e);
-  const named = SC_KEYS[e.key] || (e.key === " " && mods.some(m => m !== "shift") ? "Space" : "");
-  if (named) {
-    e.preventDefault();
-    return scSend({ t: "key", k: named, mods });
-  }
-  if (e.key.length !== 1) return;
-  e.preventDefault();
-  if (mods.some(m => m === "ctrl" || m === "meta")) {
-    const base = (/^Key([A-Z])$/.exec(e.code) || [])[1] || (/^Digit(\d)$/.exec(e.code) || [])[1] || e.key;
-    scSend({ t: "key", k: base.toLowerCase(), mods });
-  } else scSend({ t: "text", s: e.key });
-});
-scType.addEventListener("beforeinput", e => {
-  if (e.inputType === "deleteContentBackward") { e.preventDefault(); scSend({ t: "key", k: "Backspace", mods: [] }); }
-  else if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") { e.preventDefault(); scSend({ t: "key", k: "Enter", mods: [] }); }
-});
-const scTyped = () => { if (scType.value) { scSend({ t: "text", s: scType.value }); scType.value = ""; } };
-scType.addEventListener("input", e => { if (!e.isComposing) scTyped(); });
-scType.addEventListener("compositionend", scTyped);
-scType.addEventListener("focus", renderScreen);
-scType.addEventListener("blur", renderScreen);
-$("screenNav").onclick = openScreen;
-for (const mq of [phoneMq, uprightMq]) mq.addEventListener("change", () => { screenTick(); fitScreen(); });
-$("scFloat").addEventListener("click", e => {
-  const b = e.target.closest("[data-scf]");
-  if (b && b.dataset.scf === "keys") scType.focus();
-  else if (b && b.dataset.scf === "sound") setSound(!AU.on);
-  else if (b) closeScreen();
-});
-$("scSound").onclick = () => setSound(!AU.on);
-for (const id of ["scFps", "scFpsF"]) $(id).addEventListener("change", e => setFps(e.target.value));
-$("scClose").onclick = closeScreen;
-$("scKeys").onclick = () => scType.focus();
-$("scFull").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : $("screen").requestFullscreen()).catch(() => {});
-$("scMsg").addEventListener("click", async e => {
-  if (!e.target.closest('[data-sc="on"]')) return;
-  const turning = setComputer("screen", true);
-  renderScreen();
-  await turning;
-  if (PC.err) toast(PC.err);
-  D.err = "";
-  screenTick();
-});
-// "Ask my Mac again", wherever it is shown (the permission note or over a control error)
-$("scStage").addEventListener("click", e => { if (e.target.closest('[data-sc="ask"]')) askAgain(); });
 
 /* ---------- account menu and theme ---------- */
 const THEMES = [["system", "System", I.monitor], ["light", "Light", I.sun], ["dark", "Dark", I.moon]];
@@ -4318,9 +3732,8 @@ function computerHtml() {
   const auto = `<div class="switch"><div class="t"><span>${esc(`Start ${CFG.name} when you log in`)}</span><small>Makes it a startup item on this computer, so it's online whenever you're logged in.</small></div><button type="button" class="toggle" role="switch" data-pc="autostart" aria-checked="${!!(c && c.autostart)}" aria-label="${esc(`Start ${CFG.name} when you log in`)}"${off}></button></div>`;
   // only from a program that knows it (2.10.0 and newer); a Mac asks for its password on its own screen to change it
   const awake = c && typeof c.awake === "boolean" ? `<div class="switch"><div class="t"><span>Keep running with the lid closed</span><small>Your computer stays awake, even with its lid closed, so ${esc(CFG.name)} keeps answering. It uses more battery. A Mac asks for its password on its own screen to change this.${PC.busy === "awake" ? ' <b class="ok-text">Waiting for your computer…</b>' : ""}</small></div><button type="button" class="toggle" role="switch" data-pc="awake" aria-checked="${!!c.awake}" aria-label="Keep running with the lid closed"${off}${PC.busy === "awake" ? " disabled" : ""}></button></div>` : "";
-  const screen = c && typeof c.screen === "boolean" ? `<div class="switch"><div class="t"><span>Remote</span><small>Shows this computer's screen in Remote, in the sidebar, and lets you use its mouse and keyboard from there.</small></div><button type="button" class="toggle" role="switch" data-pc="screen" aria-checked="${!!c.screen}" aria-label="Remote"${off}${PC.busy === "screen" ? " disabled" : ""}></button></div>` : "";
   const ws = c && c.workspace ? `<div class="field"><label for="fWs">Working folder</label><input class="input" id="fWs" value="${esc(PC.ws !== undefined ? PC.ws : c.workspace)}" autocomplete="off" spellcheck="false"><small>Where ${esc(CFG.name)} works and where files you attach go. Changed when you press Enter or click away; it's made if it isn't there.${PC.busy === "workspace" ? ' <b class="ok-text">Saving…</b>' : ""}</small></div>` : "";
-  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${awake}${screen}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
+  return `<div class="sec"><h3>This computer</h3>${why ? `<p>${why}</p>` : ""}${auto}${awake}${ws}${PC.err ? `<div class="err-text">${esc(PC.err)}</div>` : ""}</div>`;
 }
 // The switch moves at once; if the computer says no, it moves back and says why.
 async function setComputer(key, value) {

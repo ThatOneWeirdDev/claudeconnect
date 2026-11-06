@@ -35,9 +35,9 @@ const PLANS = {
 const LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"];
 const LIMIT_STATUS = ["allowed", "allowed_warning", "rejected"];
 // The settings that live on the computer, which the site can show and change: starting at login, staying awake with the lid
-// closed, Remote (its screen on the site) and the folder Claude Code works in. The computer also says which Claude plan it's signed in with, and an older one says what it reads (credits,
+// closed and the folder Claude Code works in. The computer also says which Claude plan it's signed in with, and an older one says what it reads (credits,
 // history), which nobody can change anymore.
-const COMPUTER_KEYS = ["autostart", "awake", "screen", "credits"];
+const COMPUTER_KEYS = ["autostart", "awake", "credits"];
 const HISTORY_SCOPES = ["all", "workspace", "off"];
 
 function cleanComputer(v) {
@@ -177,21 +177,6 @@ function fileMime(name, kind) {
 
 // A path in the working folder as the page sends it: names joined by "/", "" for the folder itself. Null for anything that
 // tries to leave it. The computer checks again, links included.
-// The page's invisible mark for Remote (zero-width characters), which the computer looks for in its own window titles.
-function screenTag(v) {
-  return typeof v === "string" && /^[\u200b\u200c\u200d\u2060]{6,32}$/.test(v) ? v : "";
-}
-// How many pictures a second a page looking at Remote asked for: 1 to 60, 30 unless it said.
-function screenFps(v) {
-  const n = Math.round(Number(v));
-  return Number.isFinite(n) && n > 0 ? Math.min(60, Math.max(1, n)) : 30;
-}
-// A piece of the computer's sound starts with "CCAU" (a picture with a JPEG's 0xFF 0xD8).
-function isSound(raw) {
-  const b = raw instanceof ArrayBuffer ? new Uint8Array(raw, 0, Math.min(4, raw.byteLength)) : ArrayBuffer.isView(raw) ? new Uint8Array(raw.buffer, raw.byteOffset, Math.min(4, raw.byteLength)) : null;
-  return !!b && b.length === 4 && b[0] === 0x43 && b[1] === 0x43 && b[2] === 0x41 && b[3] === 0x55;
-}
-
 function cleanFsPath(v) {
   if (v === undefined || v === null) return "";
   const s = String(v);
@@ -869,9 +854,7 @@ export class ChatgqlHub extends DurableObject {
   }
 
   async webSocketMessage(ws, raw) {
-    if (this.agentInfo(ws).viewer) return this.viewerMessage(ws, raw);
-    // from the computer, a binary message is a live picture of its screen, or a piece of its sound
-    if (typeof raw !== "string") return isSound(raw) ? this.soundOut(raw) : this.screenOut(raw);
+    if (typeof raw !== "string") return;
     let m;
     try {
       m = JSON.parse(raw);
@@ -901,12 +884,6 @@ export class ChatgqlHub extends DurableObject {
     if (m.type === "sessions") return this.saveSessions(m.sessions);
     if (m.type === "commands") return this.saveCommands(m.commands);
     if (m.type === "transcript" || m.type === "reset_result" || m.type === "fs_result") return this.gotTranscript(m);
-    if (m.type === "screen_status") {
-      const o = { code: typeof m.code === "string" && /^[a-z_]{1,20}$/.test(m.code) ? m.code : "failed", error: String(m.error || "").slice(0, 300), os: typeof m.os === "string" ? m.os.slice(0, 10) : "" };
-      if (typeof m.view === "boolean") o.view = m.view;
-      if (typeof m.control === "boolean") o.control = m.control;
-      return this.screenSay(o);
-    }
     if (m.type === "computer") {
       ws.serializeAttachment({ ...this.agentInfo(ws), computer: cleanComputer(m.values) });
       return this.gotTranscript(m);
@@ -1000,7 +977,6 @@ export class ChatgqlHub extends DurableObject {
       if (r && r.at >= opened) continue;
       if (!active.has(c.running)) await this.completeRun({ runId: c.running, chatId: c.id, text: (this.runs.get(c.running) || {}).text || "", error: `${this.siteName()} restarted before the reply finished.` });
     }
-    this.screenSync();
     this.maybeAutoUpdate().catch(() => {});
   }
 
@@ -1008,18 +984,15 @@ export class ChatgqlHub extends DurableObject {
     try {
       ws.close(1000, "bye");
     } catch {}
-    if (this.agentInfo(ws).viewer) return this.screenSync(ws);
     await this.agentGone(ws);
   }
 
   async webSocketError(ws) {
-    if (this.agentInfo(ws).viewer) return this.screenSync(ws);
     await this.agentGone(ws);
   }
 
   async agentGone(ws) {
     if (this.ctx.getWebSockets("agent").some(w => w !== ws)) return;
-    this.screenSync(null, true);
     await this.ctx.storage.put("lastSeen", Date.now());
     await this.ctx.storage.setAlarm(Date.now() + 90000);
   }
@@ -1046,7 +1019,6 @@ export class ChatgqlHub extends DurableObject {
     if (p === "/api/computer" && method === "POST") return this.setComputer(req);
     if (p === "/api/remote" && method === "POST") return this.answerRemote(req);
     if (p === "/api/resets/use" && method === "POST") return this.useReset(req);
-    if (p === "/api/screen/live") return this.screenLive(req, url);
     if (p === "/api/site" && method === "POST") return this.setSite(req);
     if (p === "/api/admin/settings" && method === "POST") return this.startSettings(req);
     if (p === "/api/admin/move" && method === "POST") return this.startMove(req);
@@ -1126,10 +1098,6 @@ export class ChatgqlHub extends DurableObject {
             credits: info.computer && typeof info.computer.credits === "boolean" ? info.computer.credits : caps.includes("credits"),
             // the file browser: what's in the working folder
             files: caps.includes("files"),
-            // Remote: the computer's screen on the site; its sound, and the rate of its pictures picked on the page
-            screen: caps.includes("screen"),
-            screenSound: caps.includes("sound"),
-            screenFps: caps.includes("fps"),
             subscription: (info.computer && info.computer.subscription) || "",
             computer: info.computer || null
           }
@@ -1294,7 +1262,6 @@ export class ChatgqlHub extends DurableObject {
     const r = await this.askAgent({ type: "computer", values }, "awake" in values ? 200000 : 10000, "computer");
     if (!r) return json({ error: "awake" in values ? "Your computer didn't answer in time. On a Mac, its password has to be typed on the Mac itself." : "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
     if (r.error) return json({ error: String(r.error).slice(0, 200), computer: cleanComputer(r.values) }, 400);
-    if ("screen" in values) this.screenSync();
     return json({ computer: cleanComputer(r.values) });
   }
 
@@ -1322,145 +1289,6 @@ export class ChatgqlHub extends DurableObject {
     if (!r) return json({ error: "Your computer didn't answer in time. Try again in a moment.", code: "slow" }, 504);
     const result = ["reset", "already_used", "not_limited", "cooldown", "ineligible", "unavailable", "error"].includes(r.result) ? r.result : "error";
     return json({ result, reason: typeof r.reason === "string" ? r.reason.slice(0, 40) : "", resetsLeft: Number.isFinite(r.resetsLeft) ? r.resetsLeft : null, cleared: Array.isArray(r.cleared) ? r.cleared.filter(c => typeof c === "string").slice(0, 8).map(c => c.slice(0, 40)) : [] });
-  }
-
-  // ---- Remote, live. The page keeps one WebSocket open here (only from this site's own pages: a page on another site can't
-  // open it with your sign-in). The computer's pictures come in as binary messages and go straight out to the pages that are
-  // looking, no faster than each asked for; each page says when it has one (passed on, so the computer sends no faster than
-  // it's taken), and sends what's done over the picture. The computer's sound comes in as binary messages too, and goes on
-  // as it comes to the pages with their sound on, not held back by the pictures. The computer streams only while someone is
-  // looking, at the highest rate any of them asked for, with sound while any of them wants it.
-  screenLive(req, url) {
-    if ((req.headers.get("upgrade") || "").toLowerCase() !== "websocket") return json({ error: "Expected a WebSocket" }, 426);
-    const origin = req.headers.get("origin");
-    if (origin && origin !== url.origin) return json({ error: "Forbidden" }, 403);
-    const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1], ["viewer"]);
-    pair[1].serializeAttachment({ viewer: true, w: 1600, tag: "", fps: 30, sound: false });
-    return new Response(null, { status: 101, webSocket: pair[0] });
-  }
-
-  viewers(gone) {
-    if (gone && this.unseen) {
-      const u = this.unseen.get(gone);
-      if (u && u.timer) clearTimeout(u.timer);
-      this.unseen.delete(gone);
-    }
-    return this.ctx.getWebSockets("viewer").filter(v => v !== gone);
-  }
-
-  // what's in the way, or what went wrong, to every page that's looking
-  screenSay(o, gone) {
-    const s = JSON.stringify({ t: "status", ...o });
-    for (const v of this.viewers(gone)) {
-      try {
-        v.send(s);
-      } catch {}
-    }
-  }
-
-  // A page gets a picture while fewer than two it hasn't had yet are on their way to it, and no sooner after the last than
-  // the rate it asked for allows. One that's slower than another watching at the same time, or asked for fewer, misses some,
-  // and gets the newest when it's ready, so it's never behind.
-  screenOut(picture) {
-    this.unseen ||= new Map();
-    for (const v of this.viewers()) {
-      const u = this.unseen.get(v) || { n: 0, held: null, at: 0, timer: null };
-      this.unseen.set(v, u);
-      u.held = picture;
-      this.screenGive(v, u);
-    }
-  }
-
-  screenGive(v, u) {
-    if (!u.held || u.n >= 2 || u.timer) return;
-    // a little early is close enough: the computer's own pace already keeps to the highest rate asked for
-    const wait = u.at + (0.9 * 1000) / screenFps(this.agentInfo(v).fps) - Date.now();
-    if (wait > 4) {
-      u.timer = setTimeout(() => {
-        u.timer = null;
-        this.screenGive(v, u);
-      }, wait);
-      return;
-    }
-    const picture = u.held;
-    u.held = null;
-    try {
-      v.send(picture);
-      u.n++;
-      u.at = Date.now();
-    } catch {}
-  }
-
-  screenSeen(v) {
-    const u = this.unseen && this.unseen.get(v);
-    if (!u) return;
-    u.n = Math.max(0, u.n - 1);
-    this.screenGive(v, u);
-  }
-
-  // the computer's sound, straight on to every page that has its sound on
-  soundOut(piece) {
-    for (const v of this.viewers()) {
-      if (!this.agentInfo(v).sound) continue;
-      try {
-        v.send(piece);
-      } catch {}
-    }
-  }
-
-  // The computer streams while at least one page is looking, as wide as the widest of them, and stops when none is.
-  screenSync(gone, offline) {
-    const viewers = this.viewers(gone);
-    const ws = offline ? null : this.agent();
-    const tell = msg => {
-      try {
-        if (ws) this.sendAgent(ws, msg);
-      } catch {}
-    };
-    if (!viewers.length) return tell({ type: "screen_stop" });
-    if (!ws) return this.screenSay({ code: "offline", error: `${this.siteName()} is offline. Start ${this.commandName()} on your computer first.` }, gone);
-    if (!(this.agentInfo(ws).caps || []).includes("screenlive")) return this.screenSay({ code: "agent_old", error: `Update ${this.siteName()} on your computer to use Remote.` }, gone);
-    const w = Math.max(...viewers.map(v => Number(this.agentInfo(v).w) || 1600));
-    const fps = Math.max(...viewers.map(v => screenFps(this.agentInfo(v).fps)));
-    const sound = viewers.some(v => this.agentInfo(v).sound === true);
-    tell({ type: "screen_start", w, fps, sound, tags: [...new Set(viewers.map(v => this.agentInfo(v).tag).filter(Boolean))] });
-  }
-
-  viewerMessage(ws, raw) {
-    if (typeof raw !== "string" || raw.length > 100000) return;
-    let m;
-    try {
-      m = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!m || typeof m !== "object") return;
-    // what the page wants: how wide a picture (hello, size), how many a second (fps), and whether it plays the sound
-    if (m.t === "hello" || m.t === "size" || m.t === "fps" || m.t === "sound") {
-      const a = { ...this.agentInfo(ws) };
-      if (m.t === "hello" || m.t === "size") {
-        const w = Number(m.w);
-        a.w = Number.isFinite(w) ? Math.max(320, Math.min(2560, Math.round(w))) : 1600;
-        a.tag = screenTag(m.tag) || a.tag || "";
-      }
-      if (m.fps !== undefined) a.fps = screenFps(m.fps);
-      if (typeof m.sound === "boolean") a.sound = m.sound;
-      ws.serializeAttachment(a);
-      return this.screenSync();
-    }
-    const agent = this.agent();
-    if (!agent) return;
-    try {
-      if (m.t === "ack") {
-        this.screenSeen(ws);
-        this.sendAgent(agent, { type: "screen_ack" });
-      }
-      // the page asking the computer to request its screen permissions again (ask, with its own prompts) or just report them
-      else if (m.t === "ask") this.sendAgent(agent, { type: "screen_ask" });
-      else if (m.t === "perms") this.sendAgent(agent, { type: "screen_check" });
-      else if (m.t === "input" && Array.isArray(m.events) && m.events.length) this.sendAgent(agent, { type: "screen_input", events: m.events.slice(0, 200), tags: [...new Set(this.viewers().map(v => this.agentInfo(v).tag).filter(Boolean))] });
-    } catch {}
   }
 
   async prefs() {

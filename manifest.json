@@ -1,19 +1,16 @@
 {
   "name": "claudeconnect",
-  "version": "2.18.0",
-  "released": "2026-11-05",
+  "version": "2.19.0",
+  "released": "2026-11-06",
   "notes": [
-    "Remote now plays your computer's sound. It comes uncompressed (16-bit, 48 kHz stereo) as it plays, on its own and not tied to the pictures, so it never stutters along with the frame rate. Turn it on or off with the speaker button.",
-    "Pick how many pictures a second Remote shows (1 to 60) from the list at the top of the Remote page. Each browser keeps its own choice, and the top bar shows how many are arriving.",
-    "You can go to another chat, or start a new one, while a reply is still being written. It keeps going, the sidebar marks it until it's done, and going back shows how far it's got. If it asks for permission meanwhile, the question still shows.",
-    "Sound needs macOS 13 or later and Apple's command line tools on a Mac (no new permission), PulseAudio or PipeWire on Linux, and nothing extra on Windows."
+    "Remote is gone: the Remote page in the sidebar, its switch in Settings → General → This computer, and everything on your computer that showed its screen, played its sound and used its mouse and keyboard. Nothing on your computer can be seen or controlled from the site any more. On a Mac, you can turn node off again under Screen Recording and Accessibility in System Settings → Privacy & Security."
   ],
   "files": {
     "ClaudeConnect.mjs": "211418e23234c099d6d8f330c8c9bea42a4d9d10cfeed1b654858bfca31e3269",
-    "installer.mjs": "23695aabb52df58a8652ebaf77e7b335b45c0fa1cae21a672ee91add165d13e3",
+    "installer.mjs": "f2f0ab42458386d99adfd3262b81abbc127e621b2f730fc7110887334e5c3e25",
     "setup.mjs": "5074e245069469b21b0c5c59239d20498c34ae2d75ec7472bd4166593fd69f37",
     "setup.html": "7c5f0baac504379267c18b4d75e7848daf13a41fee4e1185459556dd1b654812",
-    "agent/agent.mjs": "2c660d7c14c3c428685cdd018d6379c50495a58af2debddf4d9e5c6311f60e41",
+    "agent/agent.mjs": "b04c29296c48a33e91bf4779f00bf7a978c552febf726684a448c70fe98fb8ea",
     "agent/sessions.mjs": "501ff207add7b3a3c4a652dd9d42a68426a936adfe05b26c6fc50ae5812853e5",
     "agent/limits.mjs": "41068cc30ea662fd2e28c704649d584a86132bc20e831a0cacbc67fbd0df6463",
     "agent/files.mjs": "194511f52b72d5b8bc64fadd8990449585b14c70fe2ff77ac4e30cf88e30be53",
@@ -21,10 +18,9 @@
     "agent/permit.mjs": "d6607a5da852305283dd8216b891f0d7925a1bc114c49dcf5226f59dfaebc1d6",
     "agent/awake.mjs": "79a9ac208985ff024ae6e4158dd6985917ce4ade39adcac5f1fcc68ca4844fce",
     "agent/keepalive.mjs": "9545644ddb7950c4a71a28d00e8c1be5752ead293667f3c3b94e71353eee66fd",
-    "agent/screen.mjs": "26b53422dd6be0090e0b52ba12d055a207be3471f9a0f0ebc986407f850c138e",
     "agent/search.mjs": "b9962d86ef159e18b4e6a2bc649d67172951a72410d7782fec9d78d855ee9b7f",
-    "site/worker.js": "55128514769c5548ef3f8174e7df0f9799d47f428791136b40e977bcf1375165",
-    "site/app.html": "1dd2b01c14e32b7d6d04d48a5c990a53e99cdc74936740bde3299dc187c90cf4",
+    "site/worker.js": "d09532d828e2333dfc2da182b7349f45f2f32653ca6e92c5e3878a4e7bbe54f6",
+    "site/app.html": "a920476502144a9224a719b4cb1a28fe141f7915066072ff8f5881e9d80d85f9",
     "site/version.js": "d4447d850c816fb520b0bf7fbf4bb768f65e0fdc519c6b546329d21ebb7ee104",
     "site/names.js": "15898c3dd81a2216c8fde3ca06e2192e34c26733338f780b082c0f63a4d08500",
     "site/image.js": "e5656c70833c2be5183d8c67cca497afe9ba57717cdf02a09fdb9f7f96e41559",
